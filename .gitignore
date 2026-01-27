@@ -36,3 +36,6 @@ firebase-debug.log
 *.heic
 *.HEIC
 
+# Firebase cache
+.firebase/
+
