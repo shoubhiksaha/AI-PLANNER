@@ -6,20 +6,20 @@ This diagram illustrates the flow of data where the image is processed entirely 
 ```mermaid
 graph TD
     %% Nodes
-    User([User (PWA)])
+    User(["User (PWA)"])
     subgraph "Backend (Firebase Functions)"
-        SyncPlanner[syncPlanner Function<br/>(Node.js 20 Setup)]
-        MemoryBuffer[In-Memory Buffer<br/>(Transient Image Data)]
+        SyncPlanner["syncPlanner Function<br/>(Node.js 20 Setup)"]
+        MemoryBuffer["In-Memory Buffer<br/>(Transient Image Data)"]
     end
     
     subgraph "AI Analysis"
-        Gemini[Gemini 2.0 Flash<br/>(Google AI Studio)]
+        Gemini["Gemini 2.0 Flash<br/>(Google AI Studio)"]
     end
     
     subgraph "External Integrations"
         GCal[Google Calendar/Tasks]
         GSheets[Google Sheets]
-        NotionAPI[Notion API<br/>(File Uploads)]
+        NotionAPI["Notion API<br/>(File Uploads)"]
         NotionS3[Notion Internal Storage]
     end
 
