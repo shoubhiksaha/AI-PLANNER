@@ -1,0 +1,38 @@
+# Dependencies
+/node_modules
+
+# Vercel
+.vercel
+.output
+
+# Local development files
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env*
+!.env.example
+functions/.env
+
+# Secrets & credentials
+client_secret*.json
+credentials.js
+credentials.json
+token.json
+/tmp/token.json
+INTERVIEW_PREP.md
+
+
+# Logs
+firebase-debug.log
+
+# Large Media Files (local only)
+*.mov
+*.MOV
+*.mp4
+*.heic
+*.HEIC
+

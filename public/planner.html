@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download Planner - AI Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-700 min-h-screen flex flex-col items-center justify-center p-4 text-center">
+
+    <div class="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-slate-100">
+        <div class="text-4xl mb-4">📄</div>
+        <h1 class="text-2xl font-bold mb-2 text-slate-800">2026 AI Planner Template</h1>
+        <p class="text-slate-500 mb-8">Download the official PDF template optimized for our AI OCR engine.</p>
+
+
+
+        <a href="planner-file.pdf" download
+            class="block w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-colors shadow-md shadow-emerald-200">
+            Download PDF Now
+        </a>
+
+        <!-- DONATION SECTION -->
+        <div class="mt-8 pt-8 border-t border-slate-100">
+            <p class="text-xs text-slate-400 font-medium uppercase tracking-wider mb-4">Enjoying the free tool?</p>
+            <div class="bg-white p-4 rounded-xl inline-block border border-slate-200 shadow-sm">
+                <!-- User to upload donate.jpg -->
+                <img src="donate.jpg" alt="Scan to Donate"
+                    class="w-32 h-32 mx-auto mb-2 rounded-lg bg-slate-100 object-cover"
+                    onerror="this.style.display='none'; this.nextElementSibling.textContent='(Upload donate.jpg to see QR)'">
+                <p class="text-xs text-emerald-600 font-bold">Support the Dev ☕</p>
+                <div class="mt-2 text-[10px] text-slate-400">
+                    UPI ID: <span
+                        class="font-mono select-all bg-slate-50 px-1.5 py-0.5 rounded text-slate-600 border border-slate-100">officialshoubhiksaha@oksbi</span>
+                </div>
+            </div>
+        </div>
+
+        <a href="index.html" class="block mt-6 text-sm text-slate-400 hover:text-slate-600">
+            ← Back to Dashboard
+        </a>
+    </div>
+
+</body>
+
+</html>

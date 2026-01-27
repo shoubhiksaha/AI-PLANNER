@@ -1,0 +1,20 @@
+{
+    "short_name": "AI Planner",
+    "name": "AI Agenda Planner",
+    "icons": [
+        {
+            "src": "https://cdn-icons-png.flaticon.com/512/2921/2921226.png",
+            "type": "image/png",
+            "sizes": "512x512"
+        },
+        {
+            "src": "https://cdn-icons-png.flaticon.com/512/2921/2921226.png",
+            "type": "image/png",
+            "sizes": "192x192"
+        }
+    ],
+    "start_url": ".",
+    "display": "standalone",
+    "theme_color": "#ffffff",
+    "background_color": "#ffffff"
+}

@@ -1,0 +1,265 @@
+/*
+ * This is the backend function for the A.I. Planner.
+ * It connects to the Gemini API, Google Calendar, and Google Tasks.
+ *
+ * Version: 4.0 (Definitive Fix)
+ * Fixes:
+ * - Corrects all syntax errors causing the "Illegal return statement" crash.
+ * - Implements a robust "find or create" mechanism for the Google Tasks list.
+ * - Corrects the Google Calendar event creation logic to explicitly disable reminders.
+ * - Encapsulates API logic into helper functions for better readability.
+ * - Adds detailed, contextual logging for easier debugging.
+ */
+import { google } from 'googleapis';
+import { JWT } from 'google-auth-library';
+import fs from 'fs';
+import path from 'path';
+
+// --- Configuration ---
+const CALENDAR_ID = 'officialshoubhiksaha@gmail.com';
+const TASK_LIST_TITLE = 'AI Planner Tasks';
+const credentialsPath = path.join(process.cwd(), 'credentials.json');
+const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
+const GEMINI_API_KEY = "AIzaSyA663aK1gviWhHBNWGwkaiSTjX872N3WHU";
+
+// --- Main Serverless Handler ---
+export default async function handler(req, res) {
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method Not Allowed' });
+    }
+
+    try {
+        console.log("Received request. Parsing image data with Gemini API...");
+        const { imageData } = req.body;
+        if (!imageData) {
+            return res.status(400).json({ error: 'Image data is required.' });
+        }
+        const plannerData = await getPlannerDataFromImage(imageData);
+        console.log("Successfully parsed planner data:", JSON.stringify(plannerData, null, 2));
+
+
+        if (plannerData.error) {
+            console.error("Gemini API returned a data validation error:", plannerData.error);
+            return res.status(400).json({ error: plannerData.error + " Please check your planner and try again." });
+        }
+
+        console.log("Authenticating with Google Workspace APIs...");
+        const auth = new JWT({
+            email: credentials.client_email,
+            key: credentials.private_key,
+            scopes: [
+                'https://www.googleapis.com/auth/calendar.events',
+                'https://www.googleapis.com/auth/tasks'
+            ],
+        });
+        const calendar = google.calendar({ version: 'v3', auth });
+        const tasks = google.tasks({ version: 'v1', auth });
+        console.log("Authentication successful.");
+
+        const { createdEventsCount, setRemindersCount } = await syncCalendarEvents(calendar, plannerData);
+        const createdTasksCount = await syncGoogleTasks(tasks, plannerData);
+
+        const successMessage = `Sync complete! Created ${createdEventsCount} events, set ${setRemindersCount} reminders, and added ${createdTasksCount} tasks for ${plannerData.date}.`;
+        console.log(successMessage);
+        res.status(200).json({ text: successMessage });
+
+    } catch (error) {
+        console.error("FATAL ERROR in serverless function:", error.message, error.stack);
+        res.status(500).json({ error: 'An internal server error occurred. Check server logs for details.' });
+    }
+}
+
+// --- Helper Functions ---
+
+/**
+ * Sends image data to the Gemini API for parsing.
+ */
+async function getPlannerDataFromImage(imageData) {
+    const mimeType = imageData.match(/data:(.*);base64,/)?.[1] || 'image/jpeg';
+    const base64ImageData = imageData.split(',')[1];
+    
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+    
+    const geminiPrompt = `Analyze the attached image of a daily planner with a multi-step verification process.
+
+            Step 1: Extract all relevant data.
+            - Extract the handwritten date as a string (e.g., "6-August-2025").
+            - Extract the schedule items with tasks into a "schedule" array. Each object should have "time", "task", "block" (boolean), and "reminder" (boolean). Ignore empty or crossed-out tasks.
+            - Extract the to-do list items into a "todos" array. Each object should have "task" (string) and "done" (boolean). Ignore empty lines.
+            - Extract the handwritten total for Blocks, the total for Reminders, and the total for To-Dos as numbers.
+
+            Step 2: Verify your work meticulously.
+            - Count how many items in your extracted "schedule" have "block": true. Compare this to the handwritten total for Blocks.
+            - Count how many items in your extracted "schedule" have "reminder": true. Compare this to the handwritten total for Reminders.
+            - Count the total number of items in your extracted "todos" array. Compare this to the handwritten total for To-Dos.
+
+            Step 3: Finalize the output.
+            - If ALL THREE of your counts from Step 2 PERFECTLY MATCH the handwritten totals, return a single JSON object with the "date", "schedule", and "todos".
+            - If ANY of your counts DO NOT MATCH, you have made a mistake. Re-examine the entire image, correct your extraction, and repeat Step 2. Do this re-check twice.
+            - If after two re-checks the counts still do not match, return a JSON object with an "error" key. The value should be a string explaining the specific mismatch, for example: "I counted 7 blocked events, but the planner says 8."
+
+            Do not include any explanatory text. Your final output must only be the clean JSON object.
+        `;
+
+    const geminiPayload = {
+        contents: [{ parts: [{ text: geminiPrompt }, { inlineData: { mimeType, data: base64ImageData } }] }],
+        generationConfig: { responseMimeType: "application/json" }
+    };
+
+    const geminiResponse = await fetch(geminiApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geminiPayload)
+    });
+
+    if (!geminiResponse.ok) {
+        const errorBody = await geminiResponse.text();
+        throw new Error(`Failed to get response from Gemini API. Status: ${geminiResponse.status}. Body: ${errorBody}`);
+    }
+    
+    const geminiResult = await geminiResponse.json();
+    const responseData = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!responseData) {
+        throw new Error('Failed to extract structured data from Gemini API response.');
+    }
+    
+    return JSON.parse(responseData);
+}
+
+/**
+ * Syncs schedule items to Google Calendar.
+ */
+async function syncCalendarEvents(calendar, plannerData) {
+    let createdEventsCount = 0;
+    let setRemindersCount = 0;
+
+    for (const item of (plannerData.schedule || [])) {
+        if ((item.block || item.reminder) && item.task) {
+            const eventStartTime = parseDateTime(item.time, plannerData.date);
+            if (!eventStartTime) {
+                console.warn(`Skipping event with invalid time format: "${item.time}" for task "${item.task}"`);
+                continue;
+            }
+
+            const eventEndTime = new Date(eventStartTime.getTime() + 60 * 60 * 1000);
+
+            const event = {
+                summary: item.task,
+                start: { dateTime: eventStartTime.toISOString(), timeZone: 'Asia/Kolkata' },
+                end: { dateTime: eventEndTime.toISOString(), timeZone: 'Asia/Kolkata' },
+                reminders: {
+                    useDefault: false,
+                    overrides: item.reminder ? [{ method: 'popup', minutes: 10 }] : [],
+                },
+            };
+
+            try {
+                console.log(`Attempting to create event: "${item.task}" with reminder: ${item.reminder}`);
+                await calendar.events.insert({
+                    calendarId: CALENDAR_ID,
+                    resource: event,
+                });
+                console.log(`Successfully created event: "${item.task}"`);
+
+                if (item.block) createdEventsCount++;
+                if (item.reminder) setRemindersCount++;
+            } catch (e) {
+                console.error(`Failed to insert calendar event: "${item.task}"`, e.message);
+            }
+        }
+    }
+    return { createdEventsCount, setRemindersCount };
+}
+
+/**
+ * Syncs to-do items to Google Tasks.
+ */
+async function syncGoogleTasks(tasks, plannerData) {
+    if (!plannerData.todos || plannerData.todos.length === 0) {
+        console.log("No to-do items to sync.");
+        return 0;
+    }
+
+    const taskListId = await getOrCreateTaskListId(tasks);
+    
+    const dueDate = new Date(plannerData.date);
+    if (isNaN(dueDate.getTime())) {
+        throw new Error(`Invalid date received from AI for tasks: "${plannerData.date}"`);
+    }
+    dueDate.setHours(23, 59, 59, 999);
+    const dueDateTime = dueDate.toISOString();
+
+    let createdTasksCount = 0;
+    for (const item of plannerData.todos) {
+        if (item.task) {
+            try {
+                console.log(`Attempting to create task: "${item.task}" in list ID: ${taskListId}`);
+                await tasks.tasks.insert({
+                    tasklist: taskListId,
+                    requestBody: {
+                        title: item.task,
+                        status: item.done ? 'completed' : 'needsAction',
+                        due: dueDateTime
+                    }
+                });
+                console.log(`Successfully created task: "${item.task}"`);
+                createdTasksCount++;
+            } catch (e) {
+                console.error(`Failed to insert task: "${item.task}"`, e.message);
+            }
+        }
+    }
+    return createdTasksCount;
+}
+
+/**
+ * Finds a task list by title, or creates it if it doesn't exist.
+ */
+async function getOrCreateTaskListId(tasks) {
+    try {
+        console.log(`Searching for task list titled "${TASK_LIST_TITLE}"...`);
+        const response = await tasks.tasklists.list();
+        const taskLists = response.data.items || [];
+        
+        const existingList = taskLists.find(list => list.title === TASK_LIST_TITLE);
+
+        if (existingList) {
+            console.log(`Found existing task list: "${existingList.title}" (ID: ${existingList.id})`);
+            return existingList.id;
+        } else {
+            console.log(`Task list "${TASK_LIST_TITLE}" not found. Creating a new one...`);
+            const newTaskList = await tasks.tasklists.insert({
+                requestBody: {
+                    title: TASK_LIST_TITLE,
+                },
+            });
+            const newId = newTaskList.data.id;
+            console.log(`Successfully created new task list with ID: ${newId}`);
+            return newId;
+        }
+    } catch (e) {
+        console.error("Failed to get or create task list:", e.message);
+        throw new Error("Could not access Google Tasks. Please check permissions and ensure the API is enabled.");
+    }
+}
+
+/**
+ * Parses a time string and a date string to create a Date object.
+ */
+function parseDateTime(timeString, dateString) {
+    const timeMatch = timeString.match(/(\d{1,2})\s*(AM|PM)/i);
+    if (!timeMatch) return null;
+
+    let hours = parseInt(timeMatch[1], 10);
+    const ampm = timeMatch[2].toUpperCase();
+
+    if (ampm === 'PM' && hours < 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+
+    const eventDate = new Date(dateString);
+    if (isNaN(eventDate.getTime())) return null;
+    
+    eventDate.setHours(hours, 0, 0, 0);
+    
+    return eventDate;
+}

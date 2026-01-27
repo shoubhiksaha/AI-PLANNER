@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Planner Sync</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2921/2921226.png">
+    <meta name="theme-color" content="#ffffff">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+
+        .view-hidden {
+            display: none !important;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #3B82F6;
+            animation: spin 1s ease infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Smooth transitions */
+        .fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .file-input:hover {
+            border-color: #6366f1;
+            background-color: #eff6ff;
+        }
+    </style>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('SW registered'))
+                    .catch(err => console.log('SW failed', err));
+            });
+        }
+    </script>
+</head>
+
+<body
+    class="bg-gradient-to-br from-slate-50 to-[#eefcf6] text-slate-700 min-h-screen flex items-center justify-center p-4">
+
+    <!-- MAIN CONTAINER -->
+    <div class="w-full max-w-lg mx-auto glass rounded-2xl shadow-xl p-8 relative overflow-hidden">
+
+        <!-- HEADER -->
+        <div class="text-center mb-10">
+            <div class="inline-block p-3 rounded-2xl bg-emerald-50 mb-4 shadow-sm text-3xl">🌿</div>
+            <h1 class="text-4xl font-bold tracking-tight text-slate-800">AI Planner</h1>
+            <p id="header-subtitle" class="text-slate-500 mt-2 font-medium">Calm your digital chaos.</p>
+        </div>
+
+        <!-- VIEW 1: LOGIN -->
+        <div id="view-login" class="fade-in flex flex-col items-center">
+
+            <!-- TRUST BADGE -->
+            <div class="mb-8 flex items-center space-x-2 bg-white/50 px-4 py-1.5 rounded-full border border-slate-200">
+                <span class="text-xs font-semibold text-emerald-600 tracking-wide uppercase">🔒 Private & Secure</span>
+            </div>
+
+            <button id="login-btn"
+                class="w-full max-w-sm py-3.5 px-6 bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-center group mb-12">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                    class="w-6 h-6 mr-3 group-hover:scale-110 transition-transform">
+                <span class="text-slate-700 font-medium">Continue with Google</span>
+            </button>
+
+            <!-- FOOTER LINKS -->
+            <div class="w-full grid grid-cols-2 gap-y-6 gap-x-4 text-xs text-slate-500 border-t border-slate-100 pt-8">
+                <a href="privacy.html" target="_blank"
+                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
+                    <span class="group-hover:scale-110 transition-transform">🛡️</span> Privacy Policy
+                </a>
+                <a href="planner.html" target="_blank"
+                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
+                    <span class="group-hover:scale-110 transition-transform">📄</span> Planner PDF
+                </a>
+                <a href="gear.html" target="_blank"
+                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
+                    <span class="group-hover:scale-110 transition-transform">🛍️</span> Best Gear List
+                </a>
+                <div class="opacity-50 flex items-center justify-center gap-1 cursor-not-allowed" title="Coming Soon">
+                    <span>⌚ Health Sync</span>
+                    <span
+                        class="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Soon</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 2: SETUP (ONBOARDING) -->
+        <div id="view-setup" class="view-hidden fade-in space-y-6">
+            <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                <h3 class="font-bold text-blue-900 mb-1">One-Time Setup</h3>
+                <p class="text-xs text-blue-700">Connect Notion to enable Brain Dump & Journal features.</p>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Notion Integration Key</label>
+                    <input type="password" id="setup-key"
+                        class="w-full rounded-lg border border-gray-300 p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="secret_...">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Database ID</label>
+                    <input type="text" id="setup-db"
+                        class="w-full rounded-lg border border-gray-300 p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="Database ID">
+                </div>
+            </div>
+
+            <button id="open-guide" class="text-blue-600 text-sm hover:underline flex items-center">
+                <span>📚 How to find these keys? (Guide)</span>
+            </button>
+
+            <button id="save-setup-btn"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all">
+                Save & Continue
+            </button>
+            <button id="skip-setup-btn" class="w-full text-gray-400 hover:text-gray-600 text-sm py-2">
+                Skip for now (Limited Features)
+            </button>
+        </div>
+
+        <!-- VIEW 3: DASHBOARD -->
+        <div id="view-dashboard" class="view-hidden fade-in space-y-6">
+            <!-- User Info -->
+            <div class="flex items-center justify-between text-xs text-gray-400 border-b border-gray-100 pb-2">
+                <span id="user-email">user@example.com</span>
+                <button id="logout-btn" class="hover:text-red-500">Sign Out</button>
+            </div>
+
+            <!-- Upload Area -->
+            <label for="file-upload" id="drop-zone"
+                class="file-input block w-full h-40 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer flex flex-col items-center justify-center transition-all bg-gray-50 relative group">
+                <div id="upload-ui" class="text-center group-hover:scale-105 transition-transform pointer-events-none">
+                    <span class="text-3xl block mb-2">📸</span>
+                    <span class="text-sm font-medium text-gray-500">Tap to Upload or Drag & Drop</span>
+                </div>
+                <img id="dash-preview"
+                    class="hidden absolute inset-0 w-full h-full object-contain rounded-xl bg-white p-2">
+            </label>
+            <input id="file-upload" type="file" accept="image/*" class="hidden">
+
+            <!-- Buttons -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <button onclick="triggerSync('morning')"
+                    class="dash-btn disabled:opacity-50 p-3 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl flex flex-col items-center transition-all">
+                    <span class="text-xl">☀️</span>
+                    <span class="font-bold text-orange-900 text-sm mt-1">Morning</span>
+                </button>
+                <button onclick="triggerSync('night')"
+                    class="dash-btn disabled:opacity-50 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl flex flex-col items-center transition-all">
+                    <span class="text-xl">🌙</span>
+                    <span class="font-bold text-indigo-900 text-sm mt-1">Night Sync</span>
+                </button>
+                <button onclick="triggerSync('journal')"
+                    class="dash-btn disabled:opacity-50 p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl flex flex-col items-center transition-all">
+                    <span class="text-xl">📖</span>
+                    <span class="font-bold text-emerald-900 text-sm mt-1">Journal</span>
+                </button>
+            </div>
+
+            <!-- Loading/Status -->
+            <div id="status-area" class="hidden p-3 bg-gray-50 rounded-lg text-sm border text-center"></div>
+            <div id="dash-loader" class="hidden flex justify-center">
+                <div class="spinner"></div>
+            </div>
+
+            <!-- DASHBOARD FOOTER LINKS -->
+            <div
+                class="w-full grid grid-cols-2 gap-y-4 gap-x-4 text-xs text-slate-400 border-t border-slate-100 pt-6 mt-4">
+                <a href="privacy.html" target="_blank"
+                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
+                    <span>🛡️</span> Privacy Policy
+                </a>
+                <a href="planner.html" target="_blank"
+                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
+                    <span>📄</span> Planner PDF
+                </a>
+                <a href="gear.html" target="_blank"
+                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
+                    <span>🛍️</span> Best Gear
+                </a>
+                <div class="opacity-50 flex items-center justify-center gap-1 cursor-not-allowed">
+                    <span>⌚ Health Soon</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- GUIDE MODAL -->
+    <div id="guide-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[80vh]">
+            <h3 class="font-bold text-xl text-gray-900 border-b pb-2">Notion Setup Guide</h3>
+
+            <div class="space-y-4 text-sm text-gray-600">
+
+                <section>
+                    <h4 class="font-bold text-gray-800">Step 1: Get Access Key</h4>
+                    <ol class="list-decimal list-inside space-y-1 ml-2">
+                        <li>Go to <a href="https://www.notion.so/my-integrations" target="_blank"
+                                class="text-blue-600 underline hover:text-blue-800">notion.so/my-integrations</a>.</li>
+                        <li>Click <strong>+ New integration</strong>.</li>
+                        <li>Name it <strong>"AI Planner"</strong> and submit.</li>
+                        <li>Copy the <strong>"Internal Integration Secret"</strong> (Key).</li>
+                    </ol>
+                </section>
+
+                <section>
+                    <h4 class="font-bold text-gray-800">Step 2: Create Your Journal Page</h4>
+                    <ol class="list-decimal list-inside space-y-1 ml-2">
+                        <li>Open Notion and create a new empty page.</li>
+                        <li>Type <code>/database</code> and select <strong>"Database - Full page"</strong>.</li>
+                        <li>Name it <strong>"Brain Dump Journal"</strong>.</li>
+                    </ol>
+                </section>
+
+                <section>
+                    <h4 class="font-bold text-gray-800">Step 3: Connect AI Planner</h4>
+                    <ol class="list-decimal list-inside space-y-1 ml-2">
+                        <li>Stay on your new Database page.</li>
+                        <li>Click the <strong>... (three dots)</strong> at the very top-right of the Notion window.</li>
+                        <li>Scroll down to <strong>"Connections"</strong> > <strong>"Connect to"</strong>.</li>
+                        <li>Search for <strong>"AI Planner"</strong> and select it. Confirm access.</li>
+                    </ol>
+                </section>
+
+                <section>
+                    <h4 class="font-bold text-gray-800">Step 4: Get Database ID</h4>
+                    <ul class="list-disc list-inside space-y-1 ml-2 text-xs bg-gray-50 p-2 rounded border">
+                        <li>Look at the URL of your database page:</li>
+                        <li class="font-mono text-xs break-all text-gray-500">https://notion.so/myworkspace/<span
+                                class="bg-yellow-200 text-black px-1 font-bold">18b3...4d92</span>?v=...</li>
+                        <li>Copy the <strong>32-character code</strong> between the slash <code>/</code> and the
+                            question mark <code>?</code>.</li>
+                        <li>If there is no question mark, copy the ID at the end.</li>
+                    </ul>
+                </section>
+
+            </div>
+
+            <button id="close-guide"
+                class="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold py-3 rounded-xl transition-colors">
+                Got it, let's go!
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+
+        // FIREBASE CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyBRVEfF58gL3yxQ2UY-_lMgftPnFrZ0_T0",
+            authDomain: "ai-planner-project-467800.firebaseapp.com",
+            projectId: "ai-planner-project-467800",
+            storageBucket: "ai-planner-project-467800.firebasestorage.app",
+            messagingSenderId: "195957114195",
+            appId: "1:195957114195:web:06bf15f172f55d2ff3cda6"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        if (window.location.hostname === "localhost") {
+            connectAuthEmulator(auth, "http://127.0.0.1:9099");
+        }
+
+        // STATE
+        let currentUser = null;
+        let fileAsBase64 = null;
+        let userNotionConfig = null; // { key, id }
+
+        // Retrieve cached token from session if available
+        let googleAccessToken = sessionStorage.getItem('googleAccessToken') || null;
+
+        // NAVIGATION
+        const switchView = (viewId) => {
+            ['view-login', 'view-setup', 'view-dashboard'].forEach(id => {
+                document.getElementById(id).classList.add('view-hidden');
+            });
+            document.getElementById(viewId).classList.remove('view-hidden');
+        };
+
+        // --- 1. AUTH FLOW ---
+        const loginBtn = document.getElementById('login-btn');
+        loginBtn.addEventListener('click', async () => {
+            const provider = new GoogleAuthProvider();
+            provider.addScope('https://www.googleapis.com/auth/calendar.events');
+            provider.addScope('https://www.googleapis.com/auth/tasks');
+            provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+            provider.addScope('https://www.googleapis.com/auth/drive.file');
+
+            try {
+                const result = await signInWithPopup(auth, provider);
+                // Capture the Access Token immediately so we don't ask again
+                const credential = GoogleAuthProvider.credentialFromResult(result);
+                googleAccessToken = credential.accessToken;
+                sessionStorage.setItem('googleAccessToken', googleAccessToken); // Persist
+
+                // Auth listener will handle redirection
+            } catch (e) {
+                alert("Login failed: " + e.message);
+            }
+        });
+
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                currentUser = user;
+                // If we have a user but no access token (e.g. reload), we might need to re-auth silently later.
+                // For now, we rely on sessionStorage.
+                document.getElementById('user-email').textContent = user.email;
+                await checkUserSetup(user);
+            } else {
+                currentUser = null;
+                googleAccessToken = null;
+                sessionStorage.removeItem('googleAccessToken'); // Clear
+                switchView('view-login');
+            }
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            auth.signOut();
+            sessionStorage.clear();
+        });
+
+        // --- 2. SETUP FLOW ---
+        async function checkUserSetup(user) {
+            try {
+                // Check Firestore for profile
+                const userRef = doc(db, "users", user.email);
+                const snap = await getDoc(userRef);
+
+                if (snap.exists() && snap.data().notionKey) {
+                    // User has setup Notion -> Go to Dashboard
+                    userNotionConfig = { key: snap.data().notionKey, id: snap.data().notionDbId };
+                    switchView('view-dashboard');
+                } else {
+                    // No setup -> Go to Setup Screen
+                    switchView('view-setup');
+                }
+            } catch (err) {
+                console.error("Profile Load Error:", err);
+                // Fallback on error (e.g., permissions conflict) -> Go to Setup/Dashboard
+                // We choose Setup to ensure they can at least rely on local entry
+                switchView('view-setup');
+            }
+        }
+
+        document.getElementById('save-setup-btn').addEventListener('click', async () => {
+            const key = document.getElementById('setup-key').value;
+            const dbId = document.getElementById('setup-db').value;
+            if (!key || !dbId) return alert("Please fill both fields");
+
+            // Save to Firestore (Simulated via next sync or direct write if rules allow. 
+            // Here we just save locally to state and pass to first sync to let backend save it securley)
+            userNotionConfig = { key, id: dbId };
+
+            // Optimistic switch
+            switchView('view-dashboard');
+        });
+
+        document.getElementById('skip-setup-btn').addEventListener('click', () => {
+            switchView('view-dashboard');
+        });
+
+        // Guide Modal
+        const modal = document.getElementById('guide-modal');
+        document.getElementById('open-guide').addEventListener('click', () => modal.classList.remove('hidden'));
+        document.getElementById('close-guide').addEventListener('click', () => modal.classList.add('hidden'));
+
+        // --- 3. DASHBOARD LOGIC ---
+        const fileInput = document.getElementById('file-upload');
+        const dashPreview = document.getElementById('dash-preview');
+        const uploadUi = document.getElementById('upload-ui');
+        const dashBtns = document.querySelectorAll('.dash-btn');
+        const dropZone = document.getElementById('drop-zone');
+
+        const updateDashButtons = (enabled) => {
+            dashBtns.forEach(b => b.disabled = !enabled);
+        };
+        updateDashButtons(false);
+
+        // File Handler with Compression & HEIC Support
+        const handleFile = async (file) => {
+            if (!file) return;
+
+            // Handle HEIC/HEIF conversion
+            if (file.type === "image/heic" || file.type === "image/heif" || file.name.toLowerCase().endsWith('.heic')) {
+                console.log("HEIC detected. Converting...");
+                try {
+                    const blob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.8 });
+                    // heic2any returns a blob or blob array. Handle single file.
+                    const convertedBlob = Array.isArray(blob) ? blob[0] : blob;
+                    file = new File([convertedBlob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+                } catch (e) {
+                    console.error("HEIC Conversion failed:", e);
+                    alert("Could not convert HEIC image. Please use JPG.");
+                    return;
+                }
+            }
+
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        // Max dimensions
+                        const MAX_WIDTH = 1200;
+                        const MAX_HEIGHT = 1600;
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > height) {
+                            if (width > MAX_WIDTH) {
+                                height *= MAX_WIDTH / width;
+                                width = MAX_WIDTH;
+                            }
+                        } else {
+                            if (height > MAX_HEIGHT) {
+                                width *= MAX_HEIGHT / height;
+                                height = MAX_HEIGHT;
+                            }
+                        }
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        // Compress to JPEG 70%
+                        fileAsBase64 = canvas.toDataURL('image/jpeg', 0.7);
+
+                        dashPreview.src = fileAsBase64;
+                        dashPreview.classList.remove('hidden');
+                        uploadUi.classList.add('hidden');
+                        updateDashButtons(true);
+                        console.log(`Original: ${(file.size / 1024).toFixed(2)}KB, Compressed: ${(fileAsBase64.length / 1024).toFixed(2)}KB`);
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                alert("Please upload an image file.");
+            }
+        }
+
+        // Click Upload
+        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+        // Drag & Drop Logic
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) { dropZone.classList.add('bg-blue-50', 'border-blue-400'); }
+        function unhighlight(e) { dropZone.classList.remove('bg-blue-50', 'border-blue-400'); }
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFile(files[0]);
+        });
+
+        window.triggerSync = async (syncType) => {
+            // UI Loading
+            // UI Loading with Granular Messages
+            const loader = document.getElementById('dash-loader');
+            loader.style.display = 'flex';
+            const statusArea = document.getElementById('status-area');
+            statusArea.classList.remove('hidden', 'text-red-600', 'bg-red-50', 'text-green-600', 'bg-green-50');
+            statusArea.classList.add('text-blue-600', 'bg-blue-50');
+            statusArea.textContent = "Compressing Image..."; // Initial State
+
+            updateDashButtons(false);
+
+            // Granular Progress Timer (Simulated for UX)
+            const steps = [
+                { t: 1000, msg: "Uploading to Secure Cloud..." },
+                { t: 5000, msg: "AI is Reading Handwriting..." },
+                { t: 15000, msg: "Extracting Tasks & Events..." },
+                { t: 25000, msg: "Syncing with Notion & Google..." },
+                { t: 40000, msg: "Almost there..." }
+            ];
+
+            let timers = [];
+            steps.forEach(step => {
+                timers.push(setTimeout(() => {
+                    if (loader.style.display !== 'none') { // Only update if still loading
+                        statusArea.textContent = step.msg;
+                    }
+                }, step.t));
+            });
+
+            try {
+                // Get Token: Use cached or Re-auth if missing (e.g. page refresh)
+                let token = googleAccessToken;
+                if (!token) {
+                    token = sessionStorage.getItem('googleAccessToken');
+                    if (token) googleAccessToken = token; // Restore to memory
+                }
+
+                if (!token) {
+                    console.log("Token missing (refresh?), re-authenticating...");
+                    const provider = new GoogleAuthProvider();
+                    provider.addScope('https://www.googleapis.com/auth/calendar.events');
+                    provider.addScope('https://www.googleapis.com/auth/tasks');
+                    provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+                    provider.addScope('https://www.googleapis.com/auth/drive.file');
+
+                    const result = await signInWithPopup(auth, provider);
+                    const credential = GoogleAuthProvider.credentialFromResult(result);
+                    token = credential.accessToken;
+                    googleAccessToken = token; // Cache it
+                    sessionStorage.setItem('googleAccessToken', token); // Persist
+                }
+
+                // Prepare API
+                const API_URL = window.location.hostname === "localhost"
+                    ? "http://127.0.0.1:5001/ai-planner-project-467800/us-central1/syncPlanner"
+                    : "https://syncplanner-xeh5qbnxga-uc.a.run.app";
+
+                const payload = {
+                    token: token,
+                    imageData: fileAsBase64,
+                    syncType
+                };
+
+                // Attach Notion Config if we have it (First time save)
+                if (userNotionConfig) {
+                    payload.notionKey = userNotionConfig.key;
+                    payload.notionDbId = userNotionConfig.id;
+                }
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes Frontend Timeout
+
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+                timers.forEach(t => clearTimeout(t)); // Stop simulated progress
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    statusArea.classList.remove('text-red-600', 'bg-red-50', 'text-blue-600', 'bg-blue-50');
+                    statusArea.classList.add('text-green-600', 'bg-green-50');
+                    statusArea.innerHTML = `<strong>Success!</strong> ${data.text}`;
+                } else {
+                    throw new Error(data.error || "Server Error");
+                }
+            } catch (err) {
+                console.error(err);
+                timers.forEach(t => clearTimeout(t));
+                statusArea.classList.remove('hidden', 'text-blue-600', 'bg-blue-50', 'text-green-600', 'bg-green-50');
+                statusArea.classList.add('text-red-600', 'bg-red-50');
+
+                // Friendly Errors
+                let msg = err.message;
+                if (msg.includes("Failed to fetch")) msg = "Network Error. Check your connection.";
+
+                statusArea.innerHTML = `<strong>Error:</strong> ${msg}`;
+                statusArea.classList.add('text-red-600', 'bg-red-50');
+            } finally {
+                document.getElementById('dash-loader').style.display = 'none';
+                updateDashButtons(true);
+            }
+        };
+
+    </script>
+</body>
+
+</html>
