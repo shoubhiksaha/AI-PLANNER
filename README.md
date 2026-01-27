@@ -39,7 +39,7 @@ This project is not just a static codebase; it is the result of continuous produ
 *   **Goal**: 100% Privacy & Cost Reduction.
 *   **Architecture**: Implemented **Zero Storage** (RAM-only processing).
 *   **Engineering**: Modularized AI logic to easily swap providers (Gemini 2.0). 
-*   **Notion**: Reverse-engineered API for direct binary uploads.
+*   **Notion**: Implemented **Custom Direct File Upload Protocol** (bypassing SDK limits for binary streams).
 
 ### V4: Future Roadmap
 *   **BYOK**: "Bring Your Own Key" support for users.
@@ -61,7 +61,7 @@ This project evolved through several iterations to achieve its rigorous privacy 
 **Problem**: We needed to upload images to Notion *without* hosting them ourselves. The Notion API documentation for `file_uploads` is complex and often requires a 2-step process.
 *   *Attempt 1*: Direct JSON upload (Failed - 400 Bad Request).
 *   *Attempt 2*: using `client.auth` object (Failed - 401 Unauthorized).
-**Solution**: Reverse-engineered the 2026 Notion File Upload flow.
+**Solution**: Implemented the **Multi-Step Direct File Upload Protocol**.
 *   **Step 1**: Initialize upload with JSON payload (`filename`, `content_type`). Receive `upload_url`.
 *   **Step 2**: PUT binary data to `upload_url` using `FormData` and explicit `Authorization` headers.
 *   **Step 3**: Link the resulting `file_id` to the Page Block.
