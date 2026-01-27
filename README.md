@@ -3,6 +3,11 @@
 **A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini 2.0 Flash.**
 
 [![Watch Demo](https://img.shields.io/badge/Demo-Watch%20Video-red)](https://youtu.be/GfeUy8J7WFc)
+[![Live App](https://img.shields.io/badge/Live-Try%20Beta-blue)](https://ai-planner-project-467800.web.app)
+
+> [!NOTE]  
+> **Testing Mode Restriction**: Since this project is in Google Cloud "Testing Mode," new users need to be white-listed to log in.  
+> **To get access**: Email [officialshoubhiksaha@gmail.com](mailto:officialshoubhiksaha@gmail.com) with the subject "Beta Access". I usually approve within 1 hour.
 
 ![Status](https://img.shields.io/badge/Status-Production-success)
 ![Privacy](https://img.shields.io/badge/Privacy-Zero%20Storage-green)
