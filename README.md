@@ -94,7 +94,7 @@ See [Architecture Diagram](architecture.md).
 
 1.  **Clone**:
     ```bash
-    git clone https://github.com/yourusername/ai-planner-zero.git
+    git clone https://github.com/shoubhiksaha/AI-PLANNER.git
     ```
 2.  **Install**:
     ```bash
