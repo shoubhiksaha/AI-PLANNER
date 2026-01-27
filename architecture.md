@@ -24,14 +24,15 @@ graph TD
     end
 
     %% Flow
-    User -->|POST /syncPlanner<br/>(Base64 Image)| SyncPlanner
-    SyncPlanner -->|1. Decode & Strip Prefix| MemoryBuffer
+    %% Flow
+    User -->|"POST /syncPlanner<br/>(Base64 Image)"| SyncPlanner
+    SyncPlanner -->|"1. Decode & Strip Prefix"| MemoryBuffer
     
-    MemoryBuffer -->|2. Stream Image (Inline)| Gemini
-    Gemini -->|3. Return JSON Data| SyncPlanner
+    MemoryBuffer -->|"2. Stream Image (Inline)"| Gemini
+    Gemini -->|"3. Return JSON Data"| SyncPlanner
     
-    SyncPlanner -->|4. Sync Events| GCal
-    SyncPlanner -->|5. Sync Expenses| GSheets
+    SyncPlanner -->|"4. Sync Events"| GCal
+    SyncPlanner -->|"5. Sync Expenses"| GSheets
     
     %% Notion Flow (Complex)
     SyncPlanner -- "6a. Init Upload (JSON)" --> NotionAPI
