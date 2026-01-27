@@ -7,7 +7,7 @@
 
 > [!NOTE]  
 > **Testing Mode Restriction**: Since this project is in Google Cloud "Testing Mode," new users need to be white-listed to log in.  
-> **To get access**: Email [officialshoubhiksaha@gmail.com](mailto:officialshoubhiksaha@gmail.com) with the subject "Beta Access". I usually approve within 1 hour.
+> **To get access**: Email [officialshoubhiksaha@gmail.com](mailto:officialshoubhiksaha@gmail.com) with the subject "Beta Access". I usually approve within 1 day.
 
 ![Status](https://img.shields.io/badge/Status-Production-success)
 ![Privacy](https://img.shields.io/badge/Privacy-Zero%20Storage-green)
