@@ -41,9 +41,14 @@ This document outlines the strategic pivot from a "Pipeline Tool" to a true "AI 
 
 ---
 
-## 3. Product Roadmap (V3 & V4)
+## 3. Product Roadmap (V3, V4, & UI Context)
 
-### A. Brain Dump 2.0 (Searchable & Tagged)
+### A. UI & Context Awareness (New)
+*   **Theming Engine**: Dynamic "Light/Dark/OLED" modes.
+*   **Weather Intelligence**: Client-side location check (OpenMeteo API) to append context ("Rain expected: Take umbrella") to the Daily Plan.
+    *   *Privacy Note*: Location data stays on-device.
+
+### B. Brain Dump 2.0 (Searchable & Tagged)
 *   **Background OCR**: Transcribe all handwritten notes in the background so users can search for "Revenue" and find the image.
 *   **Smart "Librarian"**: Automatically tag dumps (e.g., `#Idea`, `#Anxiety`, `#Meeting`) to provide Notion-level organization without manual effort.
 
