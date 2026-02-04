@@ -2,7 +2,7 @@
 
 **A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini 2.0 Flash.**
 
-[![Watch Demo](https://img.shields.io/badge/Demo-Watch%20Video-red)](https://youtu.be/GfeUy8J7WFc)
+[![Watch Demo]( https://youtu.be/8NFqb9xvnIU?si=QPwz6_CrSo_PQwBu )
 [![Live App](https://img.shields.io/badge/Live-Try%20Beta-blue)](https://ai-planner-project-467800.web.app)
 
 > [!NOTE]  
