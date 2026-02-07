@@ -39,6 +39,11 @@ exports.syncPlanner = onRequest({ cors: true, memory: "1GiB", timeoutSeconds: 30
     if (!token) return res.status(401).send({ error: "Missing Google OAuth Token" });
     if (!imageData) return res.status(400).send({ error: "Missing Image Data" });
 
+    // Security: 20MB Payload Limit (Approximation)
+    if (imageData.length > 20 * 1024 * 1024 * 1.37) { // Base64 overhead ~37%
+        return res.status(413).send({ error: "Payload too large. Max 20MB." });
+    }
+
     try {
         // Authenticate Google APIs
         const { google } = require("googleapis"); // Lazy Load
@@ -238,7 +243,10 @@ exports.syncPlanner = onRequest({ cors: true, memory: "1GiB", timeoutSeconds: 30
         console.error("FATAL ERROR:", error.message);
         console.error("Stack:", error.stack);
         if (error.errors) console.error("Validation Errors:", JSON.stringify(error.errors, null, 2));
-        res.status(500).send({ error: error.message });
+
+        // Security: Don't leak stack traces to client
+        const safeMessage = error.message.includes("RATE_LIMIT") ? "AI Service Busy. Please try again." : "Internal Server Error";
+        res.status(500).send({ error: safeMessage });
     }
 });
 

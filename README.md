@@ -18,7 +18,7 @@ Unlike traditional apps that store user images in an S3 bucket or database, **AI
 *   User images are processed **in-memory** (Transient RAM).
 *   Data is extracted by Gemini AI and synced to Google/Notion APIs.
 *   The original image buffer is wiped immediately after processing.
-*   **Result**: Verifyable privacy. We cannot see your journal even if we wanted to.
+*   **Result**: Verifiable privacy. We cannot see your journal even if we wanted to.
 
 ---
 

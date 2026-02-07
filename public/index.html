@@ -560,7 +560,7 @@
             if (!key || !dbId) return alert("Please fill both fields");
 
             // Save to Firestore (Simulated via next sync or direct write if rules allow. 
-            // Here we just save locally to state and pass to first sync to let backend save it securley)
+            // Here we just save locally to state and pass to first sync to let backend save it securely)
             userNotionConfig = { key, id: dbId };
 
             // Optimistic switch
@@ -608,6 +608,12 @@
             }
 
             if (file.type.startsWith('image/')) {
+                // Security: 20MB Limit
+                if (file.size > 20 * 1024 * 1024) {
+                    alert("File is too large. Please upload an image smaller than 20MB.");
+                    return;
+                }
+
                 const reader = new FileReader();
                 reader.onload = (ev) => {
                     const img = new Image();
@@ -771,7 +777,7 @@
                 if (res.ok) {
                     statusArea.classList.remove('text-red-600', 'bg-red-50', 'text-blue-600', 'bg-blue-50');
                     statusArea.classList.add('text-green-600', 'bg-green-50');
-                    statusArea.innerHTML = `<strong>Success!</strong> ${data.text}`;
+                    statusArea.textContent = `Success! ${data.text}`;
                 } else {
                     throw new Error(data.error || "Server Error");
                 }
@@ -785,7 +791,7 @@
                 let msg = err.message;
                 if (msg.includes("Failed to fetch")) msg = "Network Error. Check your connection.";
 
-                statusArea.innerHTML = `<strong>Error:</strong> ${msg}`;
+                statusArea.textContent = `Error: ${msg}`;
                 statusArea.classList.add('text-red-600', 'bg-red-50');
             } finally {
                 document.getElementById('dash-loader').style.display = 'none';
