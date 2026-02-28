@@ -2,7 +2,7 @@
 
 **A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini 2.0 Flash.**
 
-[![Watch Demo]( https://youtu.be/8NFqb9xvnIU?si=QPwz6_CrSo_PQwBu )
+[![Watch Demo]( https://youtu.be/8NFqb9xvnIU?si=7pPnuoKzNEHtZS_m )
 [![Live App](https://img.shields.io/badge/Live-Try%20Beta-blue)](https://ai-planner-project-467800.web.app)
 
 > [!NOTE]  
@@ -38,7 +38,8 @@ This project is not just a static codebase; it is the result of continuous produ
 ### V3: Refinement & Zero Storage (Current)
 *   **Goal**: 100% Privacy & Cost Reduction.
 *   **Architecture**: Implemented **Zero Storage** (RAM-only processing).
-*   **Engineering**: Modularized AI logic to easily swap providers (Gemini 2.0). 
+*   **Architecture**: Implemented **Zero Storage** (RAM-only processing).
+*   **Engineering**: Modularized AI logic with fallback strategy (Gemini 2.5 Flash-Lite -> Gemini 2.5 Flash -> Gemini 2.0 Flash-Lite). 
 *   **Notion**: Implemented **Custom Direct File Upload Protocol** (bypassing SDK limits for binary streams).
 
 ### V4: Future Roadmap

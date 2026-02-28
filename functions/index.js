@@ -11,63 +11,264 @@ admin.initializeApp({
     storageBucket: "ai-planner-project-467800.firebasestorage.app"
 });
 
-const cors = require("cors")({ origin: true });
-
 // --- CONFIGURATION ---
-const { defineString } = require('firebase-functions/params');
-const GEMINI_API_KEY_PARAM = defineString('GEMINI_API_KEY');
-const GEMINI_API_KEY = GEMINI_API_KEY_PARAM.value();
-// Using default storage bucket from config or fallback (Can be parameterized if needed)
-const STORAGE_BUCKET_NAME = "ai-planner-project-467800.firebasestorage.app"; // Kept for now, but can be switched to param
+const { defineString, defineSecret } = require('firebase-functions/params');
+const GEMINI_API_KEY = defineString('GEMINI_API_KEY');
+const NOTION_ENCRYPTION_KEY = defineSecret('NOTION_ENCRYPTION_KEY');
 
-// --- MAIN FUNCTION: syncPlanner ---
-exports.syncPlanner = onRequest({ cors: true, memory: "1GiB", timeoutSeconds: 300 }, async (req, res) => {
-    // 1. Handle CORS/Options manually if needed (handled by onRequest options usually, but good practice for robustness)
-    if (req.method === 'OPTIONS') {
-        res.set('Access-Control-Allow-Origin', '*');
-        res.set('Access-Control-Allow-Methods', 'GET, POST');
-        res.status(204).send('');
-        return;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_BASE64_LENGTH = Math.ceil(MAX_IMAGE_BYTES * 1.37); // Base64 overhead ~37%
+const ALLOWED_SYNC_TYPES = new Set(['morning', 'evening', 'night', 'journal']);
+const ALLOWED_ORIGINS = new Set([
+    'https://ai-planner-project-467800.web.app',
+    'https://ai-planner-project-467800.firebaseapp.com',
+    'http://localhost:5000',
+    'http://127.0.0.1:5000',
+    'http://localhost:5500',
+    'http://127.0.0.1:5500',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+]);
+
+// --- CRYPTOGRAPHY UTILS ---
+const crypto = require('crypto');
+const ALGORITHM = 'aes-256-gcm';
+const LEGACY_ALGORITHM = 'aes-256-cbc';
+
+// Helper: Get a valid 32-byte key from the secret
+function getCryptoKey() {
+    const rawKey = NOTION_ENCRYPTION_KEY.value();
+    if (!rawKey) throw new Error("Missing NOTION_ENCRYPTION_KEY secret");
+    // Hash to ensure it's exactly 32 bytes (256 bits) required by AES-256.
+    return crypto.createHash('sha256').update(rawKey).digest();
+}
+
+function encrypt(text) {
+    if (!text) return text;
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(ALGORITHM, getCryptoKey(), iv);
+    const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+    return `v2:${iv.toString('hex')}:${encrypted.toString('hex')}:${authTag.toString('hex')}`;
+}
+
+function decryptLegacyCbc(payload) {
+    const textParts = payload.split(':');
+    if (textParts.length !== 2) return null;
+
+    const iv = Buffer.from(textParts[0], 'hex');
+    const encryptedText = Buffer.from(textParts[1], 'hex');
+    const decipher = crypto.createDecipheriv(LEGACY_ALGORITHM, getCryptoKey(), iv);
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+}
+
+function decryptCurrentGcm(payload) {
+    const textParts = payload.split(':');
+    if (textParts.length !== 4 || textParts[0] !== 'v2') return null;
+
+    const iv = Buffer.from(textParts[1], 'hex');
+    const encryptedText = Buffer.from(textParts[2], 'hex');
+    const authTag = Buffer.from(textParts[3], 'hex');
+    const decipher = crypto.createDecipheriv(ALGORITHM, getCryptoKey(), iv);
+    decipher.setAuthTag(authTag);
+    const decrypted = Buffer.concat([decipher.update(encryptedText), decipher.final()]);
+    return decrypted.toString('utf8');
+}
+
+function decryptStoredNotionKey(text) {
+    if (!text) return text;
+    try {
+        if (text.startsWith('v2:')) {
+            return { value: decryptCurrentGcm(text), needsMigration: false };
+        }
+
+        if (text.includes(':')) {
+            return { value: decryptLegacyCbc(text), needsMigration: true };
+        }
+
+        // Plaintext leftover from older storage style.
+        return { value: text, needsMigration: true };
+    } catch (e) {
+        console.error("Decryption failed for stored Notion key.");
+        return { value: null, needsMigration: false };
+    }
+}
+
+function setStandardHeaders(res) {
+    res.set('Cache-Control', 'no-store');
+    res.set('X-Content-Type-Options', 'nosniff');
+}
+
+function applyCors(req, res) {
+    const origin = req.headers.origin;
+    if (!origin) return true;
+    if (!ALLOWED_ORIGINS.has(origin)) return false;
+
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Vary', 'Origin');
+    return true;
+}
+
+function handleOptions(req, res) {
+    if (req.method !== 'OPTIONS') return false;
+    if (!applyCors(req, res)) {
+        res.status(403).send({ error: "Origin not allowed" });
+        return true;
+    }
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.status(204).send('');
+    return true;
+}
+
+function isJsonRequest(req) {
+    const contentType = req.get('content-type') || '';
+    return contentType.toLowerCase().includes('application/json');
+}
+
+function sanitizeSyncType(value) {
+    const syncType = (typeof value === 'string' ? value : 'morning').toLowerCase();
+    return syncType === 'night' ? 'evening' : syncType;
+}
+
+function parseImageDataUrl(imageData) {
+    if (typeof imageData !== 'string') return null;
+    if (imageData.length > MAX_BASE64_LENGTH) return null;
+
+    const match = imageData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) return null;
+
+    return {
+        mimeType: match[1].toLowerCase(),
+        base64Data: match[2]
+    };
+}
+
+function normalizeNotionDbId(rawDbId) {
+    if (typeof rawDbId !== 'string') return null;
+    const cleaned = rawDbId.replace(/-/g, '').trim();
+    return /^[a-f0-9]{32}$/i.test(cleaned) ? cleaned : null;
+}
+
+function isLikelyNotionKey(value) {
+    if (typeof value !== 'string') return false;
+    const trimmed = value.trim();
+    if (trimmed.length < 20 || trimmed.length > 256) return false;
+    return trimmed.startsWith('secret_');
+}
+
+async function resolveUserEmailFromGoogleToken(token) {
+    if (typeof token !== 'string' || token.length < 20 || token.length > 5000) {
+        throw new Error("INVALID_TOKEN_FORMAT");
     }
 
-    // notionKey/notionDbId can be passed from frontend setup
-    const { token, imageData, syncType = 'morning', notionKey, notionDbId } = req.body;
+    const { google } = require("googleapis");
+    const auth = new google.auth.OAuth2();
+    auth.setCredentials({ access_token: token });
+    const oauth2 = google.oauth2({ version: 'v2', auth });
+    const userInfo = await oauth2.userinfo.get();
+    const email = userInfo?.data?.email;
 
-    // Alias 'night' to 'evening' logic
-    const mode = (syncType === 'night') ? 'evening' : syncType;
+    if (!email) {
+        throw new Error("TOKEN_USER_LOOKUP_FAILED");
+    }
+    return email.toLowerCase();
+}
 
-    if (!token) return res.status(401).send({ error: "Missing Google OAuth Token" });
-    if (!imageData) return res.status(400).send({ error: "Missing Image Data" });
+async function getDecryptedNotionKeyAndMigrate(userRef, userData) {
+    if (!userData?.notionKey) {
+        return null;
+    }
 
-    // Security: 20MB Payload Limit (Approximation)
-    if (imageData.length > 20 * 1024 * 1024 * 1.37) { // Base64 overhead ~37%
-        return res.status(413).send({ error: "Payload too large. Max 20MB." });
+    const { value, needsMigration } = decryptStoredNotionKey(userData.notionKey);
+    if (!value) {
+        return null;
+    }
+
+    if (needsMigration) {
+        await userRef.set({ notionKey: encrypt(value) }, { merge: true });
+    }
+
+    return value;
+}
+
+// --- SETUP ENDPOINT: setupNotion ---
+exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTION_ENCRYPTION_KEY] }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    if (req.method !== 'POST') {
+        return res.status(405).send({ error: "Method not allowed" });
+    }
+    if (!isJsonRequest(req)) {
+        return res.status(415).send({ error: "Content-Type must be application/json" });
+    }
+
+    const body = req.body || {};
+    const token = body.token;
+    const notionKey = typeof body.notionKey === 'string' ? body.notionKey.trim() : '';
+    const notionDbId = normalizeNotionDbId(body.notionDbId);
+
+    if (!token || !isLikelyNotionKey(notionKey) || !notionDbId) {
+        return res.status(400).send({ error: "Invalid setup payload" });
     }
 
     try {
-        // Authenticate Google APIs
+        const userEmail = await resolveUserEmailFromGoogleToken(token);
+
+        const encryptedKey = encrypt(notionKey);
+        const db = admin.firestore();
+        const userRef = db.collection('users').doc(userEmail);
+        await userRef.set({ notionKey: encryptedKey, notionDbId }, { merge: true });
+
+        console.log(`Stored encrypted Notion settings for ${userEmail}`);
+        return res.status(200).send({ success: true, text: "Notion setup saved securely." });
+    } catch (err) {
+        console.error("Setup error:", err.message);
+        return res.status(500).send({ error: "Failed to securely save keys." });
+    }
+});
+
+// --- MAIN FUNCTION: syncPlanner ---
+exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 300, secrets: [NOTION_ENCRYPTION_KEY] }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    if (req.method !== 'POST') {
+        return res.status(405).send({ error: "Method not allowed" });
+    }
+    if (!isJsonRequest(req)) {
+        return res.status(415).send({ error: "Content-Type must be application/json" });
+    }
+
+    const body = req.body || {};
+    const token = body.token;
+    const mode = sanitizeSyncType(body.syncType);
+    const parsedImage = parseImageDataUrl(body.imageData);
+
+    if (!token) return res.status(401).send({ error: "Missing Google OAuth Token" });
+    if (!ALLOWED_SYNC_TYPES.has(mode)) return res.status(400).send({ error: "Invalid syncType" });
+    if (!parsedImage) return res.status(400).send({ error: "Invalid image data format or size" });
+
+    const { mimeType, base64Data } = parsedImage;
+
+    try {
+        const userEmail = await resolveUserEmailFromGoogleToken(token);
+        console.log(`User: ${userEmail}, Sync: ${mode}`);
+
         const { google } = require("googleapis"); // Lazy Load
         const auth = new google.auth.OAuth2();
         auth.setCredentials({ access_token: token });
 
-        // Get User Email for Profile Lookup
-        const oauth2 = google.oauth2({ version: 'v2', auth });
-        const userInfo = await oauth2.userinfo.get();
-        const userEmail = userInfo.data.email;
-        console.log(`User: ${userEmail}, Sync: ${mode}`);
-
-        // Load User Config from Firestore
+        // Load User Config from Firestore (This is where Notion Keys are securely stored)
         const db = admin.firestore();
         const userRef = db.collection('users').doc(userEmail);
         const userDoc = await userRef.get();
         let userData = userDoc.exists ? userDoc.data() : {};
-
-        // Update Notion Keys if provided (One-time setup logic)
-        if (notionKey && notionDbId) {
-            await userRef.set({ notionKey, notionDbId }, { merge: true });
-            userData.notionKey = notionKey;
-            userData.notionDbId = notionDbId;
-        }
 
         // Initialize Services
         const calendar = google.calendar({ version: 'v3', auth });
@@ -82,19 +283,18 @@ exports.syncPlanner = onRequest({ cors: true, memory: "1GiB", timeoutSeconds: 30
 
             // Create Notion Client (Lazy Load)
             const { Client } = require("@notionhq/client");
-            const notion = new Client({ auth: userData.notionKey });
+            const decryptedNotionKey = await getDecryptedNotionKeyAndMigrate(userRef, userData);
+            if (!decryptedNotionKey) return res.status(401).send({ error: "Invalid or corrupt Notion settings. Please re-setup Notion." });
+            const notion = new Client({ auth: decryptedNotionKey });
 
             // PARALLEL EXECUTION: Upload Limitless Image to Notion Directly (Zero Storage) & Extract Date
             console.log("Starting parallel Journal processing (Zero Storage)...");
 
-            // Strip Data URL prefix from imageData
-            const mimeType = imageData.match(/data:(.*);base64,/)?.[1] || 'image/jpeg';
-            const base64Data = imageData.split(',')[1];
             const buffer = Buffer.from(base64Data, 'base64');
 
             const [fileUploadId, extraction] = await Promise.all([
-                uploadFileToNotion(userData.notionKey, buffer, mimeType),
-                getPlannerDataFromImage(imageData, 'journal_date_only').catch(err => {
+                uploadFileToNotion(decryptedNotionKey, buffer, mimeType),
+                getPlannerDataFromImage({ mimeType, base64Data }, 'journal_date_only').catch(err => {
                     console.warn("Date extraction failed:", err.message);
                     return { date: null };
                 })
@@ -128,41 +328,39 @@ exports.syncPlanner = onRequest({ cors: true, memory: "1GiB", timeoutSeconds: 30
             return res.status(200).send({ text: `Journal synced to Notion! Date: ${journalDate}` });
         }
 
-        // PARALLEL EXECUTION: Cal & Tasks
-        console.log(`Parsing planner image for ${mode} sync...`);
-        const plannerData = await getPlannerDataFromImage(imageData, 'morning');
-
-        // Note: No Storage Upload needed for Gemini (it accepts inline Base64)
-        // Zero Storage Architecture: Image exists only in memory for this function.
-
-        if (plannerData.error) {
-            return res.status(400).send({ error: plannerData.error });
-        }
-
+        // --- BRANCH 2: MORNING/EVENING PLANNER ---
+        let plannerData;
         let msg = "";
 
         if (mode === 'morning') {
-            // PARALLEL EXECUTION: Calendar and Tasks
+            console.log(`Parsing planner image for morning sync...`);
+            plannerData = await getPlannerDataFromImage({ mimeType, base64Data }, 'morning');
+
+            if (plannerData.error) {
+                return res.status(400).send({ error: plannerData.error });
+            }
+
             console.log("Starting parallel Morning sync...");
+
+            // Parallel: Add Events to Calendar AND Add Tasks to Google Tasks.
             const [eventResults, taskCount] = await Promise.all([
                 syncCalendarEvents(calendar, plannerData),
                 syncGoogleTasks(tasks, plannerData)
             ]);
 
-            // Also check for completion
-            updateCompletedTasks(tasks, plannerData.todos).catch(e => console.warn("Task completion update failed:", e.message));
-
             msg = `Morning Sync Complete! Created ${eventResults.events} events, ${eventResults.reminders} reminders, and ${taskCount} tasks.`;
+            console.log(msg);
+            return res.status(200).send({ text: msg });
 
         } else if (mode === 'evening') {
-
-            // Evening sync also needs planner data
-            const plannerData = await getPlannerDataFromImage(imageData, 'evening');
+            // Re-scan image specifically looking for evening data (expenses, mood, etc).
+            console.log(`Parsing planner image for evening sync...`);
+            plannerData = await getPlannerDataFromImage({ mimeType, base64Data }, 'evening');
             if (plannerData.error) return res.status(400).send({ error: plannerData.error });
 
             let successMessages = [];
 
-            // 1. UPDATE COMPLETED TASKS
+            // 1. Mark tasks as completed in Google Tasks based on checkmarks in image.
             const updatedTasks = await updateCompletedTasks(tasks, plannerData);
             if (updatedTasks > 0) successMessages.push(`Marked ${updatedTasks} tasks completed.`);
 
@@ -204,31 +402,44 @@ exports.syncPlanner = onRequest({ cors: true, memory: "1GiB", timeoutSeconds: 30
 
             // Handle Notion Branch
             if (userData.notionKey && userData.notionDbId) {
-                // Upload image to Notion DIRECTLY (Zero Storage)
-                const { Client } = require("@notionhq/client");
-                const notion = new Client({ auth: userData.notionKey });
+                const decryptedNotionKey = await getDecryptedNotionKeyAndMigrate(userRef, userData);
 
-                promises.push(
-                    (async () => {
-                        const mimeType = imageData.match(/data:(.*);base64,/)?.[1] || 'image/jpeg';
-                        const base64Data = imageData.split(',')[1];
-                        const buffer = Buffer.from(base64Data, 'base64');
-                        const fileId = await uploadFileToNotion(userData.notionKey, buffer, mimeType);
-                        return syncBrainDumpToNotion(plannerData, userData.notionKey, userData.notionDbId, fileId);
-                    })()
-                );
+                if (decryptedNotionKey) {
+                    const brainDumpPromise = async () => {
+                        try {
+                            const buffer = Buffer.from(base64Data, 'base64');
+                            const fileId = await uploadFileToNotion(decryptedNotionKey, buffer, mimeType);
+                            return syncBrainDumpToNotion(plannerData, decryptedNotionKey, userData.notionDbId, fileId);
+                        } catch (err) {
+                            console.error("Notion sync failed:", err.message);
+                            return false;
+                        }
+                    };
+                    promises.push(brainDumpPromise());
+                } else {
+                    successMessages.push("(Skipped Notion - Failed to decrypt key).");
+                }
+            } else {
+                successMessages.push("(Skipped Notion - Keys missing).");
             }
 
-            // Await all
-            const results = await Promise.all(promises);
-            const addedExpenses = results[0];
-            const addedHealth = results[1];
-            const notionSynced = results.length > 2 ? results[2] : false;
+            // Await all (Promise.allSettled allows partial success)
+            const results = await Promise.allSettled(promises);
+
+            // Helper to get value or log error
+            const getResult = (result, name) => {
+                if (result.status === 'fulfilled') return result.value;
+                console.error(`${name} Sync Failed:`, result.reason?.message || result.reason);
+                return (name === 'Notion') ? false : 0;
+            };
+
+            const addedExpenses = getResult(results[0], 'Expenses');
+            const addedHealth = getResult(results[1], 'Health');
+            const notionSynced = results.length > 2 ? getResult(results[2], 'Notion') : false;
 
             if (addedExpenses > 0) successMessages.push(`Added ${addedExpenses} expenses to Sheet.`);
             if (addedHealth > 0) successMessages.push(`Logged Health & Wellness.`);
             if (notionSynced) successMessages.push(`Saved Visual Brain Dump to Notion.`);
-            if (!userData.notionKey) successMessages.push("(Skipped Notion - Keys missing).");
 
             if (successMessages.length === 0) msg = "Night Sync output: No items found to sync.";
             else msg = "Night Sync Complete: " + successMessages.join(" ");
@@ -241,16 +452,13 @@ exports.syncPlanner = onRequest({ cors: true, memory: "1GiB", timeoutSeconds: 30
 
     } catch (error) {
         console.error("FATAL ERROR:", error.message);
-        console.error("Stack:", error.stack);
-        if (error.errors) console.error("Validation Errors:", JSON.stringify(error.errors, null, 2));
 
-        // Security: Don't leak stack traces to client
+        // Security: Don't leak internals to client
         const safeMessage = error.message.includes("RATE_LIMIT") ? "AI Service Busy. Please try again." : "Internal Server Error";
         res.status(500).send({ error: safeMessage });
     }
 });
 
-// Helper to upload to Firebase Storage
 // Helper to upload file to Notion (Direct Upload - Corrected 2-Step Flow)
 async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
     try {
@@ -276,7 +484,6 @@ async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
         console.log(`Step 1 Success. ID: ${id}. Step 2: Uploading Binary...`);
 
         // Step 2: Upload File Content to the returned URL
-        // Use Native FormData (Node 20+)
         const form = new FormData();
         const blob = new Blob([fileBuffer], { type: mimeType });
         form.append("file", blob, "journal.jpg");
@@ -288,7 +495,6 @@ async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
                 "Notion-Version": "2022-06-28"
             },
             body: form
-            // Native fetch automatically sets Content-Type: multipart/form-data; boundary=...
         });
 
         if (!uploadRes.ok) throw new Error(`Notion Binary Upload Failed: ${await uploadRes.text()}`);
@@ -296,12 +502,10 @@ async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
         console.log(`Notion File Uploaded Successfully: ${id}`);
         return id;
     } catch (e) {
-        console.error("Notion Direct Upload Error:", e);
+        console.error("Notion Direct Upload Error:", e.message);
         throw e;
     }
 }
-
-
 
 // Helper to fetch with timeout
 async function fetchWithTimeout(url, options, timeout = 60000) {
@@ -375,11 +579,17 @@ async function callGeminiModel(model, apiKey, prompt, imageData, mimeType) {
 }
 
 
-async function getPlannerDataFromImage(imageData, syncType) {
-    const { GoogleGenerativeAI } = require("@google/generative-ai"); // Lazy Load
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const mimeType = imageData.match(/data:(.*);base64,/)?.[1] || 'image/jpeg';
-    const base64ImageData = imageData.split(',')[1];
+async function getPlannerDataFromImage(parsedImage, syncType) {
+    const mimeType = parsedImage?.mimeType;
+    const base64ImageData = parsedImage?.base64Data;
+    const geminiApiKey = GEMINI_API_KEY.value();
+
+    if (!mimeType || !base64ImageData) {
+        throw new Error("INVALID_IMAGE_PAYLOAD");
+    }
+    if (!geminiApiKey) {
+        throw new Error("MISSING_GEMINI_API_KEY");
+    }
 
     // Choose prompt based on sync type
     // Choose prompt based on sync type
@@ -400,7 +610,7 @@ async function getPlannerDataFromImage(imageData, syncType) {
 
     for (const model of models) {
         try {
-            return await callGeminiModel(model, GEMINI_API_KEY, prompt, base64ImageData, mimeType);
+            return await callGeminiModel(model, geminiApiKey, prompt, base64ImageData, mimeType);
         } catch (error) {
             lastError = error;
             // Continue to next model if available
@@ -422,10 +632,19 @@ async function syncCalendarEvents(calendar, plannerData) {
             // Safety check: Skip if time couldn't be parsed
             if (!startTime) continue;
 
+            // Assume event lasts 1 hour.
             const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
 
-            const sTime = startTime.toISOString().replace('Z', '');
-            const eTime = endTime.toISOString().replace('Z', '');
+            // Fix: Use localized time strings for Google Calendar to prevent UTC shift
+            // We want "2023-10-25T09:00:00" not "2023-10-25T09:00:00.000Z" (which GCal treats as UTC)
+            // The cleanest way is to use the sv-SE locale which follows ISO format but uses local time values
+            const toLocalISO = (date) => {
+                const offset = date.getTimezoneOffset() * 60000;
+                return new Date(date.getTime() - offset).toISOString().slice(0, 19);
+            };
+
+            const sTime = toLocalISO(startTime);
+            const eTime = toLocalISO(endTime);
             console.log(`Creating Event: "${item.task}" Start: ${sTime} End: ${eTime}`);
 
             await calendar.events.insert({
@@ -613,13 +832,31 @@ async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, file
 }
 
 
+// Improved parseDateTime with validation
 function parseDateTime(timeString, dateString) {
+    if (!timeString || !dateString) return null;
+
+    // Clean inputs
+    timeString = timeString.trim();
+    dateString = dateString.trim();
+
     const match = timeString.match(/(\d{1,2})\s*(AM|PM)/i);
-    if (!match) return null; // Added safety check
+    if (!match) return null;
+
     let hours = parseInt(match[1]);
+    if (isNaN(hours)) return null;
+
     if (match[2].toUpperCase() === 'PM' && hours < 12) hours += 12;
     if (match[2].toUpperCase() === 'AM' && hours === 12) hours = 0;
+
     const d = new Date(dateString);
+    if (isNaN(d.getTime())) {
+        console.warn(`Invalid date string from AI: ${dateString}`);
+        // Fallback to today if AI date is garbage, or return null to skip setting time?
+        // Returing null is safer to avoid scheduling events on wrong days.
+        return null;
+    }
+
     d.setHours(hours, 0, 0, 0);
     return d;
 }

@@ -453,7 +453,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
 
         // FIREBASE CONFIG
         const firebaseConfig = {
@@ -476,10 +476,8 @@
         // STATE
         let currentUser = null;
         let fileAsBase64 = null;
-        let userNotionConfig = null; // { key, id }
-
-        // Retrieve cached token from session if available
-        let googleAccessToken = sessionStorage.getItem('googleAccessToken') || null;
+        // Keep OAuth token only in memory (not session/local storage)
+        let googleAccessToken = null;
 
         // NAVIGATION
         const switchView = (viewId) => {
@@ -489,21 +487,51 @@
             document.getElementById(viewId).classList.remove('view-hidden');
         };
 
-        // --- 1. AUTH FLOW ---
-        const loginBtn = document.getElementById('login-btn');
-        loginBtn.addEventListener('click', async () => {
+        const buildGoogleProvider = () => {
             const provider = new GoogleAuthProvider();
             provider.addScope('https://www.googleapis.com/auth/calendar.events');
             provider.addScope('https://www.googleapis.com/auth/tasks');
             provider.addScope('https://www.googleapis.com/auth/spreadsheets');
             provider.addScope('https://www.googleapis.com/auth/drive.file');
+            return provider;
+        };
+
+        const ensureGoogleAccessToken = async () => {
+            if (googleAccessToken) return googleAccessToken;
+            if (!auth.currentUser) throw new Error("Please sign in again.");
+
+            const result = await signInWithPopup(auth, buildGoogleProvider());
+            const credential = GoogleAuthProvider.credentialFromResult(result);
+            if (!credential?.accessToken) throw new Error("Failed to acquire Google token.");
+
+            googleAccessToken = credential.accessToken;
+            return googleAccessToken;
+        };
+
+        const parseJsonResponse = async (res) => {
+            const text = await res.text();
+            const contentType = (res.headers.get('content-type') || '').toLowerCase();
+
+            if (!contentType.includes('application/json')) {
+                const snippet = text.slice(0, 120).replace(/\s+/g, ' ').trim();
+                throw new Error(`Non-JSON API response (${res.status}): ${snippet || 'empty body'}`);
+            }
 
             try {
-                const result = await signInWithPopup(auth, provider);
+                return JSON.parse(text);
+            } catch (e) {
+                throw new Error(`Invalid JSON API response (${res.status}).`);
+            }
+        };
+
+        // --- 1. AUTH FLOW ---
+        const loginBtn = document.getElementById('login-btn');
+        loginBtn.addEventListener('click', async () => {
+            try {
+                const result = await signInWithPopup(auth, buildGoogleProvider());
                 // Capture the Access Token immediately so we don't ask again
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 googleAccessToken = credential.accessToken;
-                sessionStorage.setItem('googleAccessToken', googleAccessToken); // Persist
 
                 // Auth listener will handle redirection
             } catch (e) {
@@ -514,21 +542,17 @@
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 currentUser = user;
-                // If we have a user but no access token (e.g. reload), we might need to re-auth silently later.
-                // For now, we rely on sessionStorage.
                 document.getElementById('user-email').textContent = user.email;
                 await checkUserSetup(user);
             } else {
                 currentUser = null;
                 googleAccessToken = null;
-                sessionStorage.removeItem('googleAccessToken'); // Clear
                 switchView('view-login');
             }
         });
 
         document.getElementById('logout-btn').addEventListener('click', () => {
             auth.signOut();
-            sessionStorage.clear();
         });
 
         // --- 2. SETUP FLOW ---
@@ -540,7 +564,6 @@
 
                 if (snap.exists() && snap.data().notionKey) {
                     // User has setup Notion -> Go to Dashboard
-                    userNotionConfig = { key: snap.data().notionKey, id: snap.data().notionDbId };
                     switchView('view-dashboard');
                 } else {
                     // No setup -> Go to Setup Screen
@@ -559,12 +582,36 @@
             const dbId = document.getElementById('setup-db').value;
             if (!key || !dbId) return alert("Please fill both fields");
 
-            // Save to Firestore (Simulated via next sync or direct write if rules allow. 
-            // Here we just save locally to state and pass to first sync to let backend save it securely)
-            userNotionConfig = { key, id: dbId };
+            const saveBtn = document.getElementById('save-setup-btn');
+            const originalText = saveBtn.innerText;
+            saveBtn.innerText = "Securing...";
+            saveBtn.disabled = true;
 
-            // Optimistic switch
-            switchView('view-dashboard');
+            try {
+                const token = await ensureGoogleAccessToken();
+
+                // Send raw key to backend to be encrypted and saved securely
+                const res = await fetch('/setupNotion', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token,
+                        notionKey: key,
+                        notionDbId: dbId
+                    })
+                });
+
+                if (!res.ok) throw new Error("Failed to secure keys.");
+
+                // Optimistic switch
+                switchView('view-dashboard');
+            } catch (err) {
+                console.error("Failed to save Notion settings:", err);
+                alert("Could not save settings securely. Please try again.");
+            } finally {
+                saveBtn.innerText = originalText;
+                saveBtn.disabled = false;
+            }
         });
 
         document.getElementById('skip-setup-btn').addEventListener('click', () => {
@@ -720,32 +767,14 @@
             });
 
             try {
-                // Get Token: Use cached or Re-auth if missing (e.g. page refresh)
-                let token = googleAccessToken;
-                if (!token) {
-                    token = sessionStorage.getItem('googleAccessToken');
-                    if (token) googleAccessToken = token; // Restore to memory
-                }
+                // Ensure a fresh/in-memory token when needed (no browser storage persistence)
+                const token = await ensureGoogleAccessToken();
 
-                if (!token) {
-                    console.log("Token missing (refresh?), re-authenticating...");
-                    const provider = new GoogleAuthProvider();
-                    provider.addScope('https://www.googleapis.com/auth/calendar.events');
-                    provider.addScope('https://www.googleapis.com/auth/tasks');
-                    provider.addScope('https://www.googleapis.com/auth/spreadsheets');
-                    provider.addScope('https://www.googleapis.com/auth/drive.file');
-
-                    const result = await signInWithPopup(auth, provider);
-                    const credential = GoogleAuthProvider.credentialFromResult(result);
-                    token = credential.accessToken;
-                    googleAccessToken = token; // Cache it
-                    sessionStorage.setItem('googleAccessToken', token); // Persist
-                }
-
-                // Prepare API
-                const API_URL = window.location.hostname === "localhost"
+                // Primary route uses Hosting rewrite. Fallback hits function directly.
+                const PRIMARY_API_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
                     ? "http://127.0.0.1:5001/ai-planner-project-467800/us-central1/syncPlanner"
-                    : "https://syncplanner-xeh5qbnxga-uc.a.run.app";
+                    : "/syncPlanner";
+                const FALLBACK_API_URL = "https://syncplanner-xeh5qbnxga-uc.a.run.app";
 
                 const payload = {
                     token: token,
@@ -753,26 +782,35 @@
                     syncType
                 };
 
-                // Attach Notion Config if we have it (First time save)
-                if (userNotionConfig) {
-                    payload.notionKey = userNotionConfig.key;
-                    payload.notionDbId = userNotionConfig.id;
-                }
+                // Note: We no longer send Notion keys in the payload for security.
+                // The backend automatically retrieves them securely from Firestore.
 
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes Frontend Timeout
 
-                const res = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                    signal: controller.signal
-                });
+                let res;
+                let data;
+                try {
+                    res = await fetch(PRIMARY_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                        signal: controller.signal
+                    });
+                    data = await parseJsonResponse(res);
+                } catch (primaryErr) {
+                    console.warn("Primary API route failed, retrying direct function URL.", primaryErr);
+                    res = await fetch(FALLBACK_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                        signal: controller.signal
+                    });
+                    data = await parseJsonResponse(res);
+                }
 
                 clearTimeout(timeoutId);
                 timers.forEach(t => clearTimeout(t)); // Stop simulated progress
-
-                const data = await res.json();
 
                 if (res.ok) {
                     statusArea.classList.remove('text-red-600', 'bg-red-50', 'text-blue-600', 'bg-blue-50');

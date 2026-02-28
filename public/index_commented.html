@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Planner Sync</title>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2921/2921226.png">
+    <meta name="theme-color" content="#ffffff">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Customizing Tailwind to support our specific Light/Dark/OLED themes
+        tailwind.config = {
+            darkMode: 'class', // We control dark mode manually via a CSS class
+            theme: {
+                extend: {
+                    colors: {
+                        theme: { // Custom color variables that map to our CSS below
+                            bg: 'var(--bg-main)',
+                            card: 'var(--bg-card)',
+                            text: 'var(--text-main)',
+                            muted: 'var(--text-muted)',
+                            border: 'var(--border-color)',
+                            glass: 'var(--glass-bg)',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* :root defines variables that apply to the whole page. This is the default Light Mode. */
+        :root {
+            --bg-main: #f8fafc;
+            --bg-card: rgba(255, 255, 255, 0.25);
+            --text-main: #334155;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --glass-bg: rgba(255, 255, 255, 0.25);
+        }
+
+        /* When the 'dark-mode' class is added to the <html> tag, these colors overwrite the light ones. */
+        .dark-mode {
+            --bg-main: #0f172a;
+            --bg-card: rgba(30, 41, 59, 0.25);
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --glass-bg: rgba(30, 41, 59, 0.25);
+        }
+
+        /* True black mode for OLED screens to save battery */
+        .oled-mode {
+            --bg-main: #000000;
+            --bg-card: #000000;
+            --text-main: #ffffff;
+            --text-muted: #a3a3a3;
+            --border-color: #333333;
+            --glass-bg: #000000;
+        }
+
+        /* Base styling for the whole body */
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            /* Smooth color changing */
+        }
+
+        /* The frosted glass effect used on the main card */
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            /* This is what makes it look like frosted glass */
+            border: 1px solid var(--border-color);
+        }
+
+        /* A utility class to easily hide elements */
+        .view-hidden {
+            display: none !important;
+        }
+
+        /* The spinning loading animation CSS */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #3B82F6;
+            animation: spin 1s ease infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ... Additional CSS omitted for brevity (Animations, Theme menu styling) ... */
+    </style>
+
+    <script>
+        // Registering a Service Worker makes this app installable as a PWA (Progressive Web App)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('SW registered'))
+                    .catch(err => console.log('SW failed', err));
+            });
+        }
+    </script>
+</head>
+
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- The main central frosted glass card -->
+    <div class="w-full max-w-lg mx-auto glass rounded-2xl shadow-xl p-8 relative overflow-hidden">
+
+        <!-- App Header & Theme Switcher -->
+        <div class="text-center mb-10 relative">
+
+            <!-- Theme dropdown button at top right -->
+            <div class="absolute -top-4 -right-4 z-40">
+                <button id="theme-btn" onclick="toggleMenu()" class="...">☀️</button>
+                <div id="theme-dropdown" class="theme-menu">
+                    <!-- Triggers the Javascript selectTheme function -->
+                    <div class="theme-item" onclick="selectTheme('light')" data-label="Light">☀️</div>
+                    <div class="theme-item" onclick="selectTheme('dark')" data-label="Dark">🌙</div>
+                    <div class="theme-item" onclick="selectTheme('oled')" data-label="OLED">🖤</div>
+                    <div class="theme-item" onclick="selectTheme('auto')" data-label="Auto">⚙️</div>
+                </div>
+            </div>
+
+            <!-- App Title -->
+            <div class="inline-block p-3 rounded-2xl bg-emerald-500/10 mb-4 shadow-sm text-3xl">🌿</div>
+            <h1 class="text-4xl font-bold tracking-tight text-theme-text">AI Planner</h1>
+            <p id="header-subtitle" class="text-theme-muted mt-2 font-medium">Calm your digital chaos.</p>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VIEW 1: LOGIN (Shown only when logged out)     -->
+        <!-- ============================================== -->
+        <div id="view-login" class="fade-in flex flex-col items-center">
+            <div
+                class="mb-8 flex items-center space-x-2 bg-theme-glass px-4 py-1.5 rounded-full border border-theme-border">
+                <span class="text-xs font-semibold text-emerald-600 tracking-wide uppercase">🔒 Private & Secure</span>
+            </div>
+
+            <!-- Login with Google Auth -->
+            <button id="login-btn" class="...">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="...">
+                <span class="text-theme-text font-medium">Continue with Google</span>
+            </button>
+
+            <div
+                class="w-full grid grid-cols-2 gap-y-6 gap-x-4 text-xs text-theme-muted border-t border-theme-border pt-8">
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VIEW 2: SETUP (Shown if user has no Notion Keys) -->
+        <!-- ============================================== -->
+        <div id="view-setup" class="view-hidden fade-in space-y-6">
+            <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                <h3 class="font-bold text-blue-900 mb-1">One-Time Setup</h3>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label>Notion Integration Key</label>
+                    <input type="password" id="setup-key" placeholder="secret_...">
+                </div>
+                <div>
+                    <label>Database ID</label>
+                    <input type="text" id="setup-db" placeholder="Database ID">
+                </div>
+            </div>
+
+            <button id="save-setup-btn" class="...">Save & Continue</button>
+            <button id="skip-setup-btn" class="...">Skip for now</button>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VIEW 3: DASHBOARD (Main App Interface)         -->
+        <!-- ============================================== -->
+        <div id="view-dashboard" class="view-hidden fade-in space-y-6">
+
+            <div class="flex items-center justify-between text-xs text-gray-400 border-b border-gray-100 pb-2">
+                <span id="user-email">user@example.com</span>
+                <button id="logout-btn" class="hover:text-red-500">Sign Out</button>
+            </div>
+
+            <!-- The Image Upload Drag & Drop Zone -->
+            <label for="file-upload" id="drop-zone" class="...">
+                <div id="upload-ui">📸 Tap to Upload or Drag & Drop</div>
+                <!-- Shows a compressed preview of the image holding the Base64 data -->
+                <img id="dash-preview"
+                    class="hidden absolute inset-0 w-full h-full object-contain rounded-xl bg-white p-2">
+            </label>
+            <input id="file-upload" type="file" accept="image/*" class="hidden">
+
+            <!-- Action Buttons for different Sync Modes -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <button onclick="triggerSync('morning')" class="dash-btn ...">☀️ Morning</button>
+                <button onclick="triggerSync('night')" class="dash-btn ...">🌙 Night Sync</button>
+                <button onclick="triggerSync('journal')" class="dash-btn ...">📖 Journal</button>
+            </div>
+
+            <div id="status-area" class="hidden p-3 bg-gray-50 rounded-lg text-sm border text-center"></div>
+            <div id="dash-loader" class="hidden flex justify-center">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- MAIN JAVASCRIPT LOGIC                          -->
+    <!-- ============================================== -->
+    <script type="module">
+        // 1. IMPORT FIREBASE (Like Python imports, but direct from a URL for native browser support)
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+
+        // 2. FIREBASE CONFIGURATION (Identifies which Firebase Cloud project to talk to)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBRVEfF58gL3yxQ2UY-_lMgftPnFrZ0_T0", // Frontend safe API key to identify app
+            authDomain: "ai-planner-project-467800.firebaseapp.com",
+            projectId: "ai-planner-project-467800",
+            // ... other config
+        };
+
+        // Initialize Firebase services
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app); // Handles logging in/out
+        const db = getFirestore(app); // Handles reading/writing the database
+
+        // 3. GLOBAL STATE VARIABLES (Storing temporary data while the app is running in the browser)
+        let currentUser = null;
+        let fileAsBase64 = null; // Storing the selected, compressed image text string
+
+        // Keep OAuth token in memory only (reduces XSS token theft blast radius)
+        let googleAccessToken = null;
+
+        // 4. NAVIGATION FUNCTION
+        // Loops through all 3 views, hides them, and un-hides the one passed as 'viewId'.
+        const switchView = (viewId) => {
+            ['view-login', 'view-setup', 'view-dashboard'].forEach(id => {
+                // document.getElementById finds the HTML tag. classList.add adds a Tailwind CSS hiding class.
+                document.getElementById(id).classList.add('view-hidden');
+            });
+            document.getElementById(viewId).classList.remove('view-hidden');
+        };
+
+        // Build provider with all required scopes in one place
+        const buildGoogleProvider = () => {
+            const provider = new GoogleAuthProvider();
+            provider.addScope('https://www.googleapis.com/auth/calendar.events');
+            provider.addScope('https://www.googleapis.com/auth/tasks');
+            provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+            provider.addScope('https://www.googleapis.com/auth/drive.file');
+            return provider;
+        };
+
+        // Acquire token on demand. If page was refreshed, prompt again when needed.
+        const ensureGoogleAccessToken = async () => {
+            if (googleAccessToken) return googleAccessToken;
+            if (!auth.currentUser) throw new Error("Please sign in again.");
+
+            const result = await signInWithPopup(auth, buildGoogleProvider());
+            const credential = GoogleAuthProvider.credentialFromResult(result);
+            if (!credential?.accessToken) throw new Error("Failed to acquire Google token.");
+
+            googleAccessToken = credential.accessToken;
+            return googleAccessToken;
+        };
+
+        // Safe JSON parser that fails loudly when HTML (index page) is returned by mistake.
+        const parseJsonResponse = async (res) => {
+            const text = await res.text();
+            const contentType = (res.headers.get('content-type') || '').toLowerCase();
+
+            if (!contentType.includes('application/json')) {
+                const snippet = text.slice(0, 120).replace(/\s+/g, ' ').trim();
+                throw new Error(`Non-JSON API response (${res.status}): ${snippet || 'empty body'}`);
+            }
+
+            return JSON.parse(text);
+        };
+
+        // --- AUTHENTICATION FLOW (Handling Logins) ---
+
+        // Find the login button and wait for a click
+        const loginBtn = document.getElementById('login-btn');
+        loginBtn.addEventListener('click', async () => {
+            try {
+                // Opens the standard Google Login popup window
+                const result = await signInWithPopup(auth, buildGoogleProvider());
+
+                // Save their specific access token. We need this to act 'on behalf' of the user in our backend.
+                const credential = GoogleAuthProvider.credentialFromResult(result);
+                googleAccessToken = credential.accessToken;
+            } catch (e) {
+                alert("Login failed: " + e.message);
+            }
+        });
+
+        // This listener runs automatically whenever the Firebase auth state changes (login, logout, refresh)
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                // Logged In
+                currentUser = user;
+                document.getElementById('user-email').textContent = user.email;
+                await checkUserSetup(user); // Check database to see if they need Notion setup
+            } else {
+                // Not Logged In - Hide everything and show login screen
+                currentUser = null;
+                googleAccessToken = null;
+                switchView('view-login');
+            }
+        });
+
+        // --- SETUP FLOW (Handling Notion Keys) ---
+
+        // Checks the secure Firestore database to see if the user saved Notion keys before
+        async function checkUserSetup(user) {
+            try {
+                const userRef = doc(db, "users", user.email);
+                const snap = await getDoc(userRef); // Read from database
+
+                // If document exists and has a specific notionKey field
+                if (snap.exists() && snap.data().notionKey) {
+                    switchView('view-dashboard'); // Skip setup, go straight to main app
+                } else {
+                    switchView('view-setup'); // Show setup form
+                }
+            } catch (err) {
+                switchView('view-setup'); // On error, fallback to asking for them again
+            }
+        }
+
+        // Save Notion Settings securely to database
+        document.getElementById('save-setup-btn').addEventListener('click', async () => {
+            const key = document.getElementById('setup-key').value;
+            const dbId = document.getElementById('setup-db').value;
+            if (!key || !dbId) return alert("Please fill both fields");
+
+            const saveBtn = document.getElementById('save-setup-btn');
+            saveBtn.innerText = "Securing...";
+
+            try {
+                const token = await ensureGoogleAccessToken();
+
+                // Send to backend for military-grade Application-Level Encryption before saving
+                const res = await fetch('/setupNotion', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: token,
+                        notionKey: key,
+                        notionDbId: dbId
+                    })
+                });
+
+                if (!res.ok) throw new Error("Backend encryption failed");
+
+                switchView('view-dashboard'); // Proceed to app
+            } catch (err) {
+                console.error("Error saving setup:", err);
+                alert("Failed to securely save settings.");
+            } finally {
+                saveBtn.innerText = "Save & Continue";
+            }
+        });
+
+        document.getElementById('skip-setup-btn').addEventListener('click', () => {
+            switchView('view-dashboard');
+        });
+
+        // --- IMAGE HANDLING & COMPRESSION (Crucial Part to save bandwidth) ---
+        const fileInput = document.getElementById('file-upload');
+        const dashPreview = document.getElementById('dash-preview');
+
+        // This runs instantly when a user drags a file or selects one from their phone/computer
+        const handleFile = async (file) => {
+            if (!file) return;
+
+            // 1. Format conversion: If it's a raw iPhone photo (HEIC format), convert it to JPG using a library
+            if (file.type === "image/heic" || file.name.toLowerCase().endsWith('.heic')) {
+                const blob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.8 });
+                const convertedBlob = Array.isArray(blob) ? blob[0] : blob; // Handle both single or burst photos
+                file = new File([convertedBlob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+            }
+
+            // 2. Client-Side Compression using HTML Canvas (Downsizing before uploading)
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        // Math logic to resize image to max 1200x1600 while keeping original aspect ratio
+                        const MAX_WIDTH = 1200;
+                        const MAX_HEIGHT = 1600;
+                        let width = img.width; let height = img.height;
+                        // ... complex proportion math ignored here ...
+
+                        // Draw the raw image onto an invisible digital HTML canvas
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width; canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        // Extract the drawn canvas image back out as a compressed JPEG string (Base64)
+                        fileAsBase64 = canvas.toDataURL('image/jpeg', 0.7); // The '0.7' means 70% JPEG quality
+
+                        // Show it in the UI as a preview
+                        dashPreview.src = fileAsBase64;
+                        dashPreview.classList.remove('hidden');
+                    };
+                    img.src = ev.target.result; // Setting this triggers img.onload above
+                };
+                reader.readAsDataURL(file); // Passing file here triggers reader.onload above
+            }
+        }
+
+        // Attach function to the hidden file input
+        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+        // --- API COMMUNICATION (Sending data to Backend Node Server) ---
+
+        // Attached to the window object so the HTML buttons (`onclick="triggerSync(...)"`) can fire it
+        window.triggerSync = async (syncType) => {
+            const loader = document.getElementById('dash-loader');
+            loader.style.display = 'flex'; // Show spinning circle animation
+
+            try {
+                // Ensure we have the Google Token (Authentication)
+                const token = await ensureGoogleAccessToken();
+
+                // Pack the data object to send over the internet to our backend
+                const payload = {
+                    token: token,
+                    imageData: fileAsBase64, // The compressed image string
+                    syncType: syncType       // "morning", "night", or "journal"
+                };
+
+                // Security Note: We DO NOT send `notionKey` or `notionDbId` across the internet.
+                // The Node backend securely pulls them directly from the database to prevent sniffing.
+
+                // Primary URL expects Firebase Hosting rewrite.
+                // Fallback URL calls the Cloud Run function directly.
+                const PRIMARY_API_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+                    ? "http://127.0.0.1:5001/ai-planner-project-467800/us-central1/syncPlanner"
+                    : "/syncPlanner";
+                const FALLBACK_API_URL = "https://syncplanner-xeh5qbnxga-uc.a.run.app";
+
+                let res;
+                let data;
+                try {
+                    res = await fetch(PRIMARY_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    data = await parseJsonResponse(res);
+                } catch (primaryErr) {
+                    console.warn("Primary API route failed, retrying direct function URL.", primaryErr);
+                    res = await fetch(FALLBACK_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    data = await parseJsonResponse(res);
+                }
+
+                if (res.ok) { // Check if HTTP status is 200/204
+                    // Display success message from the backend in green
+                    document.getElementById('status-area').textContent = `Success! ${data.text}`;
+                } else {
+                    // Throw to the catch block to log the error message
+                    throw new Error(data.error);
+                }
+            } catch (err) {
+                // Display error message in red
+                document.getElementById('status-area').textContent = `Error: ${err.message}`;
+            } finally {
+                loader.style.display = 'none'; // Ensure loading spinner is turned off no matter what
+            }
+        };
+
+        // ... Theme switching logic omitted for brevity (saves user choice to localStorage) ...
+    </script>
+</body>
+
+</html>
