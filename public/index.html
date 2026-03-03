@@ -452,7 +452,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
         import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
 
         // FIREBASE CONFIG
@@ -500,12 +500,20 @@
             if (googleAccessToken) return googleAccessToken;
             if (!auth.currentUser) throw new Error("Please sign in again.");
 
-            const result = await signInWithPopup(auth, buildGoogleProvider());
-            const credential = GoogleAuthProvider.credentialFromResult(result);
-            if (!credential?.accessToken) throw new Error("Failed to acquire Google token.");
-
-            googleAccessToken = credential.accessToken;
-            return googleAccessToken;
+            try {
+                const result = await signInWithPopup(auth, buildGoogleProvider());
+                const credential = GoogleAuthProvider.credentialFromResult(result);
+                if (!credential?.accessToken) throw new Error("Failed to acquire Google token.");
+                googleAccessToken = credential.accessToken;
+                return googleAccessToken;
+            } catch (e) {
+                if (e.code === 'auth/popup-blocked') {
+                    // Fallback: redirect-based login (works on Brave, Safari, etc.)
+                    await signInWithRedirect(auth, buildGoogleProvider());
+                    return; // Page will reload after redirect
+                }
+                throw e;
+            }
         };
 
         const parseJsonResponse = async (res) => {
@@ -525,16 +533,28 @@
         };
 
         // --- 1. AUTH FLOW ---
+        // Handle redirect result (if user was redirected back from Google login)
+        getRedirectResult(auth).then((result) => {
+            if (result) {
+                const credential = GoogleAuthProvider.credentialFromResult(result);
+                if (credential?.accessToken) {
+                    googleAccessToken = credential.accessToken;
+                }
+            }
+        }).catch((err) => console.warn("Redirect result error:", err));
+
         const loginBtn = document.getElementById('login-btn');
         loginBtn.addEventListener('click', async () => {
             try {
                 const result = await signInWithPopup(auth, buildGoogleProvider());
-                // Capture the Access Token immediately so we don't ask again
                 const credential = GoogleAuthProvider.credentialFromResult(result);
                 googleAccessToken = credential.accessToken;
-
-                // Auth listener will handle redirection
             } catch (e) {
+                if (e.code === 'auth/popup-blocked') {
+                    // Brave, Safari, or strict popup blockers: use redirect instead
+                    await signInWithRedirect(auth, buildGoogleProvider());
+                    return; // Page will reload after redirect completes
+                }
                 alert("Login failed: " + e.message);
             }
         });
