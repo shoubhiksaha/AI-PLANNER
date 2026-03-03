@@ -23,16 +23,16 @@
         <!-- HEADER -->
         <div class="text-center mb-10 relative">
             <div class="absolute -top-4 -right-4 z-40">
-                <button id="theme-btn" onclick="toggleMenu()"
+                <button id="theme-btn"
                     class="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-xl">
                     ☀️
                 </button>
 
                 <div id="theme-dropdown" class="theme-menu">
-                    <div class="theme-item" onclick="selectTheme('light')" data-label="Light">☀️</div>
-                    <div class="theme-item" onclick="selectTheme('dark')" data-label="Dark">🌙</div>
-                    <div class="theme-item" onclick="selectTheme('oled')" data-label="OLED">🖤</div>
-                    <div class="theme-item" onclick="selectTheme('auto')" data-label="Auto">⚙️</div>
+                    <div class="theme-item" data-theme="light" data-label="Light">☀️</div>
+                    <div class="theme-item" data-theme="dark" data-label="Dark">🌙</div>
+                    <div class="theme-item" data-theme="oled" data-label="OLED">🖤</div>
+                    <div class="theme-item" data-theme="auto" data-label="Auto">⚙️</div>
                 </div>
             </div>
 
@@ -137,17 +137,17 @@
 
             <!-- Buttons -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <button onclick="triggerSync('morning')"
+                <button id="btn-morning"
                     class="dash-btn disabled:opacity-50 p-3 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl flex flex-col items-center transition-all">
                     <span class="text-xl">☀️</span>
                     <span class="font-bold text-orange-900 text-sm mt-1">Morning</span>
                 </button>
-                <button onclick="triggerSync('night')"
+                <button id="btn-night"
                     class="dash-btn disabled:opacity-50 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl flex flex-col items-center transition-all">
                     <span class="text-xl">🌙</span>
                     <span class="font-bold text-indigo-900 text-sm mt-1">Night Sync</span>
                 </button>
-                <button onclick="triggerSync('journal')"
+                <button id="btn-journal"
                     class="dash-btn disabled:opacity-50 p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl flex flex-col items-center transition-all">
                     <span class="text-xl">📖</span>
                     <span class="font-bold text-emerald-900 text-sm mt-1">Journal</span>
@@ -162,21 +162,29 @@
 
             <!-- DASHBOARD FOOTER LINKS -->
             <div
-                class="w-full grid grid-cols-2 gap-y-4 gap-x-4 text-xs text-slate-400 border-t border-slate-100 pt-6 mt-4">
+                class="w-full grid grid-cols-3 gap-y-4 gap-x-4 text-xs text-slate-400 border-t border-slate-100 pt-6 mt-4">
                 <a href="privacy.html" target="_blank"
                     class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
-                    <span>🛡️</span> Privacy Policy
+                    <span>🛡️</span> Privacy
                 </a>
                 <a href="planner.html" target="_blank"
                     class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
-                    <span>📄</span> Planner PDF
+                    <span>📄</span> Planner
                 </a>
                 <a href="gear.html" target="_blank"
                     class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
-                    <span>🛍️</span> Best Gear
+                    <span>🛍️</span> Gear
                 </a>
+                <button id="btn-export"
+                    class="hover:text-blue-600 transition-colors flex items-center justify-center gap-2">
+                    <span>📦</span> Export Data
+                </button>
+                <button id="btn-delete-account"
+                    class="hover:text-red-500 transition-colors flex items-center justify-center gap-2">
+                    <span>🗑️</span> Delete Account
+                </button>
                 <div class="opacity-50 flex items-center justify-center gap-1 cursor-not-allowed">
-                    <span>⌚ Health Soon</span>
+                    <span>⌚ Health</span>
                 </div>
             </div>
         </div>

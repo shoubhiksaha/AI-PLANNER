@@ -1,141 +1,133 @@
 # Project Change Log and Current Architecture
 
-## Scope and method
-This document summarizes changes up to commit `8f388e8` (current `main`) and the code currently deployed in:
-- `functions/index.js`
-- `public/index.html`
-- `firebase.json`
-- `firestore.rules`
+## Scope
+This document summarizes the full evolution of the AI Planner project from initial commit through the current deployed state, including the latest CSP hardening and encryption implementations.
 
-The comparison uses:
-- Git history (`d1ae171` -> `22627da` -> `1db6faa` -> `8f388e8`)
-- Current runtime behavior in backend + frontend code.
+## Change Timeline
 
-## Change timeline (high-level)
-1. `d1ae171` Security cleanup:
-- Removed exposed credential artifacts and tightened ignore patterns.
+### 1. `d1ae171` — Security Cleanup
+- Removed exposed credential artifacts and tightened `.gitignore`.
 
-2. `1db6faa` UX/theme improvements:
-- Added dynamic theming (light/dark/OLED), license, and docs updates.
+### 2. `1db6faa` — UX/Theme Improvements
+- Added dynamic theming (Light / Dark / OLED / Auto).
+- Added license and documentation.
 
-3. `22627da` reliability/security guards:
-- Added image size limits on client and server.
+### 3. `22627da` — Reliability & Security Guards
+- Added image size limits on client (20MB) and server.
 - Improved error handling and cleanup.
 
-4. `8f388e8` architecture/security hardening:
-- Added dedicated Notion setup endpoint.
-- Added app-level encryption for Notion key storage.
-- Hardened CORS, request validation, hosting headers, and Firestore write policy.
-- Added documentation and commented references.
+### 4. `8f388e8` — Architecture & Security Hardening
+- Added `/setupNotion` endpoint for secure key submission.
+- Implemented AES-256-CBC encryption for Notion keys.
+- Hardened CORS (origin allowlist), request validation, and Firestore write policy (client read-only).
+- Added security headers to `firebase.json`.
 
-## Before vs now (what changed and why)
+### 5. Latest — CSP Migration & Auth Improvements
+- **Extracted** all inline CSS → `public/styles.css`, inline JS → `public/app.js`.
+- **Replaced** Tailwind CDN runtime with prebuilt `public/tailwind.css` (via `npx tailwindcss`).
+- **Enforced** strict Content Security Policy with SHA-256 hash for remaining inline script.
+- **Added** `signInWithRedirect` fallback for popup-blocked browsers (Brave, Safari).
+- **Added** mobile detection: redirect-first auth for phones/tablets.
+- **Updated** service worker cache to v2 with new external files.
 
-### 1) Notion key lifecycle
-Before:
-- Keys could be passed from frontend in sync flow.
-- Storage model was weaker and less explicit.
+---
 
-Now:
-- Dedicated setup endpoint `setupNotion` persists keys after validation (`functions/index.js:197`).
-- Encrypted-at-rest model with versioned AES-GCM + legacy migration (`functions/index.js:46`, `functions/index.js:80`, `functions/index.js:180`).
-- Sync flow reads/decrypts server-side only (`functions/index.js:286`, `functions/index.js:405`).
+## Before vs Now
 
-Why:
-- Reduce client exposure and keep integration secrets server-controlled.
+### 1) Notion Key Lifecycle
+| Before | Now |
+|--------|-----|
+| Keys passed from frontend in sync payload | Dedicated `/setupNotion` encrypts keys server-side |
+| Plaintext storage model | AES-256-CBC encryption with key in Secret Manager |
+| Client manages keys | Server-only read/decrypt during sync |
 
-### 2) API boundary hardening
-Before:
-- Broad CORS and weaker request-shape enforcement.
+### 2) API Boundary
+| Before | Now |
+|--------|-----|
+| Broad CORS | Origin allowlist |
+| Weak payload validation | Strict content-type, sync type, and data URL checks |
 
-Now:
-- Allowed-origin allowlist (`functions/index.js:22`).
-- Explicit method and content-type checks (`functions/index.js:203`, `functions/index.js:241`).
-- Strict sync type and image data URL validation (`functions/index.js:131`, `functions/index.js:136`, `functions/index.js:250`, `functions/index.js:255`).
+### 3) Firestore Trust Model
+| Before | Now |
+|--------|-----|
+| Client read + write own doc | Client read-only; writes via Admin SDK only |
 
-Why:
-- Lower abuse surface and reject malformed traffic earlier.
+### 4) Frontend Architecture
+| Before | Now |
+|--------|-----|
+| 944-line monolithic `index.html` | ~250-line HTML + `app.js` + `styles.css` + `tailwind.css` |
+| Tailwind CDN (runtime compiler) | Prebuilt static CSS (faster, smaller) |
+| Token in `sessionStorage` | Token in memory only |
+| Popup-only auth | Popup + redirect fallback; redirect-first on mobile |
 
-### 3) Firestore trust model
-Before:
-- Client could read and write own `/users/{email}` doc.
+### 5) Security Headers
+| Before | Now |
+|--------|-----|
+| Basic headers | Full CSP + `X-Frame-Options` + `Referrer-Policy` + `Permissions-Policy` |
+| No CSP | Strict CSP with SHA-256 hash, `upgrade-insecure-requests` |
 
-Now:
-- Client read only; writes denied in rules (`firestore.rules:5`, `firestore.rules:7`).
-- User profile writes moved to Admin SDK paths in functions (`functions/index.js:225`).
+---
 
-Why:
-- Prevent direct client tampering of sensitive user integration fields.
-
-### 4) Frontend token + endpoint behavior
-Before:
-- Access token persisted in browser session storage.
-- API assumed rewrite success and parsed response directly as JSON.
-
-Now:
-- In-memory token only (`public/index.html:479`, `public/index.html:499`).
-- Robust non-JSON detection + fallback to direct function URL (`public/index.html:511`, `public/index.html:774`, `public/index.html:777`, `public/index.html:793`).
-
-Why:
-- Reduce token persistence risk and avoid runtime failures when hosting rewrites are missing/misrouted.
-
-### 5) Hosting + browser security headers
-Before:
-- Fewer defensive headers and no explicit function rewrites in hosting config.
-
-Now:
-- Added hardening headers and HTML no-store caching (`firebase.json:23`).
-- Added explicit rewrites for `/syncPlanner` and `/setupNotion` (`firebase.json:55`).
-
-Why:
-- Better browser-side defense baseline and predictable API routing.
-
-### 6) Operational/documentation upgrades
-Before:
-- Architecture and security decisions were distributed and partially implicit.
-
-Now:
-- Added `DESIGN_AND_DECISIONS.md`, `SECURITY_CSP_PLAN.md`, `public/index_commented.html`, and `functions/planner_v3_draft.js`.
-
-Why:
-- Improve maintainability, onboarding, and future hardening roadmap.
-
-## Current system architecture (present project)
+## Current System Architecture
 
 ```mermaid
 graph TD
-    A[User Browser PWA<br/>public/index.html] --> B[Firebase Auth Popup]
+    A[User Browser PWA<br/>index.html + app.js] --> B[Firebase Auth<br/>Popup / Redirect]
     B --> A
 
-    A -->|POST /setupNotion<br/>token + notionKey + notionDbId| C[setupNotion Function<br/>functions/index.js]
-    A -->|POST /syncPlanner<br/>token + imageData + syncType| D[syncPlanner Function<br/>functions/index.js]
-    A -->|Fallback on non-JSON| E[Cloud Run URL<br/>syncplanner-...run.app]
+    A -->|POST /setupNotion<br/>token + notionKey + dbId| C[setupNotion<br/>Cloud Function]
+    A -->|POST /syncPlanner<br/>token + imageData + syncType| D[syncPlanner<br/>Cloud Function]
+    A -->|Fallback| E[Cloud Run Direct URL]
     E --> D
 
-    C -->|OAuth userinfo validate| F[Google OAuth APIs]
-    D -->|OAuth userinfo validate| F
+    C -->|Validate via OAuth| F[Google OAuth APIs]
+    D -->|Validate via OAuth| F
 
-    C -->|encrypt key + store| G[Firestore users/{email}]
-    D -->|read user config| G
-    D -->|decrypt + migrate legacy format| G
+    C -->|AES encrypt + store| G[Firestore<br/>users/email]
+    D -->|Read + decrypt| G
 
-    D -->|image parse + prompt| H[Gemini API]
-    H -->|structured JSON| D
+    D -->|Image + prompt| H[Gemini AI]
+    H -->|Structured JSON| D
 
-    D -->|morning| I[Google Calendar]
-    D -->|morning/evening| J[Google Tasks]
-    D -->|evening| K[Google Sheets]
-    D -->|journal/evening file upload| L[Notion API]
-    L --> M[Notion Workspace Storage]
+    D -->|Morning| I[Google Calendar]
+    D -->|Morning/Evening| J[Google Tasks]
+    D -->|Evening| K[Google Sheets]
+    D -->|Journal/Evening| L[Notion API]
+    L --> M[Notion Workspace]
 
-    N[Firebase Hosting<br/>firebase.json] -->|rewrites /setupNotion /syncPlanner| C
-    N -->|rewrites /setupNotion /syncPlanner| D
-    N -->|security headers| A
-
-    O[Firestore Rules] -->|allow read own doc| A
-    O -->|deny client writes| A
+    N[Firebase Hosting<br/>firebase.json] -->|Rewrite| C
+    N -->|Rewrite| D
+    N -->|CSP + Security Headers| A
 ```
 
-## Notes on current constraints
-- Runtime remains Node 20 in `functions/package.json`; upgrade is pending deprecation timeline.
-- `GEMINI_API_KEY` currently uses `defineString` in code (`functions/index.js:16`), while `NOTION_ENCRYPTION_KEY` uses Secret Manager (`functions/index.js:17`).
-- CSP hardening is planned but not fully enforced yet; see `SECURITY_CSP_PLAN.md`.
+## Current File Structure
+```
+AI PLANNER/
+├── public/
+│   ├── index.html          # HTML structure only
+│   ├── app.js              # Application logic (ES module)
+│   ├── styles.css           # Custom CSS (themes, glass, animations)
+│   ├── tailwind.css         # Prebuilt Tailwind utilities
+│   ├── sw.js               # Service Worker (v2)
+│   ├── manifest.json        # PWA config
+│   ├── privacy.html         # Privacy policy
+│   ├── planner.html         # Planner PDF viewer
+│   └── gear.html            # Gear recommendations
+├── functions/
+│   ├── index.js             # Cloud Functions (setupNotion, syncPlanner)
+│   └── package.json         # Dependencies
+├── firebase.json            # Hosting config + CSP headers + rewrites
+├── firestore.rules          # Read-only client access
+├── tailwind.config.js       # Tailwind build config
+├── src/input.css            # Tailwind directives
+├── DESIGN_AND_DECISIONS.md  # Architecture & design docs
+├── SECURITY_CSP_PLAN.md     # CSP migration plan (✅ complete)
+├── PROJECT_CHANGELOG_AND_CURRENT_ARCHITECTURE.md  # This file
+└── README.md                # Project overview
+```
+
+## Notes
+- Runtime: Node 20 (`functions/package.json`).
+- `GEMINI_API_KEY`: loaded via `defineString` (from `.env` file).
+- `NOTION_ENCRYPTION_KEY`: managed via Google Cloud Secret Manager.
+- CSP is fully enforced and active in production.

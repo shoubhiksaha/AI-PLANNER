@@ -66,6 +66,14 @@
         "function": "setupNotion"
       },
       {
+        "source": "/exportUserData",
+        "function": "exportUserData"
+      },
+      {
+        "source": "/deleteUserAccount",
+        "function": "deleteUserAccount"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

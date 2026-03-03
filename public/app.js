@@ -317,7 +317,12 @@ dropZone.addEventListener('drop', (e) => {
     handleFile(files[0]);
 });
 
-window.triggerSync = async (syncType) => {
+// Sync button bindings
+document.getElementById('btn-morning').addEventListener('click', () => triggerSync('morning'));
+document.getElementById('btn-night').addEventListener('click', () => triggerSync('night'));
+document.getElementById('btn-journal').addEventListener('click', () => triggerSync('journal'));
+
+const triggerSync = async (syncType) => {
     // UI Loading with Granular Messages
     const loader = document.getElementById('dash-loader');
     loader.style.display = 'flex';
@@ -417,14 +422,86 @@ window.triggerSync = async (syncType) => {
     }
 };
 
+// --- GDPR: Export & Delete ---
+document.getElementById('btn-export').addEventListener('click', exportMyData);
+document.getElementById('btn-delete-account').addEventListener('click', deleteMyAccount);
+
+async function exportMyData() {
+    try {
+        if (!auth.currentUser) { alert('Please sign in first.'); return; }
+        const token = await auth.currentUser.getIdToken();
+        const res = await fetch('/exportUserData', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+        });
+        const data = await parseJsonResponse(res);
+        if (!res.ok) throw new Error(data.error || "Export failed");
+
+        // Trigger download
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ai-planner-data-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error("Export error:", err);
+        alert("Failed to export data: " + err.message);
+    }
+}
+
+async function deleteMyAccount() {
+    const confirmed = confirm(
+        "⚠️ Delete your account?\n\n" +
+        "This will permanently delete:\n" +
+        "• Your email from our database\n" +
+        "• Your encrypted Notion keys\n\n" +
+        "This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    const doubleConfirm = confirm("Are you absolutely sure? This is permanent.");
+    if (!doubleConfirm) return;
+
+    try {
+        if (!auth.currentUser) { alert('Please sign in first.'); return; }
+        const token = await auth.currentUser.getIdToken();
+        const res = await fetch('/deleteUserAccount', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+        });
+        const data = await parseJsonResponse(res);
+        if (!res.ok) throw new Error(data.error || "Delete failed");
+
+        alert("✅ Your account data has been permanently deleted.");
+        auth.signOut();
+    } catch (err) {
+        console.error("Delete error:", err);
+        alert("Failed to delete account: " + err.message);
+    }
+}
+
 // --- 4. THEME LOGIC (Dropdown & Auto) ---
 const themeBtn = document.getElementById('theme-btn');
 const themeMenu = document.getElementById('theme-dropdown');
 
 // Toggle Dropdown
-window.toggleMenu = () => {
+themeBtn.addEventListener('click', () => {
     themeMenu.classList.toggle('active');
-};
+});
+
+// Theme items use data-theme attribute instead of inline onclick
+document.querySelectorAll('.theme-item[data-theme]').forEach(item => {
+    item.addEventListener('click', () => {
+        const mode = item.dataset.theme;
+        localStorage.setItem('theme', mode);
+        applyTheme(mode);
+        themeMenu.classList.remove('active');
+    });
+});
 
 // Close when clicking outside
 document.addEventListener('click', (e) => {
@@ -432,12 +509,6 @@ document.addEventListener('click', (e) => {
         themeMenu.classList.remove('active');
     }
 });
-
-window.selectTheme = (mode) => {
-    localStorage.setItem('theme', mode); // Save preference
-    applyTheme(mode);
-    themeMenu.classList.remove('active'); // Close menu
-};
 
 function applyTheme(mode) {
     const html = document.documentElement;

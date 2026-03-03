@@ -228,6 +228,88 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
     }
 });
 
+// --- GDPR: Export User Data ---
+exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    if (req.method !== 'POST') {
+        return res.status(405).send({ error: "Method not allowed" });
+    }
+    if (!isJsonRequest(req)) {
+        return res.status(415).send({ error: "Content-Type must be application/json" });
+    }
+
+    const body = req.body || {};
+    const token = body.token;
+    if (!token) return res.status(400).send({ error: "Missing token" });
+
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(token);
+        const userEmail = decodedToken.email?.toLowerCase();
+        if (!userEmail) return res.status(401).send({ error: "No email in token" });
+        const db = admin.firestore();
+        const userRef = db.collection('users').doc(userEmail);
+        const snap = await userRef.get();
+
+        const exportData = {
+            exportedAt: new Date().toISOString(),
+            email: userEmail,
+            accountExists: snap.exists,
+            data: {}
+        };
+
+        if (snap.exists) {
+            const raw = snap.data();
+            exportData.data = {
+                notionConfigured: !!raw.notionKey,
+                notionDbId: raw.notionDbId || null
+                // Note: Encrypted key intentionally excluded for security
+            };
+        }
+
+        console.log(`Data export for ${userEmail}`);
+        return res.status(200).send(exportData);
+    } catch (err) {
+        console.error("Export error:", err.message);
+        return res.status(500).send({ error: "Failed to export data." });
+    }
+});
+
+// --- GDPR: Delete User Account ---
+exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    if (req.method !== 'POST') {
+        return res.status(405).send({ error: "Method not allowed" });
+    }
+    if (!isJsonRequest(req)) {
+        return res.status(415).send({ error: "Content-Type must be application/json" });
+    }
+
+    const body = req.body || {};
+    const token = body.token;
+    if (!token) return res.status(400).send({ error: "Missing token" });
+
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(token);
+        const userEmail = decodedToken.email?.toLowerCase();
+        if (!userEmail) return res.status(401).send({ error: "No email in token" });
+        const db = admin.firestore();
+        const userRef = db.collection('users').doc(userEmail);
+        await userRef.delete();
+
+        console.log(`Account deleted for ${userEmail}`);
+        return res.status(200).send({ success: true, text: "Your account data has been permanently deleted." });
+    } catch (err) {
+        console.error("Delete error:", err.message);
+        return res.status(500).send({ error: "Failed to delete account." });
+    }
+});
+
 // --- MAIN FUNCTION: syncPlanner ---
 exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 300, secrets: [NOTION_ENCRYPTION_KEY] }, async (req, res) => {
     setStandardHeaders(res);

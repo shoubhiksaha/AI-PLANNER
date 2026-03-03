@@ -1,127 +1,162 @@
 # Design Decisions & Project Documentation
 
-This document serves as a comprehensive record of the thought processes, architectural choices, and design philosophy behind the AI Planner project. It encapsulates the evolution of the project from initial concepts to the current implementation.
+This document records the architectural choices, design philosophy, and security engineering behind the AI Planner project. Updated to reflect the current deployed state.
 
 ## 1. Core Philosophy: "Zero Storage" Architecture
 
-### **Decision**
-The project explicitly avoids storing user data (images, analyzed text, planner contents) in its own persistent database wherever possible.
+### Decision
+The project avoids storing user data (images, analyzed text, planner contents) in its own persistent database.
 
-### **Rationale**
--   **Privacy First**: By not storing personal journal entries or planner images, we minimize data liability and increase user trust. Data flows *through* our server, not *into* it.
--   **Cost Efficiency**: Reduces storage costs on Firebase. We only use transient memory during the function execution.
--   **Simplicity**: Simplifies GDPR/CCPA compliance as we are processors, not data controllers for the long term.
+### Rationale
+- **Privacy First**: Data flows *through* our server, not *into* it. We cannot access user journals even if compelled.
+- **Cost Efficiency**: No cloud storage bills for user images.
+- **Compliance**: Simplifies GDPR/CCPA. We are the **data controller** (we decide what to collect), but minimize data liability by storing almost nothing. Google and Notion are our **processors**. The only data we persist is the user's email and their encrypted Notion keys in Firestore.
 
-### **Implementation Details**
--   Images are received via HTTP, held in memory (RAM), processed by AI, sent to external services (Notion/Google), and then immediately discarded when the function finishes.
--   We use `firebase-functions` with increased memory (1GiB) to handle these transient heavy payloads without writing to disk.
+### Implementation
+- Images are received via HTTP, held in memory (RAM), processed by AI, sent to external services (Notion/Google), and immediately discarded.
+- We use `firebase-functions` with 1GiB memory to handle transient heavy payloads without writing to disk.
 
 ---
 
-## 2. Serverless Backend (Firebase Functions)
+## 2. Serverless Backend (Firebase Functions Gen 2)
 
-### **Decision**
-The backend logic is hosted on Firebase Cloud Functions (Gen 2).
+### Decision
+All backend logic runs on Firebase Cloud Functions (Gen 2), deployed as Cloud Run services.
 
-### **Rationale**
--   **Scalability**: Automatically scales down to zero when not in use (cost-saving) and scales up during morning/evening bursts.
--   **Integration**: Native integration with Firebase Admin (for basic user config) and Google Cloud APIs.
+### Rationale
+- **Scale-to-Zero**: Costs nothing when not in use; scales up automatically during morning/evening usage bursts.
+- **Native Integration**: Firebase Admin SDK and Google Cloud APIs are first-class citizens.
 
-### **Key Optimizations**
--   **Lazy Loading**: Modules like `googleapis`, `@notionhq/client`, and `@google/generative-ai` are required *inside* the function scope. This drastically reduces "Cold Start" times by only loading heavy libraries when they are actually needed.
--   **Custom Timeout**: Set to 300 seconds (5 minutes) because AI processing and multi-service syncing can be slow.
--   **Manual CORS Handling**: We implement custom CORS logic to handle `OPTIONS` pre-flight requests to ensure smooth communication with the frontend from any origin.
+### Key Optimizations
+- **Lazy Loading**: Heavy modules (`googleapis`, `@notionhq/client`) are `require()`-ed inside function scope, reducing cold start times.
+- **Custom Timeout**: 300s (5 min) because AI processing + multi-service syncing can be slow.
+- **Manual CORS**: Custom origin allowlist with explicit `OPTIONS` handling.
+
+### Endpoints
+| Endpoint | Purpose | Auth |
+|----------|---------|------|
+| `POST /syncPlanner` | Process planner image, sync to Google + Notion | OAuth token |
+| `POST /setupNotion` | Encrypt and store Notion integration keys | OAuth token |
 
 ---
 
 ## 3. AI Integration (Google Gemini)
 
-### **Decision**
-We use Google's Gemini models (`gemini-2.0-flash`, `gemini-1.5-flash`) for handwriting recognition and data extraction.
+### Decision
+Google Gemini models for handwriting recognition and structured data extraction.
 
-### **Rationale**
--   **Multimodal Capabilities**: Gemini natively understands images and text, making it ideal for reading handwritten planners.
--   **Cost/Performance**: The "Flash" series models offer an excellent balance of speed and cost for this specific use case.
+### Model Strategy
+- **Primary**: `gemini-2.5-flash-lite-preview-06-17` (fastest, cheapest)
+- **Fallback 1**: `gemini-2.5-flash-preview-04-17` (more capable)
+- **Fallback 2**: `gemini-2.0-flash-lite` (stable, proven)
 
-### **Resilience & Reliability**
--   **Retry Logic with Exponential Backoff**: The system expects API rate limits (HTTP 429). It implements a smart retry loop that waits longer between each failed attempt (1s, 2s, 4s...) to handle traffic spikes gracefully.
--   **Model Fallback Strategy**: We define a priority list of models (`flash-lite` -> `flash` -> `latest`). If the primary model fails or times out, the system automatically tries the next one in the list.
--   **JSON Enforcement**: We explicitly request `responseMimeType: "application/json"` to ensure the AI returns structured data that code can parse reliably.
+### Resilience
+- **Retry Logic**: Exponential backoff (1s, 2s, 4s...) on HTTP 429 rate limits.
+- **Model Cascade**: If primary fails, automatically tries next model.
+- **JSON Enforcement**: `responseMimeType: "application/json"` ensures parseable output.
 
 ---
 
 ## 4. Performance & Parallelism
 
-### **Decision**
-Process independent tasks concurrently rather than sequentially.
+### Decision
+Process independent tasks concurrently using `Promise.allSettled`.
 
-### **Rationale**
-Sequential processing (Do A, then B, then C) is too slow for a user waiting for a response.
+### Implementation
+| Sync Type | Parallel Tasks |
+|-----------|---------------|
+| Morning | Calendar Events + Google Tasks |
+| Evening | Sheets (Expenses/Health) + Notion (Brain Dump) + Task Completion |
+| Journal | Notion Image Upload + AI Date Extraction |
 
-### **Implementation**
--   **`Promise.all` Pattern**:
-    -   *Morning Routine*: We sync Google Calendar Events AND Google Tasks simultaneously.
-    -   *Evening Routine*: We sync Google Sheets (Expenses/Health) AND Notion pages simultaneously.
-    -   *Journaling*: We upload the image to Notion AND ask AI to extract the date at the same time.
--   This approach roughly equates to `Time = Max(Task_A, Task_B)` instead of `Time = Task_A + Task_B`.
-
----
-
-## 5. Daily Workflows (Morning vs. Evening)
-
-The application logic determines the workflow based on the `syncType` or time of day.
-
-### **Morning Sync**
--   **Goal**: Prepare the user for the day.
--   **Actions**:
-    1.  Parse schedule and To-Dos.
-    2.  Create Calendar Events (with reminders).
-    3.  Create Google Tasks (due today).
-    *(Note: Morning sync does NOT mark tasks as complete, as users typically plan upcoming work).*
-
-### **Evening Sync**
--   **Goal**: Review and log the day.
--   **Actions**:
-    1.  Mark tasks as completed in Google Tasks based on checkmarks.
-    2.  Parse expenses, health metrics, and brain dump.
-    3.  Log financials to Google Sheets ("Expenses" tab).
-    4.  Log health stats to Google Sheets ("Health" tab).
-    5.  Upload the raw planner image + "Brain Dump" text to a Notion Page for archiving.
-
-### **Journal Sync**
--   **Goal**: Digital backup of physical journal.
--   **Actions**:
-    1.  Upload high-res image to Notion (bypassing AI limits if needed).
-    2.  Extract date via AI to name the entry correctly.
+Using `allSettled` instead of `all` allows partial success (e.g., if Notion fails, Calendar events still get created).
 
 ---
 
-## 6. External Integrations
+## 5. Daily Workflows
 
-### **Google Ecosystem**
--   **Calendar**: Adds blocks (events) and reminders. Handles time zones (`Asia/Kolkata` default).
--   **Tasks**: Syncs actionable items. Supports "checking off" tasks (two-way sync simulation).
--   **Sheets**: Used as a structured database for quantitative data (Money, Health stats).
+### Morning Sync
+- Parse schedule and To-Dos from handwritten planner image.
+- Create Calendar Events (with reminders).
+- Create Google Tasks (due today).
+- Does **NOT** mark tasks complete (users plan in the morning, not review).
 
-### **Notion**
--   **Protocol**: Uses the Notion API to create pages and append blocks.
--   **Image Upload**: Implements the specific two-step Notion file upload process (Get URL -> Upload Binary) to host images directly on Notion, adhering to the Zero Storage policy.
+### Evening Sync
+- Mark tasks as completed in Google Tasks based on checkmarks.
+- Parse expenses, health metrics, and brain dump text.
+- Log financials to Google Sheets ("Expenses" tab).
+- Log health stats to Google Sheets ("Health" tab).
+- Upload planner image + brain dump to Notion.
+
+### Journal Sync
+- Upload high-res journal image to Notion.
+- AI extracts the date for the page title.
 
 ---
 
-## 7. Frontend & UI (Context from History)
+## 6. Security Architecture
 
-### **Design Language**
--   **Glassmorphism**: The UI aims for a modern, transparent "glass" aesthetic (referenced in previous "Refining Glass Transparency" tasks).
--   **Tailwind CSS**: Used for rapid, utility-first styling.
--   **Simplicity**: The user interface focuses on a single primary action—uploading the daily planner image—keeping friction to a minimum.
+### Notion Key Encryption (AES-256-CBC)
+- User's Notion API key is encrypted server-side before storage in Firestore.
+- Encryption key lives in Google Cloud Secret Manager (`NOTION_ENCRYPTION_KEY`).
+- Keys are decrypted in-memory only during sync, never stored in plaintext.
+- Frontend sends raw key to `/setupNotion` over HTTPS; backend encrypts immediately.
+
+### Content Security Policy (CSP)
+All inline CSS and JS extracted to external files. Strict CSP header enforced via `firebase.json`:
+- `script-src 'self'` + SHA-256 hash for the only remaining inline script (SW registration).
+- `object-src 'none'`, `frame-ancestors 'none'`, `upgrade-insecure-requests`.
+- Full policy documented in `SECURITY_CSP_PLAN.md`.
+
+### Firestore Rules
+- Client: **read-only** access to own `/users/{email}` document.
+- All writes go through Admin SDK in Cloud Functions (prevents client tampering).
+
+### Auth Flow
+- **Desktop**: `signInWithPopup` with `signInWithRedirect` fallback for popup blockers (Brave, Safari).
+- **Mobile**: `signInWithRedirect` by default for native-feeling experience.
+- OAuth tokens kept in-memory only (not persisted to `sessionStorage` or `localStorage`).
+
+### API Hardening
+- Origin allowlist for CORS.
+- Strict content-type and payload shape validation.
+- Image size limit (20MB) to prevent memory exhaustion.
+- Generic error messages to client; detailed logs server-side.
 
 ---
 
-## 8. Security Measures
+## 7. Frontend Architecture
 
--   **Environment Variables**: API keys (Gemini) are stored in Firebase Params, not in the code.
--   **Payload Validation**:
-    -   Strict checks for OAuth tokens.
-    -   Image size limits (~20MB) to prevent memory exhaustion attacks.
--   **Error Masking**: The backend logs full stack traces for developers but sends generic, safe error messages ("Internal Server Error") to the client.
+### File Structure (Post-CSP Migration)
+```
+public/
+├── index.html         # Pure HTML structure (~250 lines)
+├── app.js             # Application logic (ES module)
+├── styles.css         # Custom CSS (themes, glass, animations)
+├── tailwind.css       # Prebuilt Tailwind utilities
+├── sw.js              # Service Worker (offline caching)
+├── manifest.json      # PWA manifest
+├── privacy.html       # Privacy policy
+├── planner.html       # Planner PDF viewer
+└── gear.html          # Gear recommendations
+```
+
+### Design Language
+- **Glassmorphism**: Frosted-glass cards with `backdrop-filter: blur()`.
+- **Dynamic Theming**: Light / Dark / OLED / Auto (system-aware).
+- **Tailwind CSS**: Prebuilt at deploy time (not runtime CDN).
+
+---
+
+## 8. External Integrations
+
+### Google Ecosystem
+| Service | Usage | Sync Type |
+|---------|-------|-----------|
+| Calendar | Create events with reminders | Morning |
+| Tasks | Create/complete tasks | Morning/Evening |
+| Sheets | Log expenses + health data | Evening |
+
+### Notion
+- **Protocol**: Two-step Direct File Upload (Init → PUT binary → Link `file_id` to page).
+- **Zero Storage Compliance**: Images flow from user browser → server RAM → Notion. Never persisted on our infrastructure.

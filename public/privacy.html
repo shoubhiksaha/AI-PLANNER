@@ -17,7 +17,7 @@
 <body class="bg-slate-50 text-slate-700 p-8 max-w-3xl mx-auto">
     <header class="mb-10 text-center">
         <h1 class="text-4xl font-bold mb-2 text-emerald-700">Privacy Policy</h1>
-        <p class="text-slate-500">Last Updated: January 19, 2026</p>
+        <p class="text-slate-500">Last Updated: March 3, 2026</p>
     </header>
 
     <section class="mb-8">
@@ -87,35 +87,74 @@
 
     <section class="mb-8">
         <h2 class="text-2xl font-bold mb-4 text-slate-800">5. Security</h2>
-        <p>We implement industry-standard security measures, including HTTPS encryption for all data in transit. Your
-            API keys (Notion Integration Tokens) are stored in our secure database but are only accessed during the sync
-            process.</p>
-    </section>
-
-    <section class="mb-8">
-        <h2 class="text-2xl font-bold mb-4 text-slate-800">6. GDPR Compliance (EU Users)</h2>
-        <p class="mb-2">For users in the European Economic Area (EEA), we process data based on <strong>Contractual
-                Necessity</strong> (to fulfill the service you requested).</p>
+        <p class="mb-2">We implement multiple layers of security:</p>
         <ul class="list-disc pl-6 space-y-2">
-            <li><strong>Data Controller</strong>: AI Planner Project (Contact: officialshoubhiksaha@gmail.com)</li>
-            <li><strong>International Transfers</strong>: Your data is processed in the United States (Google Cloud
-                `us-central1`). By using this service, you consent to this transfer. We rely on Google's Data Processing
-                Addendum (Standard Contractual Clauses) to ensure security.</li>
-            <li><strong>Right to Erasure</strong>: Since we operate a Zero-Storage model, your content is erased
-                automatically. For account deletion (email/preferences), contact us directly.</li>
+            <li><strong>Encryption in Transit</strong>: All data transmitted over HTTPS.</li>
+            <li><strong>Encryption at Rest</strong>: Your Notion API keys are encrypted with AES-256-CBC before storage.
+                The encryption key is managed via Google Cloud Secret Manager and never exposed in code.</li>
+            <li><strong>Content Security Policy</strong>: Strict CSP headers prevent cross-site scripting (XSS) attacks.
+            </li>
+            <li><strong>Firestore Access Control</strong>: Your account data is read-only from the client. All writes go
+                through authenticated server-side functions.</li>
+            <li><strong>Token Management</strong>: OAuth tokens are kept in memory only and are never saved to browser
+                storage.</li>
         </ul>
     </section>
 
     <section class="mb-8">
-        <h2 class="text-2xl font-bold mb-4 text-slate-800">7. User Rights</h2>
-        <p class="mb-2">Since we do not store your content, there is no "content deletion" request needed. Your content
-            deletes itself automatically after every sync.</p>
-        <p>You may revoke our access to your Google or Notion accounts at any time via those platforms' security
-            settings.</p>
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">6. Data We Persist</h2>
+        <div class="bg-amber-50 border-l-4 border-amber-500 p-4 mb-4">
+            <p class="font-bold text-amber-800">Important: While images are never stored, we do persist minimal account
+                data.</p>
+        </div>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Email Address</strong>: Stored in Firestore to identify your account.</li>
+            <li><strong>Notion Integration Keys</strong>: Encrypted with AES-256-CBC and stored in Firestore. We cannot
+                read these without the Secret Manager encryption key.</li>
+            <li><strong>No images, journal text, calendar data, or planner content is ever stored.</strong></li>
+        </ul>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">7. GDPR Compliance (EU Users)</h2>
+        <p class="mb-2">For users in the European Economic Area (EEA):</p>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Legal Basis</strong>: We process data based on your <strong>Consent</strong> (granted when you
+                sign in and use the service). You may withdraw consent at any time by revoking access via your Google
+                Account settings.</li>
+            <li><strong>Data Controller</strong>: AI Planner Project (Contact: officialshoubhiksaha@gmail.com)</li>
+            <li><strong>Data Processors</strong>: Google Cloud (hosting, AI, auth), Notion (journal storage). We rely on
+                their standard Data Processing Addendums.</li>
+            <li><strong>International Transfers</strong>: Your data is processed in the United States (Google Cloud
+                <code>us-central1</code>). We rely on Google's Standard Contractual Clauses for lawful transfer.
+            </li>
+            <li><strong>Right to Erasure</strong>: Image content is erased automatically (Zero Storage). To delete your
+                account data (email + encrypted keys) from Firestore, email us at officialshoubhiksaha@gmail.com and we
+                will delete your record within 30 days.</li>
+            <li><strong>Right to Access</strong>: You may request a copy of the data we hold about you (email +
+                encrypted key metadata) by contacting us.</li>
+            <li><strong>Data Retention</strong>: Account data is retained as long as your account is active. Inactive
+                accounts may be purged after 12 months of no activity.</li>
+        </ul>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">8. User Rights (Self-Service)</h2>
+        <p class="mb-2">Your image content deletes itself automatically after every sync (Zero Storage).</p>
+        <p class="mb-2">For your account data, use the buttons in your dashboard:</p>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><strong>📦 Export Data</strong>: Download a JSON file of all data we hold about you.</li>
+            <li><strong>🗑️ Delete Account</strong>: Permanently delete your email and encrypted keys from our database.
+            </li>
+            <li>Revoke Google access via <a href="https://myaccount.google.com/permissions"
+                    class="text-emerald-700 underline" target="_blank">Google Account Permissions</a>.</li>
+            <li>Revoke Notion access via your <a href="https://www.notion.so/my-integrations"
+                    class="text-emerald-700 underline" target="_blank">Notion Integrations</a> page.</li>
+        </ul>
     </section>
 
     <section class="mb-12">
-        <h2 class="text-2xl font-bold mb-4 text-slate-800">7. Contact Us</h2>
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">9. Contact Us</h2>
         <p>If you have any questions about this Privacy Policy, please contact us at:</p>
         <p class="mt-2 font-semibold">officialshoubhiksaha@gmail.com</p>
     </section>

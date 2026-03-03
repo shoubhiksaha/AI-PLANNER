@@ -1,107 +1,176 @@
-# AI Planner - Zero Storage Architecture 🚀
+# AI Planner — Zero Storage Architecture 🌿
 
 **A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini 2.0 Flash.**
 
-[![Watch Demo]( https://youtu.be/8NFqb9xvnIU?si=7pPnuoKzNEHtZS_m )
+[![Watch Demo](https://img.shields.io/badge/Demo-Watch%20Video-red)](https://youtu.be/8NFqb9xvnIU?si=7pPnuoKzNEHtZS_m)
 [![Live App](https://img.shields.io/badge/Live-Try%20Beta-blue)](https://ai-planner-project-467800.web.app)
 
-> [!NOTE]  
-> **Testing Mode Restriction**: Since this project is in Google Cloud "Testing Mode," new users need to be white-listed to log in.  
-> **To get access**: Email [officialshoubhiksaha@gmail.com](mailto:officialshoubhiksaha@gmail.com) with the subject "Beta Access". I usually approve within 1 day.
+> [!NOTE]
+> **Testing Mode**: New users need to be whitelisted. Email [officialshoubhiksaha@gmail.com](mailto:officialshoubhiksaha@gmail.com) with subject "Beta Access".
 
 ![Status](https://img.shields.io/badge/Status-Production-success)
 ![Privacy](https://img.shields.io/badge/Privacy-Zero%20Storage-green)
+![Security](https://img.shields.io/badge/Security-CSP%20Enforced-brightgreen)
 ![Tech](https://img.shields.io/badge/Stack-Firebase%20%7C%20Node.js%20%7C%20Gemini-blue)
 
+---
+
 ## 📖 The "Zero Storage" Philosophy
+
 Unlike traditional apps that store user images in an S3 bucket or database, **AI Planner** operates on a strict **Zero Storage** architecture.
-*   User images are processed **in-memory** (Transient RAM).
-*   Data is extracted by Gemini AI and synced to Google/Notion APIs.
-*   The original image buffer is wiped immediately after processing.
-*   **Result**: Verifiable privacy. We cannot see your journal even if we wanted to.
+
+- User images are processed **in-memory** (transient RAM only).
+- Data is extracted by Gemini AI and synced to Google Calendar, Tasks, Sheets, and Notion.
+- The original image buffer is wiped immediately after processing.
+- Notion integration keys are **encrypted at rest** (AES-256-CBC) with keys managed via Google Cloud Secret Manager.
+
+**Result**: Verifiable privacy. We cannot see your journal even if we wanted to.
 
 ---
 
-## 📈 Project Evolution: A Journey of Iteration
+## 🛡️ Security Highlights
 
-This project is not just a static codebase; it is the result of continuous product iteration and architectural refinement.
-
-### V1: The MVP (Calendar Only)
-*   **Scope**: Basic image upload to sync handwritten events to Google Calendar.
-*   **Architecture**: Simple Firebase Trigger.
-
-### V2: Feature Expansion & Stabilization
-*   **New Features**: Added Evening Sync (Task Completion), Expenses, Health, and Journaling.
-*   **Challenges**: Initial "Task Completion" logic was buggy due to fuzzy matching; refined to be exact.
-*   **Growth**: Moved from a simple script to a multi-service function.
-
-### V3: Refinement & Zero Storage (Current)
-*   **Goal**: 100% Privacy & Cost Reduction.
-*   **Architecture**: Implemented **Zero Storage** (RAM-only processing).
-*   **Architecture**: Implemented **Zero Storage** (RAM-only processing).
-*   **Engineering**: Modularized AI logic with fallback strategy (Gemini 2.5 Flash-Lite -> Gemini 2.5 Flash -> Gemini 2.0 Flash-Lite). 
-*   **Notion**: Implemented **Custom Direct File Upload Protocol** (bypassing SDK limits for binary streams).
-
-### V4: Future Roadmap
-*   **BYOK**: "Bring Your Own Key" support for users.
-*   **Multi-Provider**: Driver-based architecture to support OpenAI, Anthropic, or DeepSeek or any other provider.
-
----
-
-## 🛠️ Technical Case Study: Engineering Challenges
-
-This project evolved through several iterations to achieve its rigorous privacy goals. Below is a log of the key engineering challenges and solutions.
-
-### 1. The "Transient Memory" Challenge
-**Problem**: Most standard libraries for Firebase (`firebase-admin`) assume you want to upload files to a Storage Bucket.
-**Solution**: We bypassed the standard Storage SDK entirely.
-*   **Implementation**: Used `Buffer.from(base64)` to handle image streams directly in Node.js memory.
-*   **Result**: Removed the `admin.storage()` dependency for the core AI pipeline.
-
-### 2. Notion API Integration (The "401" Hurdle)
-**Problem**: We needed to upload images to Notion *without* hosting them ourselves. The Notion API documentation for `file_uploads` is complex and often requires a 2-step process.
-*   *Attempt 1*: Direct JSON upload (Failed - 400 Bad Request).
-*   *Attempt 2*: using `client.auth` object (Failed - 401 Unauthorized).
-**Solution**: Implemented the **Multi-Step Direct File Upload Protocol**.
-*   **Step 1**: Initialize upload with JSON payload (`filename`, `content_type`). Receive `upload_url`.
-*   **Step 2**: PUT binary data to `upload_url` using `FormData` and explicit `Authorization` headers.
-*   **Step 3**: Link the resulting `file_id` to the Page Block.
-
-### 3. Data Corruption (The "Static Noise" Bug)
-**Problem**: Images appearing in Notion were corrupted (static noise/unreadable).
-**Root Cause**: The raw Base64 string from the frontend included the Data URI header (`data:image/jpeg;base64,...`). When converted to a Buffer directly, this header corrupted the binary JPEG magic bytes.
-**Solution**: Implemented a robust regex stripper before buffer creation:
-```javascript
-const mimeType = imageData.match(/data:(.*);base64,/)?.[1] || 'image/jpeg';
-const base64Data = imageData.split(',')[1]; // Strip header
-const buffer = Buffer.from(base64Data, 'base64');
-```
+| Layer | Implementation |
+|-------|---------------|
+| **Encryption** | AES-256-CBC for Notion keys; encryption key in Secret Manager |
+| **CSP** | Strict Content Security Policy with SHA-256 script hashes |
+| **Auth** | Firebase Auth with popup + redirect fallback; redirect-first on mobile |
+| **Firestore** | Client read-only; all writes via Admin SDK |
+| **Tokens** | OAuth tokens in-memory only (not persisted in browser storage) |
+| **Headers** | `X-Frame-Options: DENY`, `upgrade-insecure-requests`, `Permissions-Policy` |
+| **API** | Origin allowlist, strict payload validation, 20MB image limit |
 
 ---
 
 ## 🏗️ Architecture
 
-See [Architecture Diagram](architecture.md).
+```mermaid
+graph TD
+    A[PWA Frontend] --> B[Firebase Auth]
+    A -->|/setupNotion| C[Encrypt & Store Keys]
+    A -->|/syncPlanner| D[Process & Sync]
+    D --> E[Gemini AI]
+    D --> F[Google Calendar/Tasks/Sheets]
+    D --> G[Notion API]
+    C --> H[Firestore - Encrypted]
+```
 
 **Stack**:
-*   **Frontend**: Vanilla JS + TailwindCSS (PWA)
-*   **Backend**: Firebase Functions (Node.js 20)
-*   **AI**: Google Gemini 2.0 Flash (Multimodal)
-*   **Auth**: Google Identity Services (OAuth 2.0)
+| Component | Technology |
+|-----------|-----------|
+| Frontend | Vanilla JS + Prebuilt Tailwind CSS (PWA) |
+| Backend | Firebase Functions Gen 2 (Node.js 20) |
+| AI | Google Gemini (Flash model cascade) |
+| Auth | Google Identity Services (OAuth 2.0) |
+| Security | CSP + AES-256-CBC Encryption + Secret Manager |
+
+---
+
+## 📈 Project Evolution
+
+### V1: The MVP
+- Basic image upload → Google Calendar events.
+- Simple Firebase Trigger.
+
+### V2: Feature Expansion
+- Added Evening Sync (task completion), Expenses, Health, and Journaling.
+- Task completion logic refined from fuzzy to exact matching.
+
+### V3: Zero Storage
+- **Zero Storage**: RAM-only image processing.
+- **Model Cascade**: Gemini 2.5 Flash-Lite → 2.5 Flash → 2.0 Flash-Lite.
+- **Notion Upload**: Custom Direct File Upload Protocol.
+
+### V4: Security Hardening & CSP (Current)
+- **Encryption**: AES-256-CBC for Notion integration keys with Secret Manager.
+- **CSP**: Full Content Security Policy — all inline JS/CSS extracted to external files.
+- **Auth Hardening**: Mobile redirect-first + popup-blocker fallback.
+- **Code Separation**: Monolithic HTML split into `app.js`, `styles.css`, `tailwind.css`.
+- **Firestore Lockdown**: Client read-only; all writes via Admin SDK.
+
+### V5: Future Roadmap
+- **BYOK**: Bring Your Own Key support.
+- **Multi-Provider**: Support for OpenAI, Anthropic, DeepSeek.
+- **CSP Reporting**: Add violation monitoring endpoint.
+- **CI/CD**: GitHub Actions for automated test + deploy.
+
+---
+
+## 🛠️ Technical Case Studies
+
+### 1. Transient Memory Processing
+**Problem**: Standard Firebase SDKs assume file upload to Storage Bucket.
+**Solution**: `Buffer.from(base64)` for in-memory processing. Removed `admin.storage()` dependency entirely.
+
+### 2. Notion File Upload Protocol
+**Problem**: Upload images to Notion without hosting them ourselves.
+**Solution**: Three-step protocol: Init upload → PUT binary with explicit `Authorization` → Link `file_id` to page.
+
+### 3. Static Noise Bug
+**Problem**: Images in Notion appeared as corrupted static.
+**Root Cause**: Data URI header (`data:image/jpeg;base64,...`) corrupting binary JPEG magic bytes.
+**Solution**: Strip header before buffer creation:
+```javascript
+const base64Data = imageData.split(',')[1];
+const buffer = Buffer.from(base64Data, 'base64');
+```
+
+### 4. CSP Migration
+**Problem**: 944-line monolithic HTML with inline JS/CSS blocked CSP enforcement.
+**Solution**: Extracted to external files, replaced Tailwind CDN with prebuilt CSS, added SHA-256 hash for remaining inline script.
+
+---
+
+## 📁 Project Structure
+
+```
+public/
+├── index.html       # HTML markup only
+├── app.js           # Application logic (ES module)
+├── styles.css       # Custom CSS (themes, glass, animations)
+├── tailwind.css     # Prebuilt Tailwind utilities
+└── sw.js            # Service Worker v2
+
+functions/
+├── index.js         # Cloud Functions (setupNotion, syncPlanner)
+└── package.json     # Dependencies
+
+Config:
+├── firebase.json           # Hosting + CSP headers + rewrites
+├── firestore.rules          # Client read-only rules
+├── tailwind.config.js       # Build config
+└── src/input.css            # Tailwind directives
+```
+
+---
+
+## 📚 Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [DESIGN_AND_DECISIONS.md](DESIGN_AND_DECISIONS.md) | Architecture & design philosophy |
+| [SECURITY_CSP_PLAN.md](SECURITY_CSP_PLAN.md) | CSP migration plan (✅ all phases complete) |
+| [PROJECT_CHANGELOG](PROJECT_CHANGELOG_AND_CURRENT_ARCHITECTURE.md) | Full change history & current architecture |
+| [BREACH_RESPONSE_PLAN.md](BREACH_RESPONSE_PLAN.md) | Data breach response process |
 
 ---
 
 ## 🚀 How to Run
 
-1.  **Clone**:
+1. **Clone**:
     ```bash
     git clone https://github.com/shoubhiksaha/AI-PLANNER.git
     ```
-2.  **Install**:
+2. **Install**:
     ```bash
     cd functions && npm install
+    cd .. && npm install
     ```
-3.  **Deploy**:
+3. **Build Tailwind** (after HTML changes):
+    ```bash
+    npx tailwindcss -i src/input.css -o public/tailwind.css --minify
+    ```
+4. **Deploy**:
     ```bash
     firebase deploy
     ```

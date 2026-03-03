@@ -1,38 +1,49 @@
 # CSP Migration Plan
 
-## Current blockers to strict CSP
-- Inline scripts in `public/index.html`.
-- Inline styles in `public/index.html`.
-- Runtime Tailwind via `https://cdn.tailwindcss.com`.
-- External font/style/script CDNs.
+> **Status: ✅ COMPLETE** — All 3 phases implemented and deployed.
 
-## Phase 1: Prepare (no behavior change)
-1. Move inline JavaScript from `public/index.html` to `public/app.js` (module).
-2. Move inline CSS to `public/styles.css`.
-3. Replace Tailwind CDN runtime with prebuilt CSS committed to repo.
-4. Keep third-party hosts explicit: `gstatic.com`, `googleapis.com`, `jsdelivr.net`, font hosts.
+## Previous blockers (now resolved)
+- ~~Inline scripts in `public/index.html`~~ → Extracted to `public/app.js`
+- ~~Inline styles in `public/index.html`~~ → Extracted to `public/styles.css`
+- ~~Runtime Tailwind via `https://cdn.tailwindcss.com`~~ → Replaced with prebuilt `public/tailwind.css`
+- External font/style/script CDNs → Whitelisted in CSP header
 
-## Phase 2: Enforce moderate CSP
-Use a temporary policy in Hosting headers (example):
-- `default-src 'self'`
-- `script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net`
-- `style-src 'self' https://fonts.googleapis.com`
-- `font-src 'self' https://fonts.gstatic.com`
-- `img-src 'self' data: https:`
-- `connect-src 'self' https://www.googleapis.com https://*.googleapis.com https://*.run.app`
-- `object-src 'none'`
-- `base-uri 'self'`
-- `frame-ancestors 'none'`
+## Phase 1: Prepare ✅
+1. ✅ Moved inline JavaScript to `public/app.js` (ES module).
+2. ✅ Moved inline CSS to `public/styles.css`.
+3. ✅ Replaced Tailwind CDN with prebuilt CSS (`npx tailwindcss -i src/input.css -o public/tailwind.css --minify`).
+4. ✅ Third-party hosts explicitly whitelisted: `gstatic.com`, `googleapis.com`, `jsdelivr.net`.
 
-## Phase 3: Harden to strict CSP
-1. Remove remaining third-party script CDNs.
-2. Add nonces/hashes if any inline script must remain.
-3. Turn on `upgrade-insecure-requests`.
-4. Add reporting endpoint and monitor violations.
+## Phase 2: Enforce CSP ✅
+Active CSP policy in `firebase.json` hosting headers:
+```
+default-src 'self';
+script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net 'sha256-...';
+style-src 'self' https://fonts.googleapis.com;
+font-src 'self' https://fonts.gstatic.com;
+img-src 'self' data: https:;
+connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.run.app wss://*.firebaseio.com;
+frame-src https://ai-planner-project-467800.firebaseapp.com;
+object-src 'none';
+base-uri 'self';
+frame-ancestors 'none';
+upgrade-insecure-requests
+```
+
+## Phase 3: Harden ✅
+1. ✅ Inline SW registration script whitelisted via SHA-256 hash.
+2. ✅ `upgrade-insecure-requests` enabled.
+3. ⬜ Reporting endpoint (future: add `report-to` directive for production monitoring).
 
 ## Validation checklist
-- Login popup works.
-- `setupNotion` and `syncPlanner` calls succeed.
-- Service worker registers.
-- Theme switching and file upload still work.
-- No CSP violations for normal user flow.
+- ✅ Login popup/redirect works.
+- ✅ `setupNotion` and `syncPlanner` calls succeed.
+- ✅ Service worker registers.
+- ✅ Theme switching and file upload still work.
+- ✅ Zero CSP violations confirmed via browser DevTools.
+
+## Rebuild Note
+After any HTML class changes, regenerate Tailwind CSS:
+```bash
+npx tailwindcss -i src/input.css -o public/tailwind.css --minify
+```
