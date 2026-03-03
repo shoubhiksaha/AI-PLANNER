@@ -4,5 +4,27 @@
     "dotenv": "^17.2.1",
     "google-auth-library": "^10.2.0",
     "googleapis": "^154.1.0"
-  }
+  },
+  "name": "ai-planner",
+  "version": "1.0.0",
+  "description": "**A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini 2.0 Flash.**",
+  "main": "credentials.js",
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shoubhiksaha/AI-PLANNER.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/shoubhiksaha/AI-PLANNER/issues"
+  },
+  "homepage": "https://github.com/shoubhiksaha/AI-PLANNER#readme"
 }
