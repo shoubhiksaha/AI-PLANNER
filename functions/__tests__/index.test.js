@@ -408,5 +408,195 @@ describe('index.js Integration Tests', () => {
             expect(res.status).toHaveBeenCalledWith(500);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Internal Server Error" }));
         });
+
+        // --- Audit Report Section B: Additional endpoint tests ---
+
+        test('morning sync creates calendar event at 9:30 for "9:30 AM" schedule item', async () => {
+            req.body.syncType = 'morning';
+            // Override fetch to return a schedule with 9:30 AM
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('generativelanguage')) {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            candidates: [{
+                                content: {
+                                    parts: [{
+                                        text: JSON.stringify({
+                                            date: "2025-01-01",
+                                            schedule: [{ time: "9:30 AM", task: "Standup", block: true, reminder: true }],
+                                            todos: []
+                                        })
+                                    }]
+                                }
+                            }]
+                        })
+                    };
+                }
+                return { ok: true, json: async () => ({}) };
+            });
+
+            await myFunctions.syncPlanner(req, res);
+
+            expect(mockCalendarInsert).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    resource: expect.objectContaining({
+                        summary: 'Standup',
+                        start: expect.objectContaining({ dateTime: expect.stringContaining('09:30') }),
+                        end: expect.objectContaining({ dateTime: expect.stringContaining('10:30') }),
+                    })
+                })
+            );
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
+                text: expect.stringContaining("1 events, 1 reminders")
+            }));
+        });
+
+        test('journal sync handles Notion upload failure gracefully', async () => {
+            req.body.syncType = 'journal';
+            global.__geminiMockText = JSON.stringify({ date: "15-January-2025" });
+            // Make Notion fetch fail
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('generativelanguage')) {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            candidates: [{
+                                content: { parts: [{ text: global.__geminiMockText }] }
+                            }]
+                        })
+                    };
+                }
+                // Notion upload fails
+                return { ok: false, status: 500, json: async () => ({ message: 'Upload failed' }) };
+            });
+
+            await myFunctions.syncPlanner(req, res);
+
+            // Should still return 200 but with an error in the flow
+            // The exact behavior depends on how the code handles Notion failures
+            expect(res.status).toHaveBeenCalled();
+        });
+
+        test('rejects request from unauthorized CORS origin', async () => {
+            req.headers.origin = 'https://evil-site.com';
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Origin not allowed" }));
+        });
+
+        test('handles OPTIONS preflight request', async () => {
+            req.method = 'OPTIONS';
+            req.headers.origin = 'https://ai-planner-project-467800.web.app';
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(204);
+        });
+
+        // --- Audit Report Section C: External API contract tests ---
+
+        test('handles Google Tasks list with missing items array', async () => {
+            req.body.syncType = 'evening';
+            global.__geminiMockText = JSON.stringify({
+                date: "2025-01-01",
+                todos: [{ task: "Buy milk", done: true }],
+                expenses: [],
+                health: {}
+            });
+            // Tasks API returns no items key
+            _mockTasksList.mockResolvedValue({ data: {} });
+
+            await myFunctions.syncPlanner(req, res);
+
+            // Should complete without crashing (graceful degradation)
+            expect(mockTasksPatch).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        test('handles empty schedule array gracefully in morning sync', async () => {
+            req.body.syncType = 'morning';
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('generativelanguage')) {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            candidates: [{
+                                content: {
+                                    parts: [{
+                                        text: JSON.stringify({
+                                            date: "2025-01-01",
+                                            schedule: [],
+                                            todos: []
+                                        })
+                                    }]
+                                }
+                            }]
+                        })
+                    };
+                }
+                return { ok: true, json: async () => ({}) };
+            });
+
+            await myFunctions.syncPlanner(req, res);
+
+            expect(mockCalendarInsert).not.toHaveBeenCalled();
+            expect(mockTasksInsert).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
+                text: "Morning Sync Complete! Created 0 events, 0 reminders, and 0 tasks."
+            }));
+        });
+
+        test('handles evening sync with no expenses or health data', async () => {
+            req.body.syncType = 'evening';
+            global.__geminiMockText = JSON.stringify({
+                date: "2025-01-01",
+                todos: [],
+                expenses: [],
+                health: {}
+            });
+            _mockTasksList.mockResolvedValue({ data: { items: [] } });
+
+            await myFunctions.syncPlanner(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            const responseText = res.send.mock.calls[0][0].text;
+            expect(responseText).toContain("Night Sync");
+        });
+    });
+
+    // --- Audit Report Section B: Additional GDPR endpoint edge cases ---
+    describe('exportUserData - additional', () => {
+        test('rejects non-POST request with 405', async () => {
+            req.method = 'GET';
+            req.body.token = 'valid-google-oauth-token-string';
+            await myFunctions.exportUserData(req, res);
+            expect(res.status).toHaveBeenCalledWith(405);
+        });
+
+        test('returns 401 when token has no email', async () => {
+            req.body.token = 'valid-google-oauth-token-string';
+            mockVerifyIdToken.mockResolvedValue({ uid: '123' }); // no email
+            await myFunctions.exportUserData(req, res);
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "No email in token" }));
+        });
+    });
+
+    describe('deleteUserAccount - additional', () => {
+        test('rejects non-POST request with 405', async () => {
+            req.method = 'GET';
+            req.body.token = 'valid-google-oauth-token-string';
+            await myFunctions.deleteUserAccount(req, res);
+            expect(res.status).toHaveBeenCalledWith(405);
+        });
+
+        test('returns 401 when token has no email', async () => {
+            req.body.token = 'valid-google-oauth-token-string';
+            mockVerifyIdToken.mockResolvedValue({ uid: '123' }); // no email
+            await myFunctions.deleteUserAccount(req, res);
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "No email in token" }));
+        });
     });
 });

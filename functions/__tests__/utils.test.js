@@ -703,4 +703,26 @@ describe('parseDateTime', () => {
         expect(result.getMonth()).toBe(0); // January = 0
         expect(result.getDate()).toBe(15);
     });
+
+    // --- Audit Report Section A: Edge cases ---
+    test('returns null for invalid minutes (9:60 AM)', () => {
+        expect(parseDateTime('9:60 AM', testDate)).toBeNull();
+    });
+
+    test('parses "9:05 AM" correctly (5 minutes)', () => {
+        const result = parseDateTime('9:05 AM', testDate);
+        expect(result).not.toBeNull();
+        expect(result.getHours()).toBe(9);
+        expect(result.getMinutes()).toBe(5);
+    });
+
+    test('rejects single-digit minutes "9:5 AM" (invalid format)', () => {
+        // Our regex requires exactly 2 digits for minutes (?::(\\d{2}))
+        expect(parseDateTime('9:5 AM', testDate)).toBeNull();
+    });
+
+    test('rejects inner whitespace " 9 : 30 AM " (colons with spaces)', () => {
+        // The regex anchors to ^...$ so inner spaces around colon don't match
+        expect(parseDateTime(' 9 : 30 AM ', testDate)).toBeNull();
+    });
 });
