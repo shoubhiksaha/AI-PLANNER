@@ -5,6 +5,7 @@ const ASSETS_TO_CACHE = [
     '/manifest.json',
     '/tailwind.css',
     '/styles.css',
+    '/app-helpers.js',
     '/app.js',
     '/privacy.html',
     '/gear.html',

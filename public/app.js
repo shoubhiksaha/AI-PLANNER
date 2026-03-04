@@ -29,12 +29,20 @@ let fileAsBase64 = null;
 // Keep OAuth token only in memory (not session/local storage)
 let googleAccessToken = null;
 
+const helpers = window.AppHelpers;
+if (!helpers) {
+    throw new Error("AppHelpers not loaded. Ensure app-helpers.js is included before app.js.");
+}
+const {
+    parseJsonResponse,
+    getApiUrls,
+    switchView: switchViewHelper,
+    applyTheme: applyThemeHelper,
+} = helpers;
+
 // NAVIGATION
 const switchView = (viewId) => {
-    ['view-login', 'view-setup', 'view-dashboard'].forEach(id => {
-        document.getElementById(id).classList.add('view-hidden');
-    });
-    document.getElementById(viewId).classList.remove('view-hidden');
+    switchViewHelper(viewId);
 };
 
 const buildGoogleProvider = () => {
@@ -71,22 +79,6 @@ const ensureGoogleAccessToken = async () => {
             return;
         }
         throw e;
-    }
-};
-
-const parseJsonResponse = async (res) => {
-    const text = await res.text();
-    const contentType = (res.headers.get('content-type') || '').toLowerCase();
-
-    if (!contentType.includes('application/json')) {
-        const snippet = text.slice(0, 120).replace(/\s+/g, ' ').trim();
-        throw new Error(`Non-JSON API response (${res.status}): ${snippet || 'empty body'}`);
-    }
-
-    try {
-        return JSON.parse(text);
-    } catch (e) {
-        throw new Error(`Invalid JSON API response (${res.status}).`);
     }
 };
 
@@ -356,10 +348,7 @@ const triggerSync = async (syncType) => {
         const token = await ensureGoogleAccessToken();
 
         // Primary route uses Hosting rewrite. Fallback hits function directly.
-        const PRIMARY_API_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-            ? "http://127.0.0.1:5001/ai-planner-project-467800/us-central1/syncPlanner"
-            : "/syncPlanner";
-        const FALLBACK_API_URL = "https://syncplanner-xeh5qbnxga-uc.a.run.app";
+        const { PRIMARY_API_URL, FALLBACK_API_URL } = getApiUrls(window.location.hostname);
 
         const payload = {
             token: token,
@@ -513,32 +502,8 @@ document.addEventListener('click', (e) => {
 function applyTheme(mode) {
     const html = document.documentElement;
     const items = document.querySelectorAll('.theme-item');
-    let effect = mode;
-
-    // Resolve Auto
-    if (mode === 'auto') {
-        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        effect = systemDark ? 'dark' : 'light';
-    }
-
-    // Apply Classes
-    html.classList.remove('dark-mode', 'oled-mode');
-    if (effect === 'dark') html.classList.add('dark-mode');
-    if (effect === 'oled') html.classList.add('oled-mode');
-
-    // Update Icon
-    if (!themeBtn) return;
-
-    if (mode === 'auto') themeBtn.textContent = '⚙️';
-    else if (mode === 'light') themeBtn.textContent = '☀️';
-    else if (mode === 'dark') themeBtn.textContent = '🌙';
-    else if (mode === 'oled') themeBtn.textContent = '🖤';
-
-    // Highlight Selection
-    items.forEach(el => {
-        el.classList.remove('selected');
-        if (el.textContent.toLowerCase().includes(mode)) el.classList.add('selected');
-    });
+    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyThemeHelper(mode, html, themeBtn, items, systemDark);
 }
 
 // Init Theme

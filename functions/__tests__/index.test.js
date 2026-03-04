@@ -302,9 +302,11 @@ describe('index.js Integration Tests', () => {
                         })
                     };
                 } else if (url.includes('notion')) {
+                    // Realistic Notion 2-step upload mock (matches production contract)
                     return {
                         ok: true,
-                        json: async () => ({ upload_url: 'http://fake-url.com', url: 'http://notion-file.com' })
+                        text: async () => JSON.stringify({ id: 'file-upload-123', upload_url: 'https://s3.us-west-2.amazonaws.com/notion-upload/fake', url: 'https://prod-files-secure.s3.us-west-2.amazonaws.com/fake.jpg' }),
+                        json: async () => ({ id: 'file-upload-123', upload_url: 'https://s3.us-west-2.amazonaws.com/notion-upload/fake', url: 'https://prod-files-secure.s3.us-west-2.amazonaws.com/fake.jpg' })
                     };
                 }
                 return { ok: true, json: async () => ({}) };
@@ -456,7 +458,7 @@ describe('index.js Integration Tests', () => {
         test('journal sync handles Notion upload failure gracefully', async () => {
             req.body.syncType = 'journal';
             global.__geminiMockText = JSON.stringify({ date: "15-January-2025" });
-            // Make Notion fetch fail
+            // Make Notion fetch fail with realistic error
             global.fetch.mockImplementation(async (url) => {
                 if (url.includes('generativelanguage')) {
                     return {
@@ -468,15 +470,53 @@ describe('index.js Integration Tests', () => {
                         })
                     };
                 }
-                // Notion upload fails
-                return { ok: false, status: 500, json: async () => ({ message: 'Upload failed' }) };
+                // Notion upload returns 500 (init step fails)
+                return {
+                    ok: false,
+                    status: 500,
+                    text: async () => 'Internal Server Error: rate limited',
+                    json: async () => ({ message: 'Upload failed' })
+                };
             });
 
             await myFunctions.syncPlanner(req, res);
 
-            // Should still return 200 but with an error in the flow
-            // The exact behavior depends on how the code handles Notion failures
-            expect(res.status).toHaveBeenCalled();
+            // uploadFileToNotion throws → caught by outer catch → returns 500
+            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Internal Server Error" }));
+        });
+
+        test('journal sync handles Notion init response missing upload_url', async () => {
+            req.body.syncType = 'journal';
+            global.__geminiMockText = JSON.stringify({ date: "15-January-2025" });
+            // Notion returns OK but with missing upload_url (contract violation)
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('generativelanguage')) {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            candidates: [{
+                                content: { parts: [{ text: global.__geminiMockText }] }
+                            }]
+                        })
+                    };
+                }
+                if (url.includes('notion')) {
+                    // Init succeeds but returns incomplete shape
+                    return {
+                        ok: true,
+                        text: async () => JSON.stringify({ id: 'file-123' }),
+                        json: async () => ({ id: 'file-123' }) // missing upload_url
+                    };
+                }
+                return { ok: true, json: async () => ({}) };
+            });
+
+            await myFunctions.syncPlanner(req, res);
+
+            // fetch(undefined) for upload step should cause an error
+            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Internal Server Error" }));
         });
 
         test('rejects request from unauthorized CORS origin', async () => {

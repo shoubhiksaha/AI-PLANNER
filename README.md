@@ -173,7 +173,25 @@ Config:
     ```bash
     npx tailwindcss -i src/input.css -o public/tailwind.css --minify
     ```
-4. **Deploy**:
+4. **Run Tests**:
+    ```bash
+    npm test                 # All 171 tests (backend + frontend)
+    npm run test:backend     # 130 backend tests with coverage
+    npm run test:frontend    # 41 frontend tests (jsdom)
+    ```
+5. **Run Firestore Rules Tests** (requires Java 21+):
+    ```bash
+    # Install Java 21 (Temurin) if not present
+    # macOS: brew install --cask temurin21
+    # Ubuntu: apt install temurin-21-jdk
+
+    npm install -g firebase-tools
+    cd functions && firebase emulators:exec \
+      --project ai-planner-project-467800 \
+      --only firestore \
+      "npx jest __tests__/firestore.rules.test.js --verbose"
+    ```
+6. **Deploy**:
     ```bash
     firebase deploy
     ```

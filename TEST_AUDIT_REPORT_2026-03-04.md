@@ -1,111 +1,98 @@
-# Test Audit Report (Updated Recheck: March 4, 2026)
+# Test Audit Report (Rechecked: March 5, 2026)
 
 ## Scope
-- Repository root: `/Users/domgeshworld/Desktop/AI PLANNER`
+- Repository: `/Users/domgeshworld/Desktop/AI PLANNER`
 - Backend: `functions/`
 - Frontend: `public/`
-- Config/Security: `firebase.json`, `firestore.rules`
+- CI: `.github/workflows/main.yml`
+- Security rules: `firestore.rules` + `functions/__tests__/firestore.rules.test.js`
 
-## Recheck Commands Executed
-- `npm test`
-- `cd functions && npx jest --coverage --coverageReporters=text-summary --coverageReporters=text`
-- `cd functions && npx jest --coverage --collectCoverageFrom='["**/*.js","!**/__tests__/**","!planner_v3_draft.js","!commented code.js","!list_buckets_dummy.js"]' --coverageReporters=text-summary --coverageReporters=text`
-- `ls -la .github`
-- `node --check '.../functions/index.js' && node --check '.../functions/utils.js'`
+## What Was Rechecked
+- Project/test inventory and scripts.
+- Backend test run and coverage.
+- Frontend test run.
+- Firestore rules test command behavior in current local environment.
+- CI workflow structure.
 
-## Current Test Snapshot
-- Test files present: `functions/__tests__/utils.test.js` only
-- Total tests: **95 passed** (1 suite)
-- Root `npm test`: **passes** (now delegates to `functions` tests)
-- Utility coverage (`utils.js`-focused run):
-  - Statements: 99.13%
-  - Branches: 98.73%
-  - Functions: 100%
-  - Lines: 100%
-- Backend all-file coverage (including `index.js`):
-  - Statements: 21.9% (115/525)
-  - Branches: 25.32% (78/308)
-  - Functions: 30.61% (15/49)
-  - Lines: 20% (92/460)
-  - `functions/index.js`: **0%**
-- CI workflows: `.github` directory still missing
+## Commands Run
+1. `npm test`
+2. `npm run test:backend`
+3. `npm run test:frontend`
+4. `./functions/node_modules/.bin/jest --verbose --config public/jest.config.js`
+5. `cat/sed` inspections for tests, configs, and workflow.
 
-## Recheck Status of Previously Flagged Issues
+## Current Results
 
-| Previous Flag | Status Now | Notes |
-|---|---|---|
-| Root `npm test` failed by design | **Resolved** | `package.json` now runs `cd functions && npm test`. |
-| `parseDateTime` minute-format bug (`"9:30 AM" -> "30 AM"`) | **Resolved** | Logic moved to `utils.js` with anchored regex and minute parsing; 17 dedicated tests added. |
-| No tests for production Cloud Functions (`functions/index.js`) | **Persistent** | Coverage for `index.js` remains 0%. |
-| No integration/contract tests for Google/Notion/Gemini | **Persistent** | Only utility unit tests exist. |
-| Frontend has zero automated tests | **Persistent** | No `public/app.js` or `public/sw.js` tests present. |
-| No CI workflow despite README CI mention | **Persistent** | `.github/` absent. |
-| Firestore/CSP/rules test automation missing | **Persistent** | No emulator rules tests or config contract checks. |
+### Backend (`npm run test:backend`)
+- Status: **PASS**
+- Suites: **2 passed** (`functions/__tests__/index.test.js`, `functions/__tests__/utils.test.js`)
+- Tests: **130 passed**
+- Coverage:
+  - Statements: **87.61%**
+  - Branches: **78.24%**
+  - Functions: **91.83%**
+  - Lines: **89.56%**
+- File highlights:
+  - `functions/index.js`: 84.1% statements / 70.74% branches / 88.23% functions / 86.95% lines
+  - `functions/utils.js`: 100% across all metrics
 
-## What Improved Since Last Audit
-1. Test count increased from 78 to 95.
-2. `parseDateTime` has comprehensive direct unit tests.
-3. Root test command is now correctly wired.
+### Frontend
+- `npm run test:frontend`: **fails in this local environment** with `ENOTFOUND registry.npmjs.org`.
+- Cause: script uses `npx jest` and attempts network fetch for Jest if not locally installed at root.
+- Verified actual frontend suites by invoking existing local binary directly:
+  - `./functions/node_modules/.bin/jest --config public/jest.config.js`
+  - Status: **PASS**
+  - Suites: **2 passed** (`public/__tests__/app.test.js`, `public/__tests__/sw.test.js`)
+  - Tests: **41 passed**
 
-## Persistent Gaps (Still Blocking “Complete / Up-to-Mark”)
+### Firestore Rules (`npm run test:rules`)
+- Not re-executed successfully in this local environment due Java emulator prerequisite (previously observed).
+- Rules test file exists with core auth/read/write checks.
+- CI workflow includes Java setup and emulator execution.
 
-### 1) Production backend remains untested
-- All HTTP handlers and sync orchestrations in `functions/index.js` remain uncovered.
-- High regression risk in auth, CORS, payload validation, and third-party API interactions.
+### CI
+- `.github/workflows/main.yml` now includes:
+  - frontend tests
+  - backend tests
+  - firestore rules tests via emulator
+  - deploy gated on successful test jobs
 
-### 2) No endpoint-level integration tests
-- Missing tests for:
-  - `setupNotion`
-  - `exportUserData`
-  - `deleteUserAccount`
-  - `syncPlanner` (morning/evening/journal branches)
+## Resolved vs Persistent (From Earlier Audits)
 
-### 3) No frontend test coverage
-- Critical flows untested:
-  - Sign-in popup/redirect fallback
-  - File upload/compression and HEIC path
-  - Sync API fallback path
-  - GDPR export/delete UX flows
-  - Service worker cache lifecycle
+### Resolved
+1. Backend integration test coverage gap is addressed substantially.
+2. `parseDateTime` regression is covered with detailed edge tests.
+3. CI workflow exists and includes test stages.
+4. Frontend tests now exist (previously absent).
 
-### 4) No CI quality gate
-- No automated execution on PR/merge.
-- No enforced coverage thresholds.
+### Still Persistent / New Findings
+1. **Root frontend test command robustness issue**
+- `test:frontend` uses `npx jest` without root `jest` dependency.
+- In restricted/offline environments this fails (observed ENOTFOUND).
 
-## New Possible Tests Identified During Recheck
+2. **Frontend tests are mirrored-logic tests, not direct module tests**
+- `public/__tests__/app.test.js` and `sw.test.js` mirror app/sw logic instead of importing production modules directly.
+- Risk: test drift if source changes but mirrors are not updated.
 
-### A) New utility edge tests (quick wins)
-1. `parseDateTime('9:60 AM', date)` should return `null` (currently uncovered branch line in `utils.js`).
-2. `parseDateTime('9:05 AM', date)` should parse 5 minutes correctly.
-3. `parseDateTime('9:5 AM', date)` should be rejected (or accepted intentionally; define behavior).
-4. `parseDateTime(' 9 : 30 AM ', date)` behavior should be explicitly defined and tested.
+3. **Rules tests not part of default `npm test` flow**
+- They are in separate script requiring emulator + Java.
+- This is acceptable but requires explicit documentation and environment setup.
 
-### B) Backend endpoint tests (highest impact)
-1. `setupNotion`: verify stored key is encrypted format (`v2:`) and not raw text.
-2. `syncPlanner` morning: ensure `9:30 AM` planner item creates calendar event at 09:30 (integration with calendar mock).
-3. `syncPlanner` evening: spreadsheet auto-create path and header writes.
-4. `syncPlanner` journal: Notion upload init failure and binary upload failure handling.
-5. `exportUserData` / `deleteUserAccount`: token missing email and verification failures.
-
-### C) External API contract tests
-1. Gemini response schema changes: missing `candidates[0].content.parts[0].text`.
-2. Google Tasks list response with missing `items`.
-3. Notion upload init returns JSON without `upload_url`.
-
-### D) Frontend tests
-1. `triggerSync` falls back from primary API URL to fallback URL correctly.
-2. Loader/status/timer cleanup after abort and error paths.
-3. `parseJsonResponse` with non-JSON or invalid JSON body.
-4. Service worker install/activate cache invalidation and fetch fallback.
+4. **Generated coverage artifacts are tracked in repo**
+- `functions/coverage/*` appears versioned/modified.
+- Adds noise to diffs and review flow.
 
 ## Updated Verdict
-- **Not all previously flagged issues are cleared.**
-- **Resolved:** root test command wiring, `parseDateTime` bug and direct unit coverage.
-- **Still persistent (major):** no `index.js` endpoint coverage, no integration tests, no frontend tests, no CI workflows.
-- Current test quality is good for utilities, but overall project test completeness is still below production-grade expectations.
+The project is materially improved and now has meaningful backend + frontend automated test coverage and CI gating. Most major issues from prior audits are resolved.
 
-## Recommended Next Step Order
-1. Add endpoint integration tests for `functions/index.js` (with mocks for Google/Notion/Gemini).
-2. Add coverage threshold for `functions/index.js` (start with minimum 40%, then raise).
-3. Add frontend unit tests for `public/app.js` critical paths.
-4. Add CI workflow to run tests and fail on threshold breaches.
+Remaining work is quality-hardening rather than foundational:
+- make frontend test execution deterministic without network (`jest` dependency + non-`npx` script),
+- reduce drift risk by testing real frontend modules where feasible,
+- keep rules/emulator prerequisites explicit,
+- and clean up coverage artifact tracking.
+
+## Recommended Next Fixes (Priority)
+1. Add root `jest` as a dev dependency and replace frontend script with `jest --config public/jest.config.js`.
+2. Export testable helpers from `public/app.js`/`public/sw.js` (or split logic modules) so tests import real code.
+3. Add `functions/coverage/` to `.gitignore` unless coverage reports are intentionally versioned.
+4. Add a short README section for running `test:rules` locally (Java + emulator requirements).

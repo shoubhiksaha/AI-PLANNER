@@ -41,3 +41,9 @@ firebase-debug.log
 # Firebase cache
 .firebase/
 
+# Test coverage artifacts
+functions/coverage/
+coverage/
+
+# Functions dependencies (installed via npm ci)
+functions/node_modules/
