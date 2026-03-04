@@ -101,6 +101,10 @@ jobs:
     - name: Install Firebase CLI
       run: npm install -g firebase-tools
 
+    - name: Create Functions .env from secrets
+      working-directory: ./functions
+      run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+
     - name: Deploy Hosting + Functions
       run: firebase deploy --project ai-planner-project-467800
       env:
