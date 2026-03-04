@@ -6,7 +6,9 @@
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test": "jest --verbose --testPathIgnorePatterns=firestore.rules.test.js",
+    "test:rules": "firebase emulators:exec --only firestore \"jest __tests__/firestore.rules.test.js --verbose\""
   },
   "engines": {
     "node": "20"
@@ -15,13 +17,27 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@notionhq/client": "^5.6.0",
-    "firebase-admin": "^13.6.0",
     "firebase-functions": "^7.0.0",
     "googleapis": "^169.0.0",
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
-    "firebase-functions-test": "^3.4.1"
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase-admin": "^13.7.0",
+    "firebase-functions-test": "^3.4.1",
+    "jest": "^30.2.0"
   },
-  "private": true
+  "private": true,
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverage": true,
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 80,
+        "lines": 80,
+        "statements": 80
+      }
+    }
+  }
 }

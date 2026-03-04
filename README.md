@@ -12,6 +12,9 @@
 ![Privacy](https://img.shields.io/badge/Privacy-Zero%20Storage-green)
 ![Security](https://img.shields.io/badge/Security-CSP%20Enforced-brightgreen)
 ![Tech](https://img.shields.io/badge/Stack-Firebase%20%7C%20Node.js%20%7C%20Gemini-blue)
+[![CI/CD](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/main.yml/badge.svg)](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/main.yml)
+![Tests](https://img.shields.io/badge/Tests-114%20Passing-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-80%25%2B-brightgreen)
 
 ---
 
@@ -22,7 +25,7 @@ Unlike traditional apps that store user images in an S3 bucket or database, **AI
 - User images are processed **in-memory** (transient RAM only).
 - Data is extracted by Gemini AI and synced to Google Calendar, Tasks, Sheets, and Notion.
 - The original image buffer is wiped immediately after processing.
-- Notion integration keys are **encrypted at rest** (AES-256-CBC) with keys managed via Google Cloud Secret Manager.
+- Notion integration keys are **encrypted at rest** (AES-256-GCM) with keys managed via Google Cloud Secret Manager.
 
 **Result**: Verifiable privacy. We cannot see your journal even if we wanted to.
 
