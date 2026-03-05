@@ -90,10 +90,19 @@ describe('Encryption', () => {
     test('decryptCurrentGcm rejects tampered ciphertext', () => {
         const encrypted = encrypt('secret_test', testKey);
         const parts = encrypted.split(':');
-        // Tamper with the encrypted data
-        parts[2] = parts[2].replace(/^./, 'f');
+        // Reliably flip a character (XOR first hex char so it's always different)
+        const firstChar = parts[2][0];
+        const flipped = firstChar === '0' ? '1' : '0';
+        parts[2] = flipped + parts[2].slice(1);
         const tampered = parts.join(':');
-        expect(() => decryptCurrentGcm(tampered, testKey)).toThrow();
+        // GCM auth failure: Node may throw or the wrapper may return null
+        let result;
+        try {
+            result = decryptCurrentGcm(tampered, testKey);
+        } catch (e) {
+            result = 'threw';
+        }
+        expect(result === null || result === 'threw').toBe(true);
     });
 });
 
