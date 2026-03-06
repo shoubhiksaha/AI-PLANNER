@@ -452,10 +452,11 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         res.status(200).send({ text: msg });
 
     } catch (error) {
-        console.error("FATAL ERROR:", error.message);
+        const errMsg = error?.message || String(error || "Unknown error");
+        console.error("FATAL ERROR:", errMsg);
 
         // Security: Don't leak internals to client
-        const safeMessage = error.message.includes("RATE_LIMIT") ? "AI Service Busy. Please try again." : "Internal Server Error";
+        const safeMessage = errMsg.includes("RATE_LIMIT") ? "AI Service Busy. Please try again." : "Internal Server Error";
         res.status(500).send({ error: safeMessage });
     }
 });
@@ -570,10 +571,11 @@ async function callGeminiModel(model, apiKey, prompt, imageData, mimeType) {
             return JSON.parse(result.candidates[0].content.parts[0].text);
 
         } catch (error) {
+            const errMsg = error?.message || String(error || "Unknown error");
             // Keep retrying if it's a 429 loop, otherwise throw to switch models
-            if (attempt > 0 && attempt <= maxRetries && error.message.includes("RATE_LIMIT")) throw error;
+            if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
 
-            console.warn(`Model ${model} failed: ${error.message}`);
+            console.warn(`Model ${model} failed: ${errMsg}`);
             throw error;
         }
     }
