@@ -17,7 +17,8 @@
   "scripts": {
     "test": "cd functions && npm test && cd .. && jest --verbose --config public/jest.config.js",
     "test:backend": "cd functions && npm test",
-    "test:frontend": "jest --verbose --config public/jest.config.js"
+    "test:frontend": "jest --verbose --config public/jest.config.js",
+    "test:rules": "cd functions && npm run test:rules"
   },
   "repository": {
     "type": "git",

@@ -1,31 +1,28 @@
-# Test Audit Report (Rechecked: March 5, 2026)
+# Test Audit Report (Rechecked: March 6, 2026)
 
 ## Scope
 - Repository: `/Users/domgeshworld/Desktop/AI PLANNER`
 - Backend: `functions/`
 - Frontend: `public/`
 - CI: `.github/workflows/main.yml`
-- Security rules: `firestore.rules` + `functions/__tests__/firestore.rules.test.js`
+- Rules: `firestore.rules` + `functions/__tests__/firestore.rules.test.js`
 
-## What Was Rechecked
-- Project/test inventory and scripts.
-- Backend test run and coverage.
-- Frontend test run.
-- Firestore rules test command behavior in current local environment.
-- CI workflow structure.
-
-## Commands Run
+## Commands Executed
 1. `npm test`
 2. `npm run test:backend`
 3. `npm run test:frontend`
-4. `./functions/node_modules/.bin/jest --verbose --config public/jest.config.js`
-5. `cat/sed` inspections for tests, configs, and workflow.
+4. `cd functions && npm run test:rules`
+5. File inspections for tests/config/workflow.
 
 ## Current Results
 
-### Backend (`npm run test:backend`)
-- Status: **PASS**
-- Suites: **2 passed** (`functions/__tests__/index.test.js`, `functions/__tests__/utils.test.js`)
+### Root test command
+- `npm test`: **PASS**
+- Runs backend tests first, then frontend tests.
+
+### Backend
+- `npm run test:backend`: **PASS**
+- Suites: **2 passed** (`index.test.js`, `utils.test.js`)
 - Tests: **130 passed**
 - Coverage:
   - Statements: **87.61%**
@@ -37,62 +34,46 @@
   - `functions/utils.js`: 100% across all metrics
 
 ### Frontend
-- `npm run test:frontend`: **fails in this local environment** with `ENOTFOUND registry.npmjs.org`.
-- Cause: script uses `npx jest` and attempts network fetch for Jest if not locally installed at root.
-- Verified actual frontend suites by invoking existing local binary directly:
-  - `./functions/node_modules/.bin/jest --config public/jest.config.js`
-  - Status: **PASS**
-  - Suites: **2 passed** (`public/__tests__/app.test.js`, `public/__tests__/sw.test.js`)
-  - Tests: **41 passed**
+- `npm run test:frontend`: **PASS**
+- Suites: **2 passed** (`public/__tests__/app.test.js`, `public/__tests__/sw.test.js`)
+- Tests: **41 passed**
+- `app.test.js` now imports production helper module (`public/app-helpers.js`) instead of duplicating helper logic.
 
-### Firestore Rules (`npm run test:rules`)
-- Not re-executed successfully in this local environment due Java emulator prerequisite (previously observed).
-- Rules test file exists with core auth/read/write checks.
-- CI workflow includes Java setup and emulator execution.
+### Firestore rules
+- `cd functions && npm run test:rules`: **FAIL in local environment**
+- Blocker: Java runtime missing for Firebase emulator (`java -version` failure).
+- CI workflow already provisions Java, so this is a local environment prerequisite issue.
 
-### CI
-- `.github/workflows/main.yml` now includes:
-  - frontend tests
-  - backend tests
-  - firestore rules tests via emulator
-  - deploy gated on successful test jobs
-
-## Resolved vs Persistent (From Earlier Audits)
+## Status of Previously Flagged Issues
 
 ### Resolved
-1. Backend integration test coverage gap is addressed substantially.
-2. `parseDateTime` regression is covered with detailed edge tests.
-3. CI workflow exists and includes test stages.
-4. Frontend tests now exist (previously absent).
+1. Root project test command reliability (now runs backend + frontend successfully).
+2. Missing frontend tests (frontend suite exists and passes).
+3. Backend endpoint coverage gap (meaningful integration coverage now present).
+4. CI workflow missing (workflow exists with frontend/backend/rules/deploy jobs).
+5. App helper drift concern (app helper tests now import real production helper module).
 
-### Still Persistent / New Findings
-1. **Root frontend test command robustness issue**
-- `test:frontend` uses `npx jest` without root `jest` dependency.
-- In restricted/offline environments this fails (observed ENOTFOUND).
+### Still Persistent
+1. Local Firestore rules test execution requires Java + emulator setup.
+2. Rules tests are not included in default `npm test` (run via separate command).
+3. Service worker tests still rely on mirrored constants/logic patterns (not imported from production code).
+4. `functions/index.js` branch coverage is only slightly above threshold; important failure branches remain uncovered.
 
-2. **Frontend tests are mirrored-logic tests, not direct module tests**
-- `public/__tests__/app.test.js` and `sw.test.js` mirror app/sw logic instead of importing production modules directly.
-- Risk: test drift if source changes but mirrors are not updated.
-
-3. **Rules tests not part of default `npm test` flow**
-- They are in separate script requiring emulator + Java.
-- This is acceptable but requires explicit documentation and environment setup.
-
-4. **Generated coverage artifacts are tracked in repo**
-- `functions/coverage/*` appears versioned/modified.
-- Adds noise to diffs and review flow.
+## New/Current Observations
+1. Coverage artifacts under `functions/coverage/` are changing in git status; decide whether to version these or ignore them.
+2. Root currently has no `test:rules` alias; rules run from `functions/` only.
 
 ## Updated Verdict
-The project is materially improved and now has meaningful backend + frontend automated test coverage and CI gating. Most major issues from prior audits are resolved.
+Testing quality is now substantially improved and broadly production-ready for backend + frontend core logic.
 
-Remaining work is quality-hardening rather than foundational:
-- make frontend test execution deterministic without network (`jest` dependency + non-`npx` script),
-- reduce drift risk by testing real frontend modules where feasible,
-- keep rules/emulator prerequisites explicit,
-- and clean up coverage artifact tracking.
+Remaining work is focused on execution ergonomics and hardening:
+- make rules tests easy to run locally (Java/emulator prerequisites + docs),
+- consider adding rules into an optional aggregate script,
+- reduce service worker test drift risk,
+- and finalize policy on coverage artifact tracking.
 
-## Recommended Next Fixes (Priority)
-1. Add root `jest` as a dev dependency and replace frontend script with `jest --config public/jest.config.js`.
-2. Export testable helpers from `public/app.js`/`public/sw.js` (or split logic modules) so tests import real code.
-3. Add `functions/coverage/` to `.gitignore` unless coverage reports are intentionally versioned.
-4. Add a short README section for running `test:rules` locally (Java + emulator requirements).
+## Recommended Next Actions
+1. Add a root script like `test:rules` forwarding to `cd functions && npm run test:rules`.
+2. Add a short setup section in README for Java + Firestore emulator prerequisites.
+3. Consider extracting/cache constants for SW tests to avoid mirrored drift.
+4. Add `functions/coverage/` to `.gitignore` if reports are not meant to be committed.

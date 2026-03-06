@@ -1,18 +1,5 @@
-const CACHE_NAME = 'ai-planner-v2';
-const ASSETS_TO_CACHE = [
-    '/',
-    '/index.html',
-    '/manifest.json',
-    '/tailwind.css',
-    '/styles.css',
-    '/app-helpers.js',
-    '/app.js',
-    '/privacy.html',
-    '/gear.html',
-    '/planner.html',
-    'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap',
-    'https://cdn-icons-png.flaticon.com/512/2921/2921226.png'
-];
+importScripts('./sw-constants.js');
+const { CACHE_NAME, ASSETS_TO_CACHE } = self.SW_CONSTANTS;
 
 self.addEventListener('install', (event) => {
     event.waitUntil(

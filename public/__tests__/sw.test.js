@@ -2,27 +2,13 @@
  * Service Worker Tests for AI Planner
  * Tests the cache lifecycle from public/sw.js
  *
+ * Constants are imported from the production sw-constants.js module
+ * to eliminate drift between tests and source.
+ *
  * @jest-environment jsdom
  */
 
-// ============================================
-// MIRRORED CONSTANTS FROM sw.js
-// ============================================
-const CACHE_NAME = 'ai-planner-v2';
-const ASSETS_TO_CACHE = [
-    '/',
-    '/index.html',
-    '/manifest.json',
-    '/tailwind.css',
-    '/styles.css',
-    '/app-helpers.js',
-    '/app.js',
-    '/privacy.html',
-    '/gear.html',
-    '/planner.html',
-    'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap',
-    'https://cdn-icons-png.flaticon.com/512/2921/2921226.png'
-];
+const { CACHE_NAME, ASSETS_TO_CACHE } = require('../sw-constants');
 
 // ============================================
 // MOCK SERVICE WORKER ENVIRONMENT
