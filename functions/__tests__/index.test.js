@@ -603,6 +603,51 @@ describe('index.js Integration Tests', () => {
             const responseText = res.send.mock.calls[0][0].text;
             expect(responseText).toContain("Night Sync");
         });
+
+        // --- Branch coverage: RATE_LIMIT safe error message ---
+        test('returns "AI Service Busy" when Gemini throws RATE_LIMIT', async () => {
+            req.body.syncType = 'morning';
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('generativelanguage')) {
+                    throw new Error('RATE_LIMIT exceeded');
+                }
+                return { ok: true, json: async () => ({}) };
+            });
+
+            await myFunctions.syncPlanner(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "AI Service Busy. Please try again." }));
+        });
+
+        // --- Branch coverage: journal date extraction failure fallback ---
+        test('uses today date when Gemini date extraction fails', async () => {
+            req.body.syncType = 'journal';
+            let callCount = 0;
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('generativelanguage')) {
+                    callCount++;
+                    if (callCount === 1) {
+                        throw new Error('Gemini unavailable');
+                    }
+                }
+                if (url.includes('notion') || url.includes('s3')) {
+                    return {
+                        ok: true,
+                        text: async () => JSON.stringify({ id: 'file-upload-123', upload_url: 'https://s3.us-west-2.amazonaws.com/notion-upload/fake' }),
+                        json: async () => ({ id: 'file-upload-123', upload_url: 'https://s3.us-west-2.amazonaws.com/notion-upload/fake' })
+                    };
+                }
+                return { ok: true, json: async () => ({}) };
+            });
+
+            await myFunctions.syncPlanner(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
+                text: expect.stringContaining('Journal synced to Notion!')
+            }));
+        });
     });
 
     // --- Audit Report Section B: Additional GDPR endpoint edge cases ---
@@ -637,6 +682,45 @@ describe('index.js Integration Tests', () => {
             await myFunctions.deleteUserAccount(req, res);
             expect(res.status).toHaveBeenCalledWith(401);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "No email in token" }));
+        });
+    });
+
+    // --- Branch coverage: syncPlanner method & content-type guards ---
+    describe('syncPlanner - request validation branches', () => {
+        test('rejects non-POST syncPlanner with 405', async () => {
+            req.method = 'GET';
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(405);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Method not allowed" }));
+        });
+
+        test('rejects non-JSON content-type for syncPlanner with 415', async () => {
+            req.headers['content-type'] = 'text/plain';
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(415);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Content-Type must be application/json" }));
+        });
+    });
+
+    // --- Branch coverage: deleteUserAccount catch block ---
+    describe('deleteUserAccount - error handling', () => {
+        test('returns 500 when Firestore delete throws', async () => {
+            req.body.token = 'valid-google-oauth-token-string';
+            mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com' });
+            // Make Firestore delete throw
+            const mockDelete = jest.fn().mockRejectedValue(new Error('Firestore unavailable'));
+            jest.spyOn(admin, 'firestore').mockReturnValue({
+                collection: () => ({
+                    doc: () => ({
+                        delete: mockDelete
+                    })
+                })
+            });
+
+            await myFunctions.deleteUserAccount(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Failed to delete account." }));
         });
     });
 });

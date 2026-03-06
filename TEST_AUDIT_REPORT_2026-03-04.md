@@ -11,18 +11,18 @@
 1. `npm test`
 2. `npm run test:backend`
 3. `npm run test:frontend`
-4. `cd functions && npm run test:rules`
+4. `npm run test:rules`
 5. File inspections for tests/config/workflow.
 
 ## Current Results
 
 ### Root test command
 - `npm test`: **PASS**
-- Runs backend tests first, then frontend tests.
+- Executes backend tests, then frontend tests.
 
 ### Backend
 - `npm run test:backend`: **PASS**
-- Suites: **2 passed** (`index.test.js`, `utils.test.js`)
+- Suites: **2 passed** (`functions/__tests__/index.test.js`, `functions/__tests__/utils.test.js`)
 - Tests: **130 passed**
 - Coverage:
   - Statements: **87.61%**
@@ -37,43 +37,43 @@
 - `npm run test:frontend`: **PASS**
 - Suites: **2 passed** (`public/__tests__/app.test.js`, `public/__tests__/sw.test.js`)
 - Tests: **41 passed**
-- `app.test.js` now imports production helper module (`public/app-helpers.js`) instead of duplicating helper logic.
+- `app.test.js` imports production helper module (`public/app-helpers.js`) instead of duplicating helper logic.
 
 ### Firestore rules
-- `cd functions && npm run test:rules`: **FAIL in local environment**
-- Blocker: Java runtime missing for Firebase emulator (`java -version` failure).
-- CI workflow already provisions Java, so this is a local environment prerequisite issue.
+- `npm run test:rules`: **FAIL in current local environment**
+- Primary blocker: Java runtime missing for Firebase emulator (`java -version` failure).
+- Additional local environment noise: offline lookup failures for Firebase MOTD and local configstore write permission warning from global firebase-tools.
+- CI workflow provisions Java, so local failure does not automatically imply CI failure.
 
 ## Status of Previously Flagged Issues
 
 ### Resolved
-1. Root project test command reliability (now runs backend + frontend successfully).
-2. Missing frontend tests (frontend suite exists and passes).
-3. Backend endpoint coverage gap (meaningful integration coverage now present).
-4. CI workflow missing (workflow exists with frontend/backend/rules/deploy jobs).
-5. App helper drift concern (app helper tests now import real production helper module).
+1. Root project test command reliability.
+2. Missing frontend tests.
+3. Backend endpoint coverage gap (substantially improved).
+4. CI workflow missing.
+5. App helper drift concern (`app.test.js` now imports real production helper module).
+6. Root `test:rules` script availability (now present).
 
 ### Still Persistent
-1. Local Firestore rules test execution requires Java + emulator setup.
-2. Rules tests are not included in default `npm test` (run via separate command).
-3. Service worker tests still rely on mirrored constants/logic patterns (not imported from production code).
-4. `functions/index.js` branch coverage is only slightly above threshold; important failure branches remain uncovered.
+1. Local Firestore rules execution depends on Java + emulator setup.
+2. Service worker tests still rely on mirrored constants/logic style rather than importing production module code.
+3. `functions/index.js` branch coverage remains only moderately above threshold, leaving failure branches uncovered.
 
-## New/Current Observations
-1. Coverage artifacts under `functions/coverage/` are changing in git status; decide whether to version these or ignore them.
-2. Root currently has no `test:rules` alias; rules run from `functions/` only.
+## Current Observations
+1. Coverage artifacts under `functions/coverage/` are changing in git status; decide whether to keep versioned or ignore in VCS.
+2. Backend test output is very log-heavy due expected mocked error-path logging; test pass/fail signal remains clear.
 
 ## Updated Verdict
-Testing quality is now substantially improved and broadly production-ready for backend + frontend core logic.
+The testing setup is now strong for core backend + frontend paths and is materially better than earlier audit states.
 
-Remaining work is focused on execution ergonomics and hardening:
-- make rules tests easy to run locally (Java/emulator prerequisites + docs),
-- consider adding rules into an optional aggregate script,
-- reduce service worker test drift risk,
-- and finalize policy on coverage artifact tracking.
+Remaining work is mostly execution-hardening and maintainability:
+- enable local rules-test execution prerequisites by default,
+- reduce SW test drift risk,
+- and finalize policy for coverage artifacts in source control.
 
 ## Recommended Next Actions
-1. Add a root script like `test:rules` forwarding to `cd functions && npm run test:rules`.
-2. Add a short setup section in README for Java + Firestore emulator prerequisites.
-3. Consider extracting/cache constants for SW tests to avoid mirrored drift.
-4. Add `functions/coverage/` to `.gitignore` if reports are not meant to be committed.
+1. Document local prerequisites for rules tests (Java + emulator) in README.
+2. Consider extracting service-worker constants/helpers so tests can import real code rather than mirror constants.
+3. Add `functions/coverage/` to `.gitignore` if coverage artifacts are not intended to be committed.
+4. Add optional quieter test mode (or scoped log suppression) to reduce noisy CI/local output.
