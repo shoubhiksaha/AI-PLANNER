@@ -175,8 +175,8 @@ Config:
     ```
 4. **Run Tests**:
     ```bash
-    npm test                 # All 177 tests (backend + frontend)
-    npm run test:backend     # 136 backend tests with coverage
+    npm test                 # All 192 tests (backend + frontend)
+    npm run test:backend     # 151 backend tests with coverage
     npm run test:frontend    # 41 frontend tests (jsdom)
     ```
 5. **Run Firestore Rules Tests** (requires Java 21+):

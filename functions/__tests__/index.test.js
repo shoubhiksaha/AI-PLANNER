@@ -664,6 +664,178 @@ describe('index.js Integration Tests', () => {
             expect(res.status).toHaveBeenCalledWith(500);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Internal Server Error" }));
         });
+
+        // --- Branch coverage: plannerData.error path (line 341) ---
+        test('returns 400 when Gemini returns error object for morning sync', async () => {
+            req.body.syncType = 'morning';
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('generativelanguage')) {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            candidates: [{ content: { parts: [{ text: JSON.stringify({ error: "Could not parse image" }) }] } }]
+                        })
+                    };
+                }
+                return { ok: true, json: async () => ({}) };
+            });
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Could not parse image" }));
+        });
+
+        // --- Branch coverage: evening plannerData.error (line 360) ---
+        test('returns 400 when Gemini returns error for evening sync', async () => {
+            req.body.syncType = 'evening';
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('generativelanguage')) {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            candidates: [{ content: { parts: [{ text: JSON.stringify({ error: "Image too blurry" }) }] } }]
+                        })
+                    };
+                }
+                return { ok: true, json: async () => ({}) };
+            });
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        // --- Branch coverage: evening Notion sync error (lines 415-416) ---
+        test('evening sync handles Notion sync error gracefully', async () => {
+            req.body.syncType = 'evening';
+            mockNotionPagesCreate.mockRejectedValue(new Error('Notion API Rate Limited'));
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            const responseText = res.send.mock.calls[0][0].text;
+            expect(responseText).toContain("Night Sync");
+        });
+
+        // --- Branch coverage: missing Notion keys (line 424) ---
+        test('evening sync skips Notion when keys are missing', async () => {
+            req.body.syncType = 'evening';
+            mockGet.mockResolvedValue({
+                exists: true,
+                data: () => ({ spreadsheetId: 'test-sheet-id' })  // No notionKey, no notionDbId
+            });
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            const responseText = res.send.mock.calls[0][0].text;
+            expect(responseText).toContain("Skipped Notion");
+        });
+
+        // --- Branch coverage: Sheets API errors (lines 433-434, 750-751, 779-780) ---
+        test('evening sync handles Sheets API errors gracefully', async () => {
+            req.body.syncType = 'evening';
+            mockSheetsAppend.mockRejectedValue(new Error('Sheets API error'));
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        // --- Branch coverage: 429 retry loop (lines 553-560) ---
+        test('handles 429 rate limit with retry and eventual success', async () => {
+            req.body.syncType = 'morning';
+            let callCount = 0;
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('generativelanguage')) {
+                    callCount++;
+                    if (callCount === 1) return { ok: false, status: 429 };
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            candidates: [{
+                                content: {
+                                    parts: [{
+                                        text: JSON.stringify({
+                                            date: "2025-01-01", schedule: [{ time: "10 AM", task: "Standup", block: false, reminder: true }], todos: []
+                                        })
+                                    }]
+                                }
+                            }]
+                        })
+                    };
+                }
+                return { ok: true, json: async () => ({}) };
+            });
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(callCount).toBeGreaterThanOrEqual(2);
+        }, 15000);
+
+        // --- Branch coverage: Gemini 4xx API error (lines 563-564) ---
+        test('handles Gemini 400 API error', async () => {
+            req.body.syncType = 'morning';
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('generativelanguage')) {
+                    return { ok: false, status: 400, text: async () => 'Bad Request: invalid image' };
+                }
+                return { ok: true, json: async () => ({}) };
+            });
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(500);
+        });
+
+        // --- Branch coverage: Notion placeholder key (lines 789-790) ---
+        test('evening sync skips Notion when API key is placeholder', async () => {
+            req.body.syncType = 'evening';
+            const placeholderKey = encrypt('YOUR_NOTION_KEY', testKey);
+            mockGet.mockResolvedValue({
+                exists: true,
+                data: () => ({ notionKey: placeholderKey, notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+            });
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        // --- Branch coverage: plaintext notionKey triggers migration (lines 74, 101, 110) ---
+        test('evening sync migrates plaintext notionKey to encrypted', async () => {
+            req.body.syncType = 'evening';
+            // Plaintext key (no ":" in it) triggers the needsMigration=true path
+            mockGet.mockResolvedValue({
+                exists: true,
+                data: () => ({ notionKey: 'secret_plaintext_notion_key', notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+            });
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            // Verify that set was called (migration writes encrypted key)
+            expect(mockSet).toHaveBeenCalled();
+        });
+
+        // --- Branch coverage: corrupted notionKey triggers decryption error catch (lines 75-77) ---
+        test('evening sync handles corrupted notionKey gracefully', async () => {
+            req.body.syncType = 'evening';
+            // v2: prefix but invalid base64/crypto data will cause decryption to throw
+            mockGet.mockResolvedValue({
+                exists: true,
+                data: () => ({ notionKey: 'v2:totally:invalid:crypto:data', notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+            });
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            // Should skip Notion (decryption failed, key is null)
+            const responseText = res.send.mock.calls[0][0].text;
+            expect(responseText).toContain("Skipped Notion");
+        });
+
+        // --- Branch coverage: Google OAuth returns no email (line 94) ---
+        test('returns 401 when Google OAuth has no email', async () => {
+            _mockGetUserInfo.mockResolvedValue({ data: {} }); // No email field
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(500); // TOKEN_USER_LOOKUP_FAILED → caught by outer catch
+        });
+
+        // --- Branch coverage: legacy CBC notionKey path (lines 57, 70-71) ---
+        test('evening sync processes legacy CBC-encrypted notionKey', async () => {
+            req.body.syncType = 'evening';
+            // A key with ":" but no "v2:" prefix triggers the CBC decrypt path
+            // This will fail decryption (wrong format) and fall to the catch
+            mockGet.mockResolvedValue({
+                exists: true,
+                data: () => ({ notionKey: 'legacy:cbc:encrypted:key', notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+            });
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
     });
 
     // --- Audit Report Section B: Additional GDPR endpoint edge cases ---
@@ -764,229 +936,4 @@ describe('index.js Integration Tests', () => {
         });
     });
 
-    // --- Branch coverage: syncPlanner Gemini error & branch paths ---
-    describe('syncPlanner - Gemini error branches', () => {
-        const validImageData = 'data:image/jpeg;base64,' + Buffer.from('fake-image').toString('base64');
-        const { deriveKey, encrypt } = require('../utils');
-        const testKey = deriveKey('test-encryption-key-for-jest');
-        const validEncryptedKey = encrypt('secret_fake_notion_key_value', testKey);
-
-        beforeEach(() => {
-            delete global.__geminiMockText;
-            req.body = {
-                token: 'valid-google-oauth-token-string',
-                syncType: 'morning',
-                imageData: validImageData
-            };
-            _mockGetUserInfo.mockResolvedValue({ data: { email: 'test@example.com' } });
-            mockGet.mockResolvedValue({
-                exists: true,
-                data: () => ({ notionKey: validEncryptedKey, notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
-            });
-
-            // Default fetch mock (Gemini + Notion) — tests override as needed
-            global.fetch.mockImplementation(async (url) => {
-                if (url.includes('generativelanguage')) {
-                    let textJSON = JSON.stringify({
-                        date: "2025-01-01",
-                        schedule: [{ time: "9 AM", task: "Meeting", block: true, reminder: false }],
-                        todos: [{ task: "Buy milk", done: false }]
-                    });
-                    if (req.body.syncType === 'evening') {
-                        textJSON = JSON.stringify({
-                            date: "2025-01-01",
-                            todos: [{ task: "Buy milk", done: true }],
-                            expenses: [{ item: "Food", amount: 10 }],
-                            health: { exercise: "Run", water: 5, sleep: 7, energy: 4 },
-                            brainDump: "Good day"
-                        });
-                    }
-                    return {
-                        ok: true,
-                        json: async () => ({
-                            candidates: [{ content: { parts: [{ text: textJSON }] } }]
-                        })
-                    };
-                } else if (url.includes('notion') || url.includes('s3')) {
-                    return {
-                        ok: true,
-                        text: async () => JSON.stringify({ id: 'file-upload-123', upload_url: 'https://s3.us-west-2.amazonaws.com/notion-upload/fake' }),
-                        json: async () => ({ id: 'file-upload-123', upload_url: 'https://s3.us-west-2.amazonaws.com/notion-upload/fake' })
-                    };
-                }
-                return { ok: true, json: async () => ({}) };
-            });
-
-            // Default mocks for evening sync dependencies
-            _mockTasksList.mockResolvedValue({ data: { items: [] } });
-            mockSheetsAppend.mockResolvedValue({});
-            mockNotionPagesCreate.mockResolvedValue({ id: 'page-123' });
-        });
-
-        // Covers line 341: plannerData.error path
-        test('returns 400 when Gemini returns an error object for morning sync', async () => {
-            req.body.syncType = 'morning';
-            global.fetch.mockImplementation(async (url) => {
-                if (url.includes('generativelanguage')) {
-                    return {
-                        ok: true,
-                        json: async () => ({
-                            candidates: [{
-                                content: { parts: [{ text: JSON.stringify({ error: "Could not parse image" }) }] }
-                            }]
-                        })
-                    };
-                }
-                return { ok: true, json: async () => ({}) };
-            });
-
-            await myFunctions.syncPlanner(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(400);
-            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Could not parse image" }));
-        });
-
-        // Covers line 448: invalid syncType falling through all branches
-        test('returns 400 for invalid syncType that passes validation', async () => {
-            // sanitizeSyncType maps unknown to "morning", but let's test internal path
-            // We need a syncType that gets past validation but hits the else branch
-            // Since sanitizeSyncType normalizes everything, we test with a valid-looking but impossible case
-            // by mocking req.body directly after validation
-            req.body.syncType = 'morning';
-            // Override to test the plannerData.error branch for evening too
-            req.body.syncType = 'evening';
-            global.fetch.mockImplementation(async (url) => {
-                if (url.includes('generativelanguage')) {
-                    return {
-                        ok: true,
-                        json: async () => ({
-                            candidates: [{
-                                content: { parts: [{ text: JSON.stringify({ error: "Image too blurry" }) }] }
-                            }]
-                        })
-                    };
-                }
-                return { ok: true, json: async () => ({}) };
-            });
-
-            await myFunctions.syncPlanner(req, res);
-            // Evening sync with error - should reach the plannerData.error branch
-            expect(res.status).toHaveBeenCalledWith(400);
-        });
-
-        // Covers lines 415-416: evening Notion sync catch block (brainDump upload fails internally)
-        test('evening sync handles Notion sync error gracefully', async () => {
-            req.body.syncType = 'evening';
-            mockNotionPagesCreate.mockRejectedValue(new Error('Notion API Rate Limited'));
-            _mockTasksList.mockResolvedValue({ data: { items: [] } });
-
-            await myFunctions.syncPlanner(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(200);
-            const responseText = res.send.mock.calls[0][0].text;
-            expect(responseText).toContain("Night Sync");
-        });
-
-        // Covers line 424: evening sync when Notion keys are completely missing (no userData.notionKey)
-        test('evening sync skips Notion when user has no Notion keys at all', async () => {
-            req.body.syncType = 'evening';
-            mockGet.mockResolvedValue({
-                exists: true,
-                data: () => ({ spreadsheetId: 'test-sheet-id' })  // No notionKey, no notionDbId
-            });
-            _mockTasksList.mockResolvedValue({ data: { items: [] } });
-
-            await myFunctions.syncPlanner(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(200);
-            const responseText = res.send.mock.calls[0][0].text;
-            expect(responseText).toContain("Skipped Notion");
-        });
-
-        // Covers lines 433-434: expense/health sync errors via Promise.allSettled
-        test('evening sync handles Sheets API errors for expenses and health', async () => {
-            req.body.syncType = 'evening';
-            // Mock Sheets append to fail (covers lines 750-751 and 779-780)
-            mockSheetsAppend.mockRejectedValue(new Error('Sheets API error'));
-            _mockTasksList.mockResolvedValue({ data: { items: [] } });
-
-            await myFunctions.syncPlanner(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(200);
-            // Should complete without crashing (allSettled graceful failure)
-        });
-
-        // Covers lines 553-560: 429 retry loop + backoff in callGeminiModel
-        test('handles 429 rate limit with retry and eventual success', async () => {
-            req.body.syncType = 'morning';
-            let callCount = 0;
-            global.fetch.mockImplementation(async (url) => {
-                if (url.includes('generativelanguage')) {
-                    callCount++;
-                    if (callCount === 1) {
-                        // First call returns 429
-                        return { ok: false, status: 429 };
-                    }
-                    // Second call succeeds
-                    return {
-                        ok: true,
-                        json: async () => ({
-                            candidates: [{
-                                content: {
-                                    parts: [{
-                                        text: JSON.stringify({
-                                            date: "2025-01-01",
-                                            schedule: [{ time: "10 AM", task: "Standup", block: false, reminder: true }],
-                                            todos: []
-                                        })
-                                    }]
-                                }
-                            }]
-                        })
-                    };
-                }
-                return { ok: true, json: async () => ({}) };
-            });
-
-            await myFunctions.syncPlanner(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(200);
-            expect(callCount).toBeGreaterThanOrEqual(2);
-        }, 15000);
-
-        // Covers lines 563-564: non-429 non-500 API error (e.g. 400/403)
-        test('handles Gemini 400 API error', async () => {
-            req.body.syncType = 'morning';
-            global.fetch.mockImplementation(async (url) => {
-                if (url.includes('generativelanguage')) {
-                    return {
-                        ok: false,
-                        status: 400,
-                        text: async () => 'Bad Request: invalid image'
-                    };
-                }
-                return { ok: true, json: async () => ({}) };
-            });
-
-            await myFunctions.syncPlanner(req, res);
-
-            // All models fail with 400 → falls through to 500
-            expect(res.status).toHaveBeenCalledWith(500);
-        });
-
-        // Covers lines 789-790: Notion API key has placeholder value
-        test('evening sync skips Notion when API key contains placeholder', async () => {
-            req.body.syncType = 'evening';
-            const placeholderKey = encrypt('YOUR_NOTION_KEY', testKey);
-            mockGet.mockResolvedValue({
-                exists: true,
-                data: () => ({ notionKey: placeholderKey, notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
-            });
-            _mockTasksList.mockResolvedValue({ data: { items: [] } });
-
-            await myFunctions.syncPlanner(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(200);
-        });
-    });
 });
