@@ -19,7 +19,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-if (window.location.hostname === "localhost") {
+if (window.location.hostname === "localhost" && window.location.search.includes("emulator=true")) {
     connectAuthEmulator(auth, "http://127.0.0.1:9099");
 }
 

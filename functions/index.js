@@ -15,6 +15,7 @@ admin.initializeApp({
 const { defineString, defineSecret } = require('firebase-functions/params');
 const GEMINI_API_KEY = defineString('GEMINI_API_KEY');
 const NOTION_ENCRYPTION_KEY = defineSecret('NOTION_ENCRYPTION_KEY');
+const NOTION_ENCRYPTION_KEY_V2 = defineSecret('NOTION_ENCRYPTION_KEY_V2');
 
 // --- UTILITIES (shared with tests) ---
 const crypto = require('crypto');
@@ -37,40 +38,55 @@ const {
     handleOptions,
     validateTokenFormat,
     parseDateTime,
+    RATE_LIMIT_SYNC,
+    RATE_LIMIT_DEFAULT,
+    RATE_LIMIT_WINDOW_MS,
 } = require('./utils');
 const ALGORITHM = 'aes-256-gcm';
 const LEGACY_ALGORITHM = 'aes-256-cbc';
 
-// Helper: Get a valid 32-byte key from the secret
-function getCryptoKey() {
-    const rawKey = NOTION_ENCRYPTION_KEY.value();
-    return deriveKey(rawKey);
+// Helper: Get derived keys for rotation
+// New key (V2) is preferred; falls back to V1 if V2 is not set
+function getCryptoKeyNew() {
+    const v2 = NOTION_ENCRYPTION_KEY_V2.value();
+    if (v2) return deriveKey(v2);
+    return deriveKey(NOTION_ENCRYPTION_KEY.value());
 }
 
-// Wrappers that inject the secret key
+function getCryptoKeyOld() {
+    return deriveKey(NOTION_ENCRYPTION_KEY.value());
+}
+
+// Wrappers that inject the secret key — always encrypt with newest key
 function encrypt(text) {
     if (!text) return text;
-    return _encryptWithKey(text, getCryptoKey());
+    return _encryptWithKey(text, getCryptoKeyNew());
 }
 
-function decryptLegacyCbc(payload) {
-    return _decryptCbcWithKey(payload, getCryptoKey());
-}
-
-function decryptCurrentGcm(payload) {
-    return _decryptGcmWithKey(payload, getCryptoKey());
-}
-
+// Decrypt: try new key first, then old key (for rotation compatibility)
 function decryptStoredNotionKey(text) {
     if (!text) return text;
+
+    // 1. Try new key (V2 or current)
     try {
         if (text.startsWith('v2:')) {
-            return { value: decryptCurrentGcm(text), needsMigration: false };
+            const val = _decryptGcmWithKey(text, getCryptoKeyNew());
+            if (val) return { value: val, needsMigration: false };
+        }
+    } catch (e) { /* fall through to old key */ }
+
+    // 2. Try old key (V1) — if V2 exists, this means key rotation happened
+    try {
+        const oldKey = getCryptoKeyOld();
+        if (text.startsWith('v2:')) {
+            const val = _decryptGcmWithKey(text, oldKey);
+            return { value: val, needsMigration: !!val };
         }
         if (text.includes(':')) {
-            return { value: decryptLegacyCbc(text), needsMigration: true };
+            const val = _decryptCbcWithKey(text, oldKey);
+            return { value: val, needsMigration: !!val };
         }
-        // Plaintext leftover from older storage style.
+        // Plaintext leftover
         return { value: text, needsMigration: true };
     } catch (e) {
         console.error("Decryption failed for stored Notion key.");
@@ -113,8 +129,36 @@ async function getDecryptedNotionKeyAndMigrate(userRef, userData) {
     return value;
 }
 
+// --- RATE LIMITING (Firestore-backed) ---
+async function checkRateLimit(email, endpoint, limit) {
+    const db = admin.firestore();
+    const docId = `${email}_${endpoint}`;
+    const ref = db.collection('rateLimits').doc(docId);
+    const now = Date.now();
+
+    const doc = await ref.get();
+    if (doc.exists) {
+        const data = doc.data();
+        const windowStart = data.windowStart || 0;
+        const count = data.count || 0;
+
+        if (now - windowStart < RATE_LIMIT_WINDOW_MS) {
+            if (count >= limit) {
+                const retryAfterMs = RATE_LIMIT_WINDOW_MS - (now - windowStart);
+                return { allowed: false, retryAfterMs };
+            }
+            await ref.set({ count: count + 1, windowStart }, { merge: true });
+            return { allowed: true };
+        }
+    }
+
+    // New window
+    await ref.set({ count: 1, windowStart: now });
+    return { allowed: true };
+}
+
 // --- SETUP ENDPOINT: setupNotion ---
-exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTION_ENCRYPTION_KEY] }, async (req, res) => {
+exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2] }, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
@@ -137,6 +181,12 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
 
     try {
         const userEmail = await resolveUserEmailFromGoogleToken(token);
+
+        const rl = await checkRateLimit(userEmail, 'setupNotion', RATE_LIMIT_DEFAULT);
+        if (!rl.allowed) {
+            res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
+            return res.status(429).send({ error: "Too many requests. Please try again later." });
+        }
 
         const encryptedKey = encrypt(notionKey);
         const db = admin.firestore();
@@ -172,6 +222,12 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
         const decodedToken = await admin.auth().verifyIdToken(token);
         const userEmail = decodedToken.email?.toLowerCase();
         if (!userEmail) return res.status(401).send({ error: "No email in token" });
+
+        const rl = await checkRateLimit(userEmail, 'exportUserData', RATE_LIMIT_DEFAULT);
+        if (!rl.allowed) {
+            res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
+            return res.status(429).send({ error: "Too many requests. Please try again later." });
+        }
         const db = admin.firestore();
         const userRef = db.collection('users').doc(userEmail);
         const snap = await userRef.get();
@@ -221,6 +277,13 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
         const decodedToken = await admin.auth().verifyIdToken(token);
         const userEmail = decodedToken.email?.toLowerCase();
         if (!userEmail) return res.status(401).send({ error: "No email in token" });
+
+        const rl = await checkRateLimit(userEmail, 'deleteUserAccount', RATE_LIMIT_DEFAULT);
+        if (!rl.allowed) {
+            res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
+            return res.status(429).send({ error: "Too many requests. Please try again later." });
+        }
+
         const db = admin.firestore();
         const userRef = db.collection('users').doc(userEmail);
         await userRef.delete();
@@ -234,7 +297,7 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
 });
 
 // --- MAIN FUNCTION: syncPlanner ---
-exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 300, secrets: [NOTION_ENCRYPTION_KEY] }, async (req, res) => {
+exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 300, secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2] }, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
@@ -247,6 +310,13 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
     }
 
     const body = req.body || {};
+
+    // Body size guard: reject payloads over 30MB to prevent OOM
+    const MAX_BODY_SIZE = 30_000_000;
+    if (JSON.stringify(body).length > MAX_BODY_SIZE) {
+        return res.status(413).send({ error: "Payload too large" });
+    }
+
     const token = body.token;
     const mode = sanitizeSyncType(body.syncType);
     const parsedImage = parseImageDataUrl(body.imageData);
@@ -260,6 +330,12 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
     try {
         const userEmail = await resolveUserEmailFromGoogleToken(token);
         console.log(`User: ${userEmail}, Sync: ${mode}`);
+
+        const rl = await checkRateLimit(userEmail, 'syncPlanner', RATE_LIMIT_SYNC);
+        if (!rl.allowed) {
+            res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
+            return res.status(429).send({ error: "Too many requests. Please try again later." });
+        }
 
         const { google } = require("googleapis"); // Lazy Load
         const auth = new google.auth.OAuth2();

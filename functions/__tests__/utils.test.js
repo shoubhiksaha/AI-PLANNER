@@ -197,10 +197,19 @@ describe('parseImageDataUrl', () => {
         expect(parseImageDataUrl('')).toBeNull();
     });
 
-    test('returns null for oversized data', () => {
-        // Create a string longer than MAX_BASE64_LENGTH
-        const huge = 'data:image/jpeg;base64,' + 'A'.repeat(MAX_IMAGE_BYTES * 2);
-        expect(parseImageDataUrl(huge)).toBeNull();
+    test('parseImageDataUrl returns null if base64 length is > MAX_BASE64_LENGTH', () => {
+        const tooLong = 'a'.repeat(MAX_BASE64_LENGTH + 1);
+        expect(parseImageDataUrl(tooLong)).toBe(null);
+    });
+
+    test('parseImageDataUrl returns null if decoded size is > MAX_IMAGE_BYTES', () => {
+        // Construct a string that is under MAX_BASE64_LENGTH but whose decoded size is > 20MB
+        // 20MB = 20971520 bytes. Required base64 length without padding = ~27962027 chars.
+        // If we make it 28,000,000 base64 chars of valid characters, decoded is 21,000,000 bytes (over 20MB limit)
+        // But MAX_BASE64_LENGTH is 28,730,983, so it passes the pre-filter, but fails the decoded byte check.
+        const validPrefix = 'data:image/jpeg;base64,';
+        const largeBase64 = 'A'.repeat(28_000_000);
+        expect(parseImageDataUrl(validPrefix + largeBase64)).toBe(null);
     });
 });
 

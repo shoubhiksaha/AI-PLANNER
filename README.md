@@ -84,14 +84,18 @@ graph TD
 - **Model Cascade**: Gemini 2.5 Flash-Lite → 2.5 Flash → 2.0 Flash-Lite.
 - **Notion Upload**: Custom Direct File Upload Protocol.
 
-### V4: Security Hardening & CSP (Current)
-- **Encryption**: AES-256-CBC for Notion integration keys with Secret Manager.
+### V4: CSP & Restructuring
 - **CSP**: Full Content Security Policy — all inline JS/CSS extracted to external files.
 - **Auth Hardening**: Mobile redirect-first + popup-blocker fallback.
 - **Code Separation**: Monolithic HTML split into `app.js`, `styles.css`, `tailwind.css`.
 - **Firestore Lockdown**: Client read-only; all writes via Admin SDK.
 
-### V5: Future Roadmap
+### V5: Security Hardening (Current)
+- **Rate Limiting**: Firestore-backed 10 req/min for Sync, 20 req/min for auth endpoints.
+- **Payload Validation**: Strict 30MB JSON limit + base64 decoded byte size checks to prevent OOM.
+- **Key Rotation**: Dual-key AES-256-GCM encryption strategy for Notion Keys with zero-downtime migration.
+
+### V6: Future Roadmap
 - **BYOK**: Bring Your Own Key support.
 - **Multi-Provider**: Support for OpenAI, Anthropic, DeepSeek.
 - **CSP Reporting**: Add violation monitoring endpoint.
@@ -175,8 +179,8 @@ Config:
     ```
 4. **Run Tests**:
     ```bash
-    npm test                 # All 192 tests (backend + frontend)
-    npm run test:backend     # 151 backend tests with coverage
+    npm test                 # All 198 tests (backend + frontend)
+    npm run test:backend     # 157 backend tests with coverage
     npm run test:frontend    # 41 frontend tests (jsdom)
     ```
 5. **Run Firestore Rules Tests** (requires Java 21+):

@@ -9,9 +9,19 @@ const mockDoc = jest.fn(() => ({
     get: mockGet,
     delete: mockDelete
 }));
-const mockCollection = jest.fn(() => ({
-    doc: mockDoc
+
+// Rate limit collection always returns { exists: false } (first request = allowed)
+const mockRateLimitSet = jest.fn();
+const mockRateLimitGet = jest.fn().mockResolvedValue({ exists: false });
+const mockRateLimitDoc = jest.fn(() => ({
+    set: mockRateLimitSet,
+    get: mockRateLimitGet,
 }));
+
+const mockCollection = jest.fn((name) => {
+    if (name === 'rateLimits') return { doc: mockRateLimitDoc };
+    return { doc: mockDoc };
+});
 
 const mockVerifyIdToken = jest.fn();
 
@@ -95,6 +105,8 @@ describe('index.js Integration Tests', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        // Reset rate limit mock — always allow (first request in window)
+        mockRateLimitGet.mockResolvedValue({ exists: false });
         req = {
             method: 'POST',
             headers: {
@@ -167,6 +179,15 @@ describe('index.js Integration Tests', () => {
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Failed to securely save keys." }));
             expect(mockSet).not.toHaveBeenCalled();
         });
+
+        test('returns 429 when rate limit exceeded', async () => {
+            req.body = { token: 'valid-google-oauth-token-string', notionKey: 'secret_1234567890abcdef1234567890abcdef', notionDbId: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6' };
+            _mockGetUserInfo.mockResolvedValue({ data: { email: 'test@example.com' } });
+            mockRateLimitGet.mockResolvedValue({ exists: true, data: () => ({ count: 100, windowStart: Date.now() }) });
+            await myFunctions.setupNotion(req, res);
+            expect(res.status).toHaveBeenCalledWith(429);
+            expect(res.set).toHaveBeenCalledWith('Retry-After', expect.any(String));
+        });
     });
 
     describe('exportUserData', () => {
@@ -218,6 +239,13 @@ describe('index.js Integration Tests', () => {
             expect(responseData.data).toStrictEqual({});
             expect(responseData.accountExists).toBe(false);
         });
+
+        test('returns 429 when rate limit exceeded', async () => {
+            req.body.token = 'valid-token';
+            mockRateLimitGet.mockResolvedValue({ exists: true, data: () => ({ count: 100, windowStart: Date.now() }) });
+            await myFunctions.exportUserData(req, res);
+            expect(res.status).toHaveBeenCalledWith(429);
+        });
     });
 
     describe('deleteUserAccount', () => {
@@ -237,6 +265,13 @@ describe('index.js Integration Tests', () => {
             expect(mockDelete).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.send).toHaveBeenCalledWith({ success: true, text: "Your account data has been permanently deleted." });
+        });
+
+        test('returns 429 when rate limit exceeded', async () => {
+            req.body.token = 'valid-token';
+            mockRateLimitGet.mockResolvedValue({ exists: true, data: () => ({ count: 100, windowStart: Date.now() }) });
+            await myFunctions.deleteUserAccount(req, res);
+            expect(res.status).toHaveBeenCalledWith(429);
         });
     });
 
@@ -311,6 +346,20 @@ describe('index.js Integration Tests', () => {
                 }
                 return { ok: true, json: async () => ({}) };
             });
+        });
+
+        test('returns 413 Payload Too Large when body size exceeds 30MB', async () => {
+            req.body = { data: "A".repeat(31_000_000) };
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(413);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Payload too large" }));
+        });
+
+        test('returns 429 when rate limit exceeded', async () => {
+            mockRateLimitGet.mockResolvedValue({ exists: true, data: () => ({ count: 100, windowStart: Date.now() }) });
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(429);
+            expect(res.set).toHaveBeenCalledWith('Retry-After', expect.any(String));
         });
 
         test('rejects request with invalid token', async () => {

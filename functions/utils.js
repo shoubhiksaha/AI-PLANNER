@@ -17,6 +17,9 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 const ALGORITHM = 'aes-256-gcm';
 const LEGACY_ALGORITHM = 'aes-256-cbc';
+const RATE_LIMIT_SYNC = 10;       // syncPlanner: 10 requests per window
+const RATE_LIMIT_DEFAULT = 20;    // other endpoints: 20 requests per window
+const RATE_LIMIT_WINDOW_MS = 60000; // 60-second sliding window
 
 // --- CRYPTO ---
 function deriveKey(rawKey) {
@@ -87,9 +90,15 @@ function parseImageDataUrl(imageData) {
     const match = imageData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
     if (!match) return null;
 
+    // Defense-in-depth: verify decoded byte size doesn't exceed limit
+    const base64Str = match[2];
+    const padding = (base64Str.endsWith('==') ? 2 : base64Str.endsWith('=') ? 1 : 0);
+    const decodedBytes = Math.floor((base64Str.length * 3) / 4) - padding;
+    if (decodedBytes > MAX_IMAGE_BYTES) return null;
+
     return {
         mimeType: match[1].toLowerCase(),
-        base64Data: match[2]
+        base64Data: base64Str
     };
 }
 
@@ -179,6 +188,9 @@ module.exports = {
     ALLOWED_ORIGINS,
     ALGORITHM,
     LEGACY_ALGORITHM,
+    RATE_LIMIT_SYNC,
+    RATE_LIMIT_DEFAULT,
+    RATE_LIMIT_WINDOW_MS,
     // Crypto
     deriveKey,
     encrypt,
