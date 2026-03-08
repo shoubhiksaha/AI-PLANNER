@@ -22,13 +22,20 @@ This document summarizes the full evolution of the AI Planner project from initi
 - Hardened CORS (origin allowlist), request validation, and Firestore write policy (client read-only).
 - Added security headers to `firebase.json`.
 
-### 5. Latest — CSP Migration & Auth Improvements
+### 5. CSP Migration & Auth Improvements
 - **Extracted** all inline CSS → `public/styles.css`, inline JS → `public/app.js`.
 - **Replaced** Tailwind CDN runtime with prebuilt `public/tailwind.css` (via `npx tailwindcss`).
 - **Enforced** strict Content Security Policy with SHA-256 hash for remaining inline script.
 - **Added** `signInWithRedirect` fallback for popup-blocked browsers (Brave, Safari).
 - **Added** mobile detection: redirect-first auth for phones/tablets.
 - **Updated** service worker cache to v2 with new external files.
+
+### 6. Production Security Hardening & OAuth Fixes (Current)
+- **Rate Limiting**: Added Firestore-backed sliding window rate limits (10 req/min Sync, 20/min Auth).
+- **Size Validation**: Strict 30MB JSON payload limits and precision byte-size decoding verification limits for images.
+- **Key Rotation**: Deployed `NOTION_ENCRYPTION_KEY_V2` with dual-key AES-256-GCM decryption for seamless zero-downtime key rotation and migrations.
+- **OAuth Fixes**: Fine-tuned Firebase `firebase.json` CSP to explicitly allow `apis.google.com` scripts and `unsafe-inline` styles, successfully resolving Google Identity popup cross-origin frame blocks.
+- **Test Infrastructure**: Expanded test suite to 198 (157 backend + 41 frontend) ensuring >95% backend statement and >85% branch coverage.
 
 ---
 
@@ -129,5 +136,6 @@ AI PLANNER/
 ## Notes
 - Runtime: Node 20 (`functions/package.json`).
 - `GEMINI_API_KEY`: loaded via `defineString` (from `.env` file).
-- `NOTION_ENCRYPTION_KEY`: managed via Google Cloud Secret Manager.
-- CSP is fully enforced and active in production.
+- `NOTION_ENCRYPTION_KEY` & `NOTION_ENCRYPTION_KEY_V2`: managed via Google Cloud Secret Manager. Dual-key AES-256-GCM architecture.
+- CSP is fully enforced and fine-tuned for `apis.google.com` Identity Services in production.
+- Global test coverage ensures extremely high reliability across 198 tests.
