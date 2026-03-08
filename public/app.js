@@ -8,10 +8,7 @@ import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11
 // FIREBASE CONFIG
 const firebaseConfig = {
     apiKey: "AIzaSyBRVEfF58gL3yxQ2UY-_lMgftPnFrZ0_T0",
-    // Use the current domain if it's a Firebase hosted domain to prevent auth domain mismatch
-    authDomain: window.location.hostname === "ai-planner-project-467800.web.app"
-        ? "ai-planner-project-467800.web.app"
-        : "ai-planner-project-467800.firebaseapp.com",
+    authDomain: "ai-planner-project-467800.firebaseapp.com",
     projectId: "ai-planner-project-467800",
     storageBucket: "ai-planner-project-467800.firebasestorage.app",
     messagingSenderId: "195957114195",
