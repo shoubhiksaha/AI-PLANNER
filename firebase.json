@@ -58,6 +58,10 @@
     ],
     "rewrites": [
       {
+        "source": "/logClientError",
+        "function": "logClientError"
+      },
+      {
         "source": "/syncPlanner",
         "function": "syncPlanner"
       },

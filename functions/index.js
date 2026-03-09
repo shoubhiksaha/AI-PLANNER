@@ -1004,35 +1004,6 @@ exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req
     return res.status(200).send({ success: true });
 });
 
-// --- GCP Error Reporting: Frontend Ingestion Endpoint ---
-exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req, res) => {
-    setStandardHeaders(res);
-    if (handleOptions(req, res)) return;
-    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
-
-    if (req.method !== 'POST') {
-        return res.status(405).send({ error: "Method not allowed" });
-    }
-    if (!isJsonRequest(req)) {
-        return res.status(415).send({ error: "Content-Type must be application/json" });
-    }
-
-    const { message, stack, url, line, column, userEmail } = req.body || {};
-
-    // Construct a rich error string for GCP
-    const errorBody = [
-        `Frontend Error: ${message || 'Unknown Error'}`,
-        `User: ${userEmail || 'Anonymous'}`,
-        `URL: ${url || 'Unknown URL'}${(line && column) ? `:${line}:${column}` : ''}`,
-        `\nStack Trace:\n${stack || 'No stack trace provided'}`
-    ].join('\n');
-
-    // Passing an Error object triggers native GCP Error Reporting aggregation
-    logger.error("Client caught unhandled exception", new Error(errorBody));
-
-    return res.status(200).send({ success: true });
-});
-
 
 // Improved parseDateTime with validation
 

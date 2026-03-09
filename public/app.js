@@ -50,7 +50,8 @@ const logToGCP = (errorEvent) => {
             userEmail: currentUser?.email
         };
 
-        const targetUrl = getApiUrls('logClientError', window.location.hostname)[0];
+        const { PRIMARY_API_URL } = getApiUrls(window.location.hostname, 'logClientError');
+        const targetUrl = PRIMARY_API_URL;
         // Fire and forget via fetch to avoid blocking the main thread
         fetch(targetUrl, {
             method: 'POST',
