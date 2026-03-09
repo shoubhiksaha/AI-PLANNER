@@ -102,6 +102,19 @@ function parseImageDataUrl(imageData) {
     };
 }
 
+function parseImageDataArray(imagesArray) {
+    if (!Array.isArray(imagesArray)) return null;
+    if (imagesArray.length === 0 || imagesArray.length > 5) return null;
+
+    const parsedImages = [];
+    for (const imgStr of imagesArray) {
+        const parsed = parseImageDataUrl(imgStr);
+        if (!parsed) return null; // If any single image is invalid/too large, reject all
+        parsedImages.push(parsed);
+    }
+    return parsedImages;
+}
+
 function normalizeNotionDbId(rawDbId) {
     if (typeof rawDbId !== 'string') return null;
     const cleaned = rawDbId.replace(/-/g, '').trim();
@@ -200,6 +213,7 @@ module.exports = {
     // Validation
     sanitizeSyncType,
     parseImageDataUrl,
+    parseImageDataArray,
     normalizeNotionDbId,
     isLikelyNotionKey,
     isJsonRequest,

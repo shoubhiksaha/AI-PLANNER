@@ -1,4 +1,5 @@
 const { onRequest } = require("firebase-functions/v2/https");
+const { logger } = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 // Imports moved inside function for Cold Start optimization
 // const fetch = require("node-fetch"); // Removed: Using Native Node 20 fetch
@@ -26,6 +27,7 @@ const {
     decryptLegacyCbc: _decryptCbcWithKey,
     sanitizeSyncType,
     parseImageDataUrl,
+    parseImageDataArray,
     normalizeNotionDbId,
     isLikelyNotionKey,
     isJsonRequest,
@@ -89,7 +91,7 @@ function decryptStoredNotionKey(text) {
         // Plaintext leftover
         return { value: text, needsMigration: true };
     } catch (e) {
-        console.error("Decryption failed for stored Notion key.");
+        logger.error("Decryption failed for stored Notion key.", e);
         return { value: null, needsMigration: false };
     }
 }
@@ -196,7 +198,7 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
         console.log(`Stored encrypted Notion settings for ${userEmail}`);
         return res.status(200).send({ success: true, text: "Notion setup saved securely." });
     } catch (err) {
-        console.error("Setup error:", err.message);
+        logger.error("Setup error:", err);
         return res.status(500).send({ error: "Failed to securely save keys." });
     }
 });
@@ -311,21 +313,22 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
     const body = req.body || {};
 
-    // Body size guard: reject payloads over 30MB to prevent OOM
-    const MAX_BODY_SIZE = 30_000_000;
+    // Body size guard: reject payloads over 100MB to prevent OOM
+    const MAX_BODY_SIZE = 100_000_000;
     if (JSON.stringify(body).length > MAX_BODY_SIZE) {
         return res.status(413).send({ error: "Payload too large" });
     }
 
     const token = body.token;
     const mode = sanitizeSyncType(body.syncType);
-    const parsedImage = parseImageDataUrl(body.imageData);
+
+    // Support backward compatibility for a single image, but standardize on array
+    const rawImages = body.images || (body.imageData ? [body.imageData] : []);
+    const parsedImages = parseImageDataArray(rawImages);
 
     if (!token) return res.status(401).send({ error: "Missing Google OAuth Token" });
     if (!ALLOWED_SYNC_TYPES.has(mode)) return res.status(400).send({ error: "Invalid syncType" });
-    if (!parsedImage) return res.status(400).send({ error: "Invalid image data format or size" });
-
-    const { mimeType, base64Data } = parsedImage;
+    if (!parsedImages || parsedImages.length === 0) return res.status(400).send({ error: "Invalid image data format, size, or too many images (max 5)." });
 
     try {
         const userEmail = await resolveUserEmailFromGoogleToken(token);
@@ -353,6 +356,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         const sheets = google.sheets({ version: 'v4', auth });
 
         // --- 1. HANDLE JOURNAL SYNC SEPARATELY ---
+        let msg = "";
         if (mode === 'journal') {
             if (!userData.notionKey || !userData.notionDbId) {
                 return res.status(400).send({ error: "Notion not setup. Please provide keys." });
@@ -364,14 +368,16 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             if (!decryptedNotionKey) return res.status(401).send({ error: "Invalid or corrupt Notion settings. Please re-setup Notion." });
             const notion = new Client({ auth: decryptedNotionKey });
 
-            // PARALLEL EXECUTION: Upload Limitless Image to Notion Directly (Zero Storage) & Extract Date
+            // PARALLEL EXECUTION: Upload Limitless Image(s) to Notion Directly (Zero Storage) & Extract Date
             console.log("Starting parallel Journal processing (Zero Storage)...");
 
-            const buffer = Buffer.from(base64Data, 'base64');
+            const journalUploadPromises = parsedImages.map(img =>
+                uploadFileToNotion(decryptedNotionKey, Buffer.from(img.base64Data, 'base64'), img.mimeType)
+            );
 
-            const [fileUploadId, extraction] = await Promise.all([
-                uploadFileToNotion(decryptedNotionKey, buffer, mimeType),
-                getPlannerDataFromImage({ mimeType, base64Data }, 'journal_date_only').catch(err => {
+            const [fileUploadIds, extraction] = await Promise.all([
+                Promise.all(journalUploadPromises),
+                getPlannerDataFromImages(parsedImages, 'journal_date_only').catch(err => {
                     console.warn("Date extraction failed:", err.message);
                     return { date: null };
                 })
@@ -383,37 +389,39 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 console.log(`Extracted Journal Date: ${journalDate}`);
             }
 
-            // Create Notion Page with File Attachment
+            // Create Notion Page with File Attachments
             const dbId = userData.notionDbId;
+            const childrenBlocks = fileUploadIds.map(id => ({
+                object: 'block',
+                type: 'image',
+                image: {
+                    type: 'file_upload',
+                    file_upload: { id: id }
+                }
+            }));
 
             await notion.pages.create({
                 parent: { database_id: dbId },
                 properties: {
                     "Name": { title: [{ text: { content: `Journal - ${journalDate}` } }] }
                 },
-                children: [
-                    {
-                        object: 'block',
-                        type: 'image',
-                        image: {
-                            type: 'file_upload',
-                            file_upload: { id: fileUploadId }
-                        }
-                    }
-                ]
+                children: childrenBlocks
             });
-            return res.status(200).send({ text: `Journal synced to Notion! Date: ${journalDate}` });
+            msg = `Journal synced to Notion! Date: ${journalDate}`;
+            await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
+            await incrementUsageCounters(userRef, parsedImages.length);
+            return res.status(200).send({ text: msg });
         }
 
         // --- BRANCH 2: MORNING/EVENING PLANNER ---
         let plannerData;
-        let msg = "";
 
         if (mode === 'morning') {
-            console.log(`Parsing planner image for morning sync...`);
-            plannerData = await getPlannerDataFromImage({ mimeType, base64Data }, 'morning');
+            console.log(`Parsing planner images for morning sync...`);
+            plannerData = await getPlannerDataFromImages(parsedImages, 'morning');
 
             if (plannerData.error) {
+                await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
                 return res.status(400).send({ error: plannerData.error });
             }
 
@@ -427,13 +435,19 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
             msg = `Morning Sync Complete! Created ${eventResults.events} events, ${eventResults.reminders} reminders, and ${taskCount} tasks.`;
             console.log(msg);
+
+            await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
+            await incrementUsageCounters(userRef, parsedImages.length);
             return res.status(200).send({ text: msg });
 
         } else if (mode === 'evening') {
-            // Re-scan image specifically looking for evening data (expenses, mood, etc).
-            console.log(`Parsing planner image for evening sync...`);
-            plannerData = await getPlannerDataFromImage({ mimeType, base64Data }, 'evening');
-            if (plannerData.error) return res.status(400).send({ error: plannerData.error });
+            // Re-scan images specifically looking for evening data (expenses, mood, etc).
+            console.log(`Parsing planner images for evening sync...`);
+            plannerData = await getPlannerDataFromImages(parsedImages, 'evening');
+            if (plannerData.error) {
+                await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
+                return res.status(400).send({ error: plannerData.error });
+            }
 
             let successMessages = [];
 
@@ -484,8 +498,14 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 if (decryptedNotionKey) {
                     const brainDumpPromise = async () => {
                         try {
-                            const buffer = Buffer.from(base64Data, 'base64');
-                            const fileId = await uploadFileToNotion(decryptedNotionKey, buffer, mimeType);
+                            if (!plannerData.brainDump) return false;
+                            console.log("Starting parallel Brain Dump to Notion (Zero Storage)...");
+                            let fileId = null;
+                            const firstImage = parsedImages[0];
+                            if (firstImage && firstImage.base64Data) {
+                                const buffer = Buffer.from(firstImage.base64Data, 'base64');
+                                fileId = await uploadFileToNotion(decryptedNotionKey, buffer, firstImage.mimeType);
+                            }
                             return syncBrainDumpToNotion(plannerData, decryptedNotionKey, userData.notionDbId, fileId);
                         } catch (err) {
                             console.error("Notion sync failed:", err.message);
@@ -520,7 +540,11 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
             if (successMessages.length === 0) msg = "Night Sync output: No items found to sync.";
             else msg = "Night Sync Complete: " + successMessages.join(" ");
+
+            await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
+            await incrementUsageCounters(userRef, parsedImages.length);
         } else {
+            await logSyncHistory(userRef, mode, parsedImages.length, 'error', `Invalid syncType: ${mode}`);
             return res.status(400).send({ error: `Invalid syncType: ${mode}` });
         }
 
@@ -531,11 +555,55 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         const errMsg = error?.message || String(error || "Unknown error");
         console.error("FATAL ERROR:", errMsg);
 
+        // Try to log the failure if we have user context
+        try {
+            const body = req.body || {};
+            const token = body.token;
+            if (token) {
+                const userEmail = await resolveUserEmailFromGoogleToken(token);
+                if (userEmail) {
+                    const db = admin.firestore();
+                    const userRef = db.collection('users').doc(userEmail);
+                    const mode = sanitizeSyncType(body.syncType);
+                    const images = body.images || (body.imageData ? [body.imageData] : []);
+                    await logSyncHistory(userRef, mode, images.length || 1, 'error', "Internal error occurred during sync.");
+                }
+            }
+        } catch (logErr) {
+            console.error("Failed to log error history:", logErr);
+        }
+
         // Security: Don't leak internals to client
         const safeMessage = errMsg.includes("RATE_LIMIT") ? "AI Service Busy. Please try again." : "Internal Server Error";
         res.status(500).send({ error: safeMessage });
     }
 });
+
+// --- FIRESTORE LOGGING ---
+async function logSyncHistory(userRef, syncType, imageCount, status, message) {
+    try {
+        await userRef.collection('syncHistory').add({
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            syncType,
+            imageCount,
+            status,
+            message
+        });
+    } catch (error) {
+        logger.error("Failed to log sync history:", error);
+    }
+}
+
+async function incrementUsageCounters(userRef, imageCount) {
+    try {
+        await userRef.set({
+            totalSyncs: admin.firestore.FieldValue.increment(1),
+            totalImagesProcessed: admin.firestore.FieldValue.increment(imageCount)
+        }, { merge: true });
+    } catch (error) {
+        logger.error("Failed to increment usage counters:", error);
+    }
+}
 
 // Helper to upload file to Notion (Direct Upload - Corrected 2-Step Flow)
 async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
@@ -580,7 +648,7 @@ async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
         console.log(`Notion File Uploaded Successfully: ${id}`);
         return id;
     } catch (e) {
-        console.error("Notion Direct Upload Error:", e.message);
+        logger.error("Notion Direct Upload Error:", e);
         throw e;
     }
 }
@@ -600,16 +668,15 @@ async function fetchWithTimeout(url, options, timeout = 60000) {
 }
 
 // Helper to call Gemini with a specific model
-async function callGeminiModel(model, apiKey, prompt, imageData, mimeType) {
+async function callGeminiModel(model, apiKey, prompt, imagesArr) {
     console.log(`Attempting Gemini model: ${model}...`);
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const parts = imagesArr.map(img => ({ inlineData: { mimeType: img.mimeType, data: img.base64Data } }));
+    parts.push({ text: prompt });
+
     const payload = {
-        contents: [{
-            parts: [
-                { text: prompt },
-                { inlineData: { mimeType, data: imageData } }
-            ]
-        }],
+        contents: [{ parts }],
         generationConfig: { responseMimeType: "application/json" }
     };
 
@@ -658,14 +725,12 @@ async function callGeminiModel(model, apiKey, prompt, imageData, mimeType) {
 }
 
 
-async function getPlannerDataFromImage(parsedImage, syncType) {
-    const mimeType = parsedImage?.mimeType;
-    const base64ImageData = parsedImage?.base64Data;
-    const geminiApiKey = GEMINI_API_KEY.value();
-
-    if (!mimeType || !base64ImageData) {
+async function getPlannerDataFromImages(parsedImages, syncType) {
+    if (!parsedImages || parsedImages.length === 0) {
         throw new Error("INVALID_IMAGE_PAYLOAD");
     }
+    const geminiApiKey = GEMINI_API_KEY.value();
+
     if (!geminiApiKey) {
         throw new Error("MISSING_GEMINI_API_KEY");
     }
@@ -689,7 +754,7 @@ async function getPlannerDataFromImage(parsedImage, syncType) {
 
     for (const model of models) {
         try {
-            return await callGeminiModel(model, geminiApiKey, prompt, base64ImageData, mimeType);
+            return await callGeminiModel(model, geminiApiKey, prompt, parsedImages);
         } catch (error) {
             lastError = error;
             // Continue to next model if available
@@ -823,7 +888,7 @@ async function syncExpensesToSheet(sheets, plannerData, spreadsheetId) {
         });
         return rows.length;
     } catch (err) {
-        console.error('Failed to sync expenses:', err.message);
+        logger.error('Failed to sync expenses:', err);
         return 0; // Don't crash the whole sync
     }
 }
@@ -852,7 +917,7 @@ async function syncHealthToSheet(sheets, plannerData, spreadsheetId) {
         });
         return 1;
     } catch (err) {
-        console.error('Failed to sync health:', err.message);
+        logger.error('Failed to sync health:', err);
         return 0;
     }
 }
@@ -905,10 +970,68 @@ async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, file
         });
         return true;
     } catch (err) {
-        console.error("Notion Sync Error:", err.message);
+        logger.error("Notion Sync Error:", err);
         return false;
     }
 }
+
+// --- GCP Error Reporting: Frontend Ingestion Endpoint ---
+exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    if (req.method !== 'POST') {
+        return res.status(405).send({ error: "Method not allowed" });
+    }
+    if (!isJsonRequest(req)) {
+        return res.status(415).send({ error: "Content-Type must be application/json" });
+    }
+
+    const { message, stack, url, line, column, userEmail } = req.body || {};
+
+    // Construct a rich error string for GCP
+    const errorBody = [
+        `Frontend Error: ${message || 'Unknown Error'}`,
+        `User: ${userEmail || 'Anonymous'}`,
+        `URL: ${url || 'Unknown URL'}${(line && column) ? `:${line}:${column}` : ''}`,
+        `\nStack Trace:\n${stack || 'No stack trace provided'}`
+    ].join('\n');
+
+    // Passing an Error object triggers native GCP Error Reporting aggregation
+    logger.error("Client caught unhandled exception", new Error(errorBody));
+
+    return res.status(200).send({ success: true });
+});
+
+// --- GCP Error Reporting: Frontend Ingestion Endpoint ---
+exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    if (req.method !== 'POST') {
+        return res.status(405).send({ error: "Method not allowed" });
+    }
+    if (!isJsonRequest(req)) {
+        return res.status(415).send({ error: "Content-Type must be application/json" });
+    }
+
+    const { message, stack, url, line, column, userEmail } = req.body || {};
+
+    // Construct a rich error string for GCP
+    const errorBody = [
+        `Frontend Error: ${message || 'Unknown Error'}`,
+        `User: ${userEmail || 'Anonymous'}`,
+        `URL: ${url || 'Unknown URL'}${(line && column) ? `:${line}:${column}` : ''}`,
+        `\nStack Trace:\n${stack || 'No stack trace provided'}`
+    ].join('\n');
+
+    // Passing an Error object triggers native GCP Error Reporting aggregation
+    logger.error("Client caught unhandled exception", new Error(errorBody));
+
+    return res.status(200).send({ success: true });
+});
 
 
 // Improved parseDateTime with validation

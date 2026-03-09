@@ -3,7 +3,6 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
-import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
 
 // FIREBASE CONFIG
 const firebaseConfig = {
@@ -17,7 +16,6 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
 
 if (window.location.hostname === "localhost" && window.location.search.includes("emulator=true")) {
     connectAuthEmulator(auth, "http://127.0.0.1:9099");
@@ -25,7 +23,7 @@ if (window.location.hostname === "localhost" && window.location.search.includes(
 
 // STATE
 let currentUser = null;
-let fileAsBase64 = null;
+let filesAsBase64 = []; // Array to store multiple images (max 5)
 // Keep OAuth token only in memory (not session/local storage)
 let googleAccessToken = null;
 
@@ -39,6 +37,32 @@ const {
     switchView: switchViewHelper,
     applyTheme: applyThemeHelper,
 } = helpers;
+
+// --- GLOBAL ERROR HANDLING (GCP Error Reporting) ---
+const logToGCP = (errorEvent) => {
+    try {
+        const errorData = {
+            message: errorEvent.message || errorEvent.reason?.message || "Unknown error",
+            stack: errorEvent.error?.stack || errorEvent.reason?.stack || "",
+            url: window.location.href,
+            line: errorEvent.lineno,
+            column: errorEvent.colno,
+            userEmail: currentUser?.email
+        };
+
+        const targetUrl = getApiUrls('logClientError', window.location.hostname)[0];
+        // Fire and forget via fetch to avoid blocking the main thread
+        fetch(targetUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(errorData),
+            keepalive: true // Ensure request finishes even if page closes
+        }).catch(() => { }); // Swallow errors during error logging
+    } catch (e) { /* failsafe */ }
+};
+
+window.addEventListener('error', logToGCP);
+window.addEventListener('unhandledrejection', logToGCP);
 
 // NAVIGATION
 const switchView = (viewId) => {
@@ -133,6 +157,9 @@ document.getElementById('logout-btn').addEventListener('click', () => {
 // --- 2. SETUP FLOW ---
 async function checkUserSetup(user) {
     try {
+        const { getFirestore, doc, getDoc } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+        const db = getFirestore(app);
+
         // Check Firestore for profile
         const userRef = doc(db, "users", user.email);
         const snap = await getDoc(userRef);
@@ -140,6 +167,8 @@ async function checkUserSetup(user) {
         if (snap.exists() && snap.data().notionKey) {
             // User has setup Notion -> Go to Dashboard
             switchView('view-dashboard');
+            // Fetch sync history in the background
+            loadSyncHistory(user.email);
         } else {
             // No setup -> Go to Setup Screen
             switchView('view-setup');
@@ -208,79 +237,144 @@ const updateDashButtons = (enabled) => {
 };
 updateDashButtons(false);
 
-// File Handler with Compression & HEIC Support
-const handleFile = async (file) => {
-    if (!file) return;
+const renderThumbnails = () => {
+    if (filesAsBase64.length > 0) {
+        dropZone.innerHTML = `
+            <div class="flex flex-wrap gap-2 justify-center p-2 items-center h-full w-full overflow-y-auto">
+                ${filesAsBase64.map((b64, idx) => `
+                    <div class="relative group h-24 w-auto shrink-0">
+                        <img src="${b64}" class="h-full w-auto object-cover border border-theme-border rounded shadow-sm">
+                        <button class="delete-btn absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow hover:bg-red-600 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 cursor-pointer z-10" data-idx="${idx}" title="Remove image">
+                            ✕
+                        </button>
+                    </div>
+                `).join('')}
+                ${filesAsBase64.length < 5 ? `
+                    <div class="h-24 w-20 shrink-0 border-2 border-dashed border-theme-border flex flex-col items-center justify-center text-theme-muted hover:text-theme-text hover:border-theme-text transition-colors rounded-lg bg-theme-bg/50">
+                        <span class="text-2xl font-light mb-1">+</span>
+                        <span class="text-[10px]">Add</span>
+                    </div>
+                ` : ''}
+            </div>
+            <div class="absolute bottom-2 right-2 bg-emerald-500/90 text-white text-xs px-2 py-1 rounded-full font-medium pointer-events-none shadow-sm">
+                ${filesAsBase64.length}/5 Page${filesAsBase64.length > 1 ? 's' : ''}
+            </div>
+        `;
 
-    // Handle HEIC/HEIF conversion
-    if (file.type === "image/heic" || file.type === "image/heif" || file.name.toLowerCase().endsWith('.heic')) {
-        console.log("HEIC detected. Converting...");
-        try {
-            const blob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.8 });
-            // heic2any returns a blob or blob array. Handle single file.
-            const convertedBlob = Array.isArray(blob) ? blob[0] : blob;
-            file = new File([convertedBlob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
-        } catch (e) {
-            console.error("HEIC Conversion failed:", e);
-            alert("Could not convert HEIC image. Please use JPG.");
-            return;
-        }
-    }
+        // Add event listeners to delete buttons
+        const deleteBtns = dropZone.querySelectorAll('.delete-btn');
+        deleteBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
 
-    if (file.type.startsWith('image/')) {
-        // Security: 20MB Limit
-        if (file.size > 20 * 1024 * 1024) {
-            alert("File is too large. Please upload an image smaller than 20MB.");
-            return;
-        }
+                const idx = parseInt(e.currentTarget.dataset.idx);
+                filesAsBase64.splice(idx, 1);
+                renderThumbnails();
+            });
+        });
 
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            const img = new Image();
-            img.onload = () => {
-                // Max dimensions
-                const MAX_WIDTH = 1200;
-                const MAX_HEIGHT = 1600;
-                let width = img.width;
-                let height = img.height;
-
-                if (width > height) {
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width;
-                        width = MAX_WIDTH;
-                    }
-                } else {
-                    if (height > MAX_HEIGHT) {
-                        width *= MAX_HEIGHT / height;
-                        height = MAX_HEIGHT;
-                    }
-                }
-
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-
-                // Compress to JPEG 70%
-                fileAsBase64 = canvas.toDataURL('image/jpeg', 0.7);
-
-                dashPreview.src = fileAsBase64;
-                dashPreview.classList.remove('hidden');
-                uploadUi.classList.add('hidden');
-                updateDashButtons(true);
-                console.log(`Original: ${(file.size / 1024).toFixed(2)}KB, Compressed: ${(fileAsBase64.length / 1024).toFixed(2)}KB`);
-            };
-            img.src = ev.target.result;
-        };
-        reader.readAsDataURL(file);
+        updateDashButtons(true);
     } else {
-        alert("Please upload an image file.");
+        dropZone.innerHTML = `
+            <div id="upload-ui" class="text-center group-hover:scale-105 transition-transform pointer-events-none">
+                <span class="text-3xl block mb-2">📸</span>
+                <span class="text-sm font-medium text-theme-muted">Tap to Upload or Drag & Drop (Max 5)</span>
+            </div>
+        `;
+        updateDashButtons(false);
     }
+
+    // Reset file input so selecting the same file again works
+    fileInput.value = '';
+};
+
+// File Handler with Compression & HEIC Support
+const handleFiles = async (files) => {
+    if (!files || files.length === 0) return;
+
+    // Remaining capacity check
+    const remainingSlots = 5 - filesAsBase64.length;
+    if (remainingSlots <= 0) {
+        alert("You have reached the maximum of 5 images.");
+        return;
+    }
+
+    const filesToProcess = Array.from(files).slice(0, remainingSlots);
+    if (files.length > remainingSlots) {
+        alert(`You can only add ${remainingSlots} more image(s). Only the first ${remainingSlots} were added.`);
+    }
+
+    dropZone.innerHTML = '<div class="spinner border-theme-text"></div><p class="mt-2 text-sm text-theme-muted">Processing images...</p>';
+
+    for (let i = 0; i < filesToProcess.length; i++) {
+        let file = filesToProcess[i];
+
+        // Handle HEIC/HEIF conversion
+        if (file.type === "image/heic" || file.type === "image/heif" || file.name.toLowerCase().endsWith('.heic')) {
+            console.log(`HEIC detected for ${file.name}. Converting...`);
+            try {
+                const blob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.8 });
+                const convertedBlob = Array.isArray(blob) ? blob[0] : blob;
+                file = new File([convertedBlob], file.name.replace(/\.heic$/i, ".jpg"), { type: "image/jpeg" });
+            } catch (e) {
+                console.error("HEIC Conversion failed:", e);
+                alert(`Could not convert ${file.name}. Skipping.`);
+                continue;
+            }
+        }
+
+        if (file.type.startsWith('image/')) {
+            // Security: 20MB Limit per file
+            if (file.size > 20 * 1024 * 1024) {
+                alert(`${file.name} is too large. Images must be under 20MB.`);
+                continue;
+            }
+
+            const base64Data = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        // Max dimensions
+                        const MAX_WIDTH = 1200;
+                        const MAX_HEIGHT = 1600;
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > height) {
+                            if (width > MAX_WIDTH) {
+                                height *= MAX_WIDTH / width;
+                                width = MAX_WIDTH;
+                            }
+                        } else {
+                            if (height > MAX_HEIGHT) {
+                                width *= MAX_HEIGHT / height;
+                                height = MAX_HEIGHT;
+                            }
+                        }
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        resolve(canvas.toDataURL('image/jpeg', 0.85)); // 85% quality JPG
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+            filesAsBase64.push(base64Data);
+        }
+    }
+
+    renderThumbnails();
 };
 
 // Click Upload
-fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 
 // Drag & Drop Logic
 ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -300,13 +394,13 @@ function preventDefaults(e) {
     dropZone.addEventListener(eventName, unhighlight, false);
 });
 
-function highlight(e) { dropZone.classList.add('bg-blue-50', 'border-blue-400'); }
-function unhighlight(e) { dropZone.classList.remove('bg-blue-50', 'border-blue-400'); }
+function highlight(e) { dropZone.classList.add('bg-blue-50', 'border-blue-400', 'dark:bg-emerald-900/20'); }
+function unhighlight(e) { dropZone.classList.remove('bg-blue-50', 'border-blue-400', 'dark:bg-emerald-900/20'); }
 
 dropZone.addEventListener('drop', (e) => {
     const dt = e.dataTransfer;
     const files = dt.files;
-    handleFile(files[0]);
+    handleFiles(files);
 });
 
 // Sync button bindings
@@ -352,7 +446,7 @@ const triggerSync = async (syncType) => {
 
         const payload = {
             token: token,
-            imageData: fileAsBase64,
+            images: filesAsBase64,
             syncType
         };
 
@@ -390,6 +484,7 @@ const triggerSync = async (syncType) => {
             statusArea.classList.remove('text-red-600', 'bg-red-50', 'text-blue-600', 'bg-blue-50');
             statusArea.classList.add('text-green-600', 'bg-green-50');
             statusArea.textContent = `Success! ${data.text}`;
+            if (currentUser) loadSyncHistory(currentUser.email); // Refresh history
         } else {
             throw new Error(data.error || "Server Error");
         }
@@ -432,7 +527,7 @@ async function exportMyData() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `ai-planner-data-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `ai - planner - data - ${new Date().toISOString().split('T')[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
     } catch (err) {
@@ -440,6 +535,68 @@ async function exportMyData() {
         alert("Failed to export data: " + err.message);
     }
 }
+
+// History Navigation
+document.getElementById('toggle-history-btn').addEventListener('click', () => {
+    switchView('view-history');
+    if (currentUser) loadSyncHistory(currentUser.email);
+});
+document.getElementById('back-to-dash-btn').addEventListener('click', () => {
+    switchView('view-dashboard');
+});
+
+// Sync History Loader
+const loadSyncHistory = async (email) => {
+    import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, orderBy, limit, getDocs }) => {
+        const db = getFirestore(app);
+        const historyList = document.getElementById('history-list');
+        if (!historyList) return;
+
+        try {
+            historyList.innerHTML = '<div class="flex justify-center py-4"><div class="spinner border-theme-text w-5 h-5"></div></div>';
+
+            const q = query(
+                collection(db, "users", email, "syncHistory"),
+                orderBy("timestamp", "desc"),
+                limit(10)
+            );
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                historyList.innerHTML = '<div class="text-center text-sm text-theme-muted py-6">No sync history found yet. Sync a planner to see results here!</div>';
+                return;
+            }
+
+            let html = '';
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const d = data.timestamp ? data.timestamp.toDate() : new Date();
+                const timeString = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                const typeIcon = data.syncType === 'morning' ? '☀️' : data.syncType === 'evening' ? '🌙' : '📖';
+                const statusColor = data.status === 'success' ? 'text-emerald-600' : 'text-red-500';
+                const statusIcon = data.status === 'success' ? '✓' : '⚠️';
+
+                html += `
+                    <div class="p-3 border flex justify-between items-center rounded-xl border-theme-border mb-2 bg-theme-bg/50">
+                        <div>
+                            <span class="font-medium text-theme-text text-sm flex items-center gap-2 mb-1">
+                                ${typeIcon} <span class="capitalize">${data.syncType}</span>
+                                <span class="text-[10px] text-theme-muted font-normal bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full">${data.imageCount || 1} pg</span>
+                            </span>
+                            <p class="text-xs ${statusColor} font-medium leading-snug">${statusIcon} ${data.message}</p>
+                        </div>
+                        <span class="text-[10px] text-theme-muted ml-2 text-right">${timeString}</span>
+                    </div>
+                `;
+            });
+            historyList.innerHTML = html;
+        } catch (e) {
+            console.error("Error loading history:", e);
+            historyList.innerHTML = '<div class="text-center text-xs text-red-500 py-6">Failed to load history.</div>';
+        }
+    });
+};
 
 async function deleteMyAccount() {
     const confirmed = confirm(
