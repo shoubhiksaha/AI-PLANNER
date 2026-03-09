@@ -5,6 +5,11 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.token.email == email;
       // User profile writes are server-managed via Admin SDK functions.
       allow write: if false;
+      
+      match /syncHistory/{docId} {
+          allow read: if request.auth != null && request.auth.token.email == email;
+          allow write: if false;
+      }
     }
   }
 }

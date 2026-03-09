@@ -4,10 +4,15 @@ const admin = require('firebase-admin');
 const mockSet = jest.fn();
 const mockGet = jest.fn();
 const mockDelete = jest.fn();
+const mockAdd = jest.fn();
+const mockCollectionInner = jest.fn(() => ({
+    add: mockAdd
+}));
 const mockDoc = jest.fn(() => ({
     set: mockSet,
     get: mockGet,
-    delete: mockDelete
+    delete: mockDelete,
+    collection: mockCollectionInner
 }));
 
 // Rate limit collection always returns { exists: false } (first request = allowed)
@@ -25,15 +30,22 @@ const mockCollection = jest.fn((name) => {
 
 const mockVerifyIdToken = jest.fn();
 
-jest.mock('firebase-admin', () => ({
-    initializeApp: jest.fn(),
-    firestore: jest.fn(() => ({
-        collection: mockCollection
-    })),
-    auth: jest.fn(() => ({
-        verifyIdToken: mockVerifyIdToken
-    }))
-}));
+jest.mock('firebase-admin', () => {
+    const FieldValue = {
+        serverTimestamp: jest.fn(() => 'mockTimestamp'),
+        increment: jest.fn((n) => `mockIncrement(${n})`)
+    };
+
+    return {
+        initializeApp: jest.fn(),
+        firestore: Object.assign(jest.fn(() => ({
+            collection: mockCollection
+        })), { FieldValue }),
+        auth: jest.fn(() => ({
+            verifyIdToken: mockVerifyIdToken
+        }))
+    };
+});
 
 // 2. Mock Firebase Functions
 jest.mock('firebase-functions/v2/https', () => ({
@@ -286,7 +298,7 @@ describe('index.js Integration Tests', () => {
             req.body = {
                 token: 'valid-google-oauth-token-string',
                 syncType: 'morning',
-                imageData: validImageData
+                images: [validImageData]
             };
             _mockGetUserInfo.mockResolvedValue({ data: { email: 'test@example.com' } });
 
@@ -298,6 +310,14 @@ describe('index.js Integration Tests', () => {
 
             // Dynamic fetch mock for both Gemini REST API and Notion upload
             global.fetch.mockImplementation(async (url) => {
+                // Notion API mock
+                if (url.includes('notion.com/v1/file_uploads')) {
+                    return { ok: true, json: async () => ({ id: 'mock-file-id', upload_url: 'https://mock-upload-url.com' }) };
+                }
+                if (url.includes('mock-upload-url.com')) {
+                    return { ok: true, text: async () => 'Upload successful' };
+                }
+
                 if (url.includes('generativelanguage')) {
                     // Gemini REST API Mock Response
                     // We can return different data based on req.body.syncType,
@@ -348,8 +368,8 @@ describe('index.js Integration Tests', () => {
             });
         });
 
-        test('returns 413 Payload Too Large when body size exceeds 30MB', async () => {
-            req.body = { data: "A".repeat(31_000_000) };
+        test('returns 413 Payload Too Large when body size exceeds 100MB', async () => {
+            req.body = { data: "A".repeat(101_000_000) };
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(413);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Payload too large" }));
@@ -377,14 +397,15 @@ describe('index.js Integration Tests', () => {
         });
 
         test('rejects request with invalid image data', async () => {
-            req.body.imageData = 'not-a-data-url';
+            req.body.images = ['not-a-data-url'];
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(400);
-            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid image data format or size" }));
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid image data format, size, or too many images (max 5)." }));
         });
 
         test('processes journal sync successfully', async () => {
             req.body.syncType = 'journal';
+            req.body.images = [validImageData];
             global.__geminiMockText = JSON.stringify({ date: "15-January-2025" });
 
             await myFunctions.syncPlanner(req, res);
@@ -672,6 +693,7 @@ describe('index.js Integration Tests', () => {
         // --- Branch coverage: journal date extraction failure fallback ---
         test('uses today date when Gemini date extraction fails', async () => {
             req.body.syncType = 'journal';
+            req.body.images = [validImageData];
             let callCount = 0;
             global.fetch.mockImplementation(async (url) => {
                 if (url.includes('generativelanguage')) {
@@ -679,6 +701,12 @@ describe('index.js Integration Tests', () => {
                     if (callCount === 1) {
                         throw new Error('Gemini unavailable');
                     }
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            candidates: [{ content: { parts: [{ text: JSON.stringify({ date: "15-January-2025" }) }] } }]
+                        })
+                    };
                 }
                 if (url.includes('notion') || url.includes('s3')) {
                     return {
@@ -885,6 +913,29 @@ describe('index.js Integration Tests', () => {
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(200);
         });
+
+        test('evening sync successfully decrypts valid legacy CBC notionKey', async () => {
+            req.body.syncType = 'evening';
+
+            // Generate a valid legacy CBC encryption payload
+            const crypto = require('crypto');
+            const iv = crypto.randomBytes(16);
+            const key = Buffer.alloc(32);
+            Buffer.from('test-encryption-key-for-jest').copy(key);
+            const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+            let encrypted = cipher.update('secret_legacy_valid_key');
+            encrypted = Buffer.concat([encrypted, cipher.final()]);
+            const legacyKeyData = iv.toString('hex') + ':' + encrypted.toString('hex');
+
+            mockGet.mockResolvedValue({
+                exists: true,
+                data: () => ({ notionKey: legacyKeyData, notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+            });
+
+            await myFunctions.syncPlanner(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
     });
 
     // --- Audit Report Section B: Additional GDPR endpoint edge cases ---
@@ -982,6 +1033,29 @@ describe('index.js Integration Tests', () => {
             await myFunctions.deleteUserAccount(req, res);
             expect(res.status).toHaveBeenCalledWith(415);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Content-Type must be application/json" }));
+        });
+    });
+
+    describe('logClientError', () => {
+        test('rejects GET requests with 405', async () => {
+            req.method = 'GET';
+            await myFunctions.logClientError(req, res);
+            expect(res.status).toHaveBeenCalledWith(405);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Method not allowed" }));
+        });
+
+        test('accepts valid error payload and logs it', async () => {
+            req.body = {
+                message: "ReferenceError: foo is not defined",
+                stack: "at bar (app.js:10:5)",
+                url: "localhost:8081",
+                userEmail: "crash_tester@example.com"
+            };
+
+            await myFunctions.logClientError(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.send).toHaveBeenCalledWith({ success: true });
         });
     });
 

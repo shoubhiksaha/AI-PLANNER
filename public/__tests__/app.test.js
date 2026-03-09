@@ -140,6 +140,12 @@ describe('switchView', () => {
         expect(document.getElementById('view-login').classList.contains('view-hidden')).toBe(true);
         expect(document.getElementById('view-dashboard').classList.contains('view-hidden')).toBe(true);
     });
+
+    test('handles missing elements gracefully without throwing', () => {
+        // Remove all views from the DOM
+        document.body.innerHTML = '';
+        expect(() => switchView('view-dashboard')).not.toThrow();
+    });
 });
 
 describe('applyTheme', () => {

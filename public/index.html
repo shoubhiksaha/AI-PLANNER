@@ -117,23 +117,31 @@
 
         <!-- VIEW 3: DASHBOARD -->
         <div id="view-dashboard" class="view-hidden fade-in space-y-6">
-            <!-- User Info -->
-            <div class="flex items-center justify-between text-xs text-gray-400 border-b border-gray-100 pb-2">
+            <!-- User Info & Navigation -->
+            <div class="flex items-center justify-between text-xs text-theme-muted border-b border-theme-border pb-3">
                 <span id="user-email">user@example.com</span>
-                <button id="logout-btn" class="hover:text-red-500">Sign Out</button>
+                <div class="flex items-center gap-3">
+                    <button id="toggle-history-btn"
+                        class="hover:text-theme-text font-medium transition-colors flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        History
+                    </button>
+                    <button id="logout-btn" class="hover:text-red-500 font-medium transition-colors">Sign Out</button>
+                </div>
             </div>
 
-            <!-- Upload Area -->
             <label for="file-upload" id="drop-zone"
-                class="file-input block w-full h-40 border-2 border-dashed border-theme-border rounded-xl cursor-pointer flex flex-col items-center justify-center transition-all bg-theme-bg relative group">
+                class="file-input block w-full h-40 border-2 border-dashed border-theme-border rounded-xl cursor-pointer flex flex-col items-center justify-center transition-all bg-theme-bg relative group overflow-hidden">
                 <div id="upload-ui" class="text-center group-hover:scale-105 transition-transform pointer-events-none">
                     <span class="text-3xl block mb-2">📸</span>
-                    <span class="text-sm font-medium text-theme-muted">Tap to Upload or Drag & Drop</span>
+                    <span class="text-sm font-medium text-theme-muted">Tap to Upload or Drag & Drop (Max 5)</span>
                 </div>
-                <img id="dash-preview"
-                    class="hidden absolute inset-0 w-full h-full object-contain rounded-xl bg-white p-2">
+                <!-- Previews injected via JS -->
             </label>
-            <input id="file-upload" type="file" accept="image/*" class="hidden">
+            <input id="file-upload" type="file" accept="image/*" multiple class="hidden">
 
             <!-- Buttons -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -186,6 +194,27 @@
                 <div class="opacity-50 flex items-center justify-center gap-1 cursor-not-allowed">
                     <span>⌚ Health</span>
                 </div>
+            </div>
+        </div>
+
+        <!-- VIEW 4: HISTORY -->
+        <div id="view-history" class="view-hidden fade-in space-y-4">
+            <div class="flex items-center justify-between border-b border-theme-border pb-3">
+                <h2 class="text-lg font-bold text-theme-text flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Sync History
+                </h2>
+                <button id="back-to-dash-btn"
+                    class="text-xs font-medium text-theme-text hover:bg-theme-border/50 px-3 py-1.5 rounded-full transition-colors border border-theme-border">
+                    ← Back
+                </button>
+            </div>
+
+            <div id="history-list" class="max-h-[60vh] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                <!-- History injected via app.js -->
             </div>
         </div>
 
