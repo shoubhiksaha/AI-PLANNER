@@ -18,11 +18,11 @@
         }
     };
 
-    exports.getApiUrls = (hostname) => {
+    exports.getApiUrls = (hostname, endpoint = 'syncPlanner') => {
         const PRIMARY_API_URL = (hostname === "localhost" || hostname === "127.0.0.1")
-            ? "http://127.0.0.1:5001/ai-planner-project-467800/us-central1/syncPlanner"
-            : "/syncPlanner";
-        const FALLBACK_API_URL = "https://syncplanner-xeh5qbnxga-uc.a.run.app";
+            ? `http://127.0.0.1:5001/ai-planner-project-467800/us-central1/${endpoint}`
+            : `/${endpoint}`;
+        const FALLBACK_API_URL = `https://${endpoint.toLowerCase()}-xeh5qbnxga-uc.a.run.app`;
         return { PRIMARY_API_URL, FALLBACK_API_URL };
     };
 
@@ -56,7 +56,7 @@
     };
 
     exports.switchView = (viewId) => {
-        ['view-login', 'view-setup', 'view-dashboard'].forEach(id => {
+        ['view-login', 'view-setup', 'view-dashboard', 'view-history'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.classList.add('view-hidden');
         });
