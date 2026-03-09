@@ -1013,4 +1013,27 @@ describe('index.js Integration Tests', () => {
         });
     });
 
+    describe('logClientError', () => {
+        test('rejects GET requests with 405', async () => {
+            req.method = 'GET';
+            await myFunctions.logClientError(req, res);
+            expect(res.status).toHaveBeenCalledWith(405);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Method not allowed" }));
+        });
+
+        test('accepts valid error payload and logs it', async () => {
+            req.body = {
+                message: "ReferenceError: foo is not defined",
+                stack: "at bar (app.js:10:5)",
+                url: "localhost:8081",
+                userEmail: "crash_tester@example.com"
+            };
+
+            await myFunctions.logClientError(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.send).toHaveBeenCalledWith({ success: true });
+        });
+    });
+
 });
