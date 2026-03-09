@@ -913,6 +913,29 @@ describe('index.js Integration Tests', () => {
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(200);
         });
+
+        test('evening sync successfully decrypts valid legacy CBC notionKey', async () => {
+            req.body.syncType = 'evening';
+
+            // Generate a valid legacy CBC encryption payload
+            const crypto = require('crypto');
+            const iv = crypto.randomBytes(16);
+            const key = Buffer.alloc(32);
+            Buffer.from('test-encryption-key-for-jest').copy(key);
+            const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+            let encrypted = cipher.update('secret_legacy_valid_key');
+            encrypted = Buffer.concat([encrypted, cipher.final()]);
+            const legacyKeyData = iv.toString('hex') + ':' + encrypted.toString('hex');
+
+            mockGet.mockResolvedValue({
+                exists: true,
+                data: () => ({ notionKey: legacyKeyData, notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+            });
+
+            await myFunctions.syncPlanner(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
     });
 
     // --- Audit Report Section B: Additional GDPR endpoint edge cases ---
