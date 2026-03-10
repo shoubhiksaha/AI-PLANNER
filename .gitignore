@@ -1,4 +1,8 @@
 # Dependencies
+# Scratch / Test files
+functions/commented code.js
+functions/list_buckets_dummy.js
+functions/planner_v3_draft.js
 /node_modules
 
 # Vercel
