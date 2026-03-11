@@ -1,4 +1,7 @@
 /* AI Planner - Custom Styles */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* === THEME VARIABLES === */
 :root {

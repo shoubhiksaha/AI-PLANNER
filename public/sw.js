@@ -1,3 +1,4 @@
+// Cache Buster v4
 importScripts('./sw-constants.js');
 const { CACHE_NAME, ASSETS_TO_CACHE } = self.SW_CONSTANTS;
 
