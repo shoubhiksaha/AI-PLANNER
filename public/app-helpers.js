@@ -56,7 +56,7 @@
     };
 
     exports.switchView = (viewId) => {
-        ['view-login', 'view-setup', 'view-dashboard', 'view-history', 'view-reports'].forEach(id => {
+        ['view-login', 'view-setup', 'view-dashboard', 'view-history'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.classList.add('view-hidden');
         });

@@ -119,18 +119,8 @@
         <div id="view-dashboard" class="view-hidden fade-in space-y-6">
             <!-- User Info & Navigation -->
             <div class="flex items-center justify-between text-xs text-theme-muted border-b border-theme-border pb-3">
-                <div class="flex flex-col">
-                    <span id="user-email">user@example.com</span>
-                    <div id="gamification-bars" class="flex gap-2 mt-1 hidden">
-                        <span id="streak-badge" class="font-bold text-orange-500 px-1.5 py-0.5 rounded bg-orange-500/10" title="Current Streak">🔥 0</span>
-                        <span id="credits-badge" class="font-bold text-yellow-500 px-1.5 py-0.5 rounded bg-yellow-500/10" title="Credits Available">🪙 0</span>
-                    </div>
-                </div>
+                <span id="user-email">user@example.com</span>
                 <div class="flex items-center gap-3">
-                    <button id="toggle-reports-btn"
-                        class="hover:text-amber-500 font-medium transition-colors flex items-center gap-1">
-                        📊 Reports
-                    </button>
                     <button id="toggle-history-btn"
                         class="hover:text-theme-text font-medium transition-colors flex items-center gap-1">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -228,45 +218,6 @@
             </div>
         </div>
 
-        <!-- VIEW 5: REPORTS -->
-        <div id="view-reports" class="view-hidden fade-in space-y-4">
-            <div class="flex items-center justify-between border-b border-theme-border pb-3">
-                <h2 class="text-lg font-bold text-theme-text flex items-center gap-2">
-                    📊 Gamification Reports
-                </h2>
-                <button id="back-to-dash-btn-reports"
-                    class="text-xs font-medium text-theme-text hover:bg-theme-border/50 px-3 py-1.5 rounded-full transition-colors border border-theme-border">
-                    ← Back
-                </button>
-            </div>
-
-            <div class="bg-theme-card border border-theme-border rounded-xl p-4 space-y-4">
-                <div class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
-                    <span class="text-xs uppercase tracking-widest font-bold text-gray-500">Current Streak</span>
-                    <span id="reports-current-streak" class="text-2xl font-black text-orange-500">🔥 0</span>
-                </div>
-                <div class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
-                    <span class="text-xs uppercase tracking-widest font-bold text-gray-500">Highest Streak</span>
-                    <span id="reports-highest-streak" class="text-lg font-bold text-theme-text">0</span>
-                </div>
-                <div class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
-                    <span class="text-xs uppercase tracking-widest font-bold text-gray-500">Streak Freezes</span>
-                    <span id="reports-streak-freezes" class="text-lg font-bold text-cyan-500">❄️ 0</span>
-                </div>
-
-                <div class="pt-4 border-t border-theme-border">
-                    <h4 class="text-xs uppercase tracking-widest font-bold text-gray-500 mb-3 text-center">Sync Heatmap (Last 30 Days)</h4>
-                    <div id="heatmap-grid" class="flex flex-wrap gap-1.5 justify-center mt-2">
-                        <div class="w-full text-center text-xs text-theme-muted">Loading heatmap data...</div>
-                    </div>
-                </div>
-
-                <button id="buy-booster-btn" class="w-full py-3 bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-300 hover:to-orange-400 text-white font-bold rounded-xl shadow-lg transition-all flex justify-center items-center gap-2 mt-4 border border-yellow-500/50">
-                    <span>🪙 Buy 50 Booster Credits (₹19)</span>
-                </button>
-            </div>
-        </div>
-
     </div>
 
     <!-- GUIDE MODAL -->
@@ -324,41 +275,6 @@
                 class="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold py-3 rounded-xl transition-colors">
                 Got it, let's go!
             </button>
-        </div>
-    </div>
-
-    <!-- PAYWALL MODAL -->
-    <div id="paywall-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-        <div class="bg-white dark:bg-gray-900 rounded-[2rem] max-w-sm w-full p-7 shadow-2xl relative overflow-hidden ring-1 ring-gray-200 dark:ring-white/10">
-            <!-- Decorative blur -->
-            <div class="absolute -top-10 -right-10 w-40 h-40 bg-orange-400/30 blur-[60px] rounded-full pointer-events-none"></div>
-            
-            <div class="text-center relative z-10">
-                <div class="w-16 h-16 bg-gradient-to-tr from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-5 shadow-lg shadow-orange-500/20">
-                    👑
-                </div>
-                <h3 class="font-black text-2xl text-theme-text mb-2 tracking-tight">Unlock Power Sync</h3>
-                <p id="paywall-message" class="text-theme-muted text-[13px] font-medium mb-8 leading-relaxed px-2">
-                    Free tier is limited to 1 page per document. Upgrade to batch upload multiple pages instantly!
-                </p>
-            </div>
-
-            <div class="space-y-3 relative z-10">
-                <button id="upgrade-standard-btn" class="group w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-2xl shadow-md transition-all active:scale-[0.98] flex justify-between px-5 items-center">
-                    <span class="flex items-center gap-2"><span class="opacity-80">🚀</span> Standard</span>
-                    <span class="bg-white/20 text-white px-2.5 py-1 rounded-lg text-xs tracking-wide">₹29/mo</span>
-                </button>
-                <button id="upgrade-pro-btn" class="group w-full bg-gradient-to-r from-gray-900 to-black dark:from-gray-100 dark:to-white dark:text-black hover:scale-[1.02] text-white font-bold py-4 rounded-2xl shadow-xl transition-all active:scale-[0.98] flex justify-between px-5 items-center ring-1 ring-white/10 dark:ring-black/10">
-                    <span class="flex items-center gap-2"><span class="opacity-80">🔥</span> Pro + BYOK</span>
-                    <span class="bg-white/20 dark:bg-black/10 px-2.5 py-1 rounded-lg text-xs tracking-wide">₹49/mo</span>
-                </button>
-            </div>
-
-            <div class="pt-6 pb-1 text-center relative z-10">
-                <button id="close-paywall" class="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                    Maybe Later
-                </button>
-            </div>
         </div>
     </div>
 
