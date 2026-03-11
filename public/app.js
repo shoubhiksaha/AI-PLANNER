@@ -144,12 +144,14 @@ auth.onAuthStateChanged(async (user) => {
         currentUser = user;
         document.getElementById('user-email').textContent = user.email;
         document.getElementById('gamification-bars').classList.remove('hidden');
+        document.getElementById('gamification-bars').classList.add('flex');
         await checkUserSetup(user);
     } else {
         currentUser = null;
         googleAccessToken = null;
         if (profileUnsubscribe) { profileUnsubscribe(); profileUnsubscribe = null; }
         document.getElementById('gamification-bars').classList.add('hidden');
+        document.getElementById('gamification-bars').classList.remove('flex');
         switchView('view-login');
     }
 });
@@ -252,8 +254,14 @@ document.getElementById('skip-setup-btn').addEventListener('click', () => {
 
 // Guide Modal
 const modal = document.getElementById('guide-modal');
-document.getElementById('open-guide').addEventListener('click', () => modal.classList.remove('hidden'));
-document.getElementById('close-guide').addEventListener('click', () => modal.classList.add('hidden'));
+document.getElementById('open-guide').addEventListener('click', () => {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+});
+document.getElementById('close-guide').addEventListener('click', () => {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+});
 
 // --- 3. DASHBOARD LOGIC ---
 const fileInput = document.getElementById('file-upload');
@@ -333,6 +341,7 @@ const handleFiles = async (files) => {
             ? "Free tier is limited to 1 page per document. Upgrade to Standard or Pro to batch upload multiple pages!"
             : "Standard tier limit reached. Upgrade to Pro for 5-page batch uploads!";
         document.getElementById('paywall-modal').classList.remove('hidden');
+        document.getElementById('paywall-modal').classList.add('flex');
         return;
     }
 
@@ -342,6 +351,7 @@ const handleFiles = async (files) => {
             ? `Free tier is limited to 1 page per document. Only the first image was added. Upgrade to batch upload!`
             : `Your tier limit is ${limit} pages. Only ${remainingSlots} images were added. Upgrade for more!`;
         document.getElementById('paywall-modal').classList.remove('hidden');
+        document.getElementById('paywall-modal').classList.add('flex');
     }
 
     dropZone.innerHTML = '<div class="spinner border-theme-text"></div><p class="mt-2 text-sm text-theme-muted">Processing images...</p>';
@@ -648,6 +658,7 @@ const loadHeatmap = async (email) => {
 // --- MONETIZATION & CASHFREE PLACEHOLDERS ---
 document.getElementById('close-paywall').addEventListener('click', () => {
     document.getElementById('paywall-modal').classList.add('hidden');
+    document.getElementById('paywall-modal').classList.remove('flex');
 });
 
 const handlePaymentClick = (tierName) => {
