@@ -95,9 +95,13 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
     const body = req.body || {};
     const token = body.token;
     const notionKey = typeof body.notionKey === 'string' ? body.notionKey.trim() : '';
-    const notionDbId = normalizeNotionDbId(body.notionDbId);
+    const notionDbId = body.notionDbId ? normalizeNotionDbId(body.notionDbId) : '';
+    const byokConfig = typeof body.byokConfig === 'object' ? body.byokConfig : null;
 
-    if (!token || !isLikelyNotionKey(notionKey) || !notionDbId) {
+    if (!token || ((!notionKey || !notionDbId) && !byokConfig)) {
+        return res.status(400).send({ error: "Invalid setup payload" });
+    }
+    if (notionKey && (!isLikelyNotionKey(notionKey) || !notionDbId)) {
         return res.status(400).send({ error: "Invalid setup payload" });
     }
 
@@ -110,13 +114,28 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
             return res.status(429).send({ error: "Too many requests. Please try again later." });
         }
 
-        const encryptedKey = encrypt(notionKey);
         const db = admin.firestore();
         const userRef = db.collection('users').doc(userEmail);
-        await userRef.set({ notionKey: encryptedKey, notionDbId }, { merge: true });
 
-        logger.info(`Stored encrypted Notion settings for ${userEmail}`);
-        return res.status(200).send({ success: true, text: "Notion setup saved securely." });
+        let updateData = {};
+        if (notionKey && notionDbId) {
+            updateData.notionKey = encrypt(notionKey);
+            updateData.notionDbId = notionDbId;
+        }
+        if (byokConfig) {
+            // Optional encryption or pure-pass for BYOK depending on model. For now, pass direct.
+            // If they pass an empty key, they might be disabling BYOK.
+            if (!byokConfig.apiKey) {
+                updateData.byokConfig = admin.firestore.FieldValue.delete();
+            } else {
+                updateData.byokConfig = byokConfig;
+            }
+        }
+
+        await userRef.set(updateData, { merge: true });
+
+        logger.info(`Stored encrypted configuration for ${userEmail}`);
+        return res.status(200).send({ success: true, text: "Configuration saved securely." });
     } catch (err) {
         logger.error("Setup error:", err);
         return res.status(500).send({ error: "Failed to securely save keys." });
@@ -317,6 +336,41 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         const userDoc = await userRef.get();
         let userData = userDoc.exists ? userDoc.data() : {};
 
+        const byokConfig = userData.byokConfig || null;
+
+        // CHECK LIMITS & CREDITS
+        if (!byokConfig) {
+            const tier = userData.tier || 'free';
+            const pageCount = parsedImages.length;
+
+            let maxPages = 1;
+            if (tier === 'standard') maxPages = (mode === 'journal') ? 3 : 1;
+            else if (tier === 'pro') maxPages = 5;
+
+            if (pageCount > maxPages) {
+                const durationMs = Date.now() - startTimeMs;
+                logger.warn("Tier feature limit exceeded", { requestId, authEmail: email, tier, pageCount, maxPages, status: 403 });
+                return res.status(403).send({ error: `Tier Limit: ${tier.toUpperCase()} allows max ${maxPages} page(s) for this sync. Please upgrade or reduce image count.` });
+            }
+
+            let tierCredits = userData.tierCredits || 0;
+            let boosterCredits = userData.boosterCredits || 0;
+            if ((tierCredits + boosterCredits) < pageCount) {
+                const durationMs = Date.now() - startTimeMs;
+                logger.warn("Insufficient credits", { requestId, authEmail: email, tierCredits, boosterCredits, pageCount, status: 402 });
+                return res.status(402).send({ error: "Insufficient AI Planner credits. Please visit the Upgrade tab." });
+            }
+
+            if (tierCredits >= pageCount) {
+                tierCredits -= pageCount;
+            } else {
+                const remainder = pageCount - tierCredits;
+                tierCredits = 0;
+                boosterCredits -= remainder;
+            }
+            await userRef.set({ tierCredits, boosterCredits }, { merge: true });
+        }
+
         // Initialize Services
         const calendar = google.calendar({ version: 'v3', auth });
         const tasks = google.tasks({ version: 'v1', auth });
@@ -350,7 +404,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
             const [fileUploadIds, extraction] = await Promise.all([
                 Promise.all(journalUploadPromises),
-                getPlannerDataFromImages(parsedImages, 'journal_date_only').catch(err => {
+                getPlannerDataFromImages(parsedImages, 'journal_date_only', timeZone, requestId, byokConfig).catch(err => {
                     logger.warn("Date extraction failed for journal:", { requestId, authEmail: email, syncMode: mode, error: err.message });
                     return { date: null };
                 })
@@ -400,7 +454,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
         if (mode === 'morning') {
             logger.info("Parsing planner images for morning sync...", { requestId, authEmail: email });
-            plannerData = await getPlannerDataFromImages(parsedImages, 'morning', timeZone);
+            plannerData = await getPlannerDataFromImages(parsedImages, 'morning', timeZone, requestId, byokConfig);
 
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
@@ -425,7 +479,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         } else if (mode === 'evening') {
             // Re-scan images specifically looking for evening data (expenses, mood, etc).
             logger.info("Parsing planner images for evening sync...", { requestId, authEmail: email });
-            plannerData = await getPlannerDataFromImages(parsedImages, 'evening');
+            plannerData = await getPlannerDataFromImages(parsedImages, 'evening', timeZone, requestId, byokConfig);
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
                 return res.status(400).send({ error: plannerData.error });

@@ -8,6 +8,7 @@ This folder contains the exact artifacts you need for Google OAuth app verificat
 - `demo-video-script.md`: Step-by-step recording script for the reviewer demo video.
 - `test-account.md`: Reviewer test account setup template and handoff checklist.
 - `submission-checklist.md`: Final pre-submit checklist for consent screen + domain + policies.
+- `brand-verification-form-template.md`: Ready-to-paste branding form text and documentation links template.
 
 ## How to use
 
@@ -21,4 +22,3 @@ This folder contains the exact artifacts you need for Google OAuth app verificat
 - `https://www.googleapis.com/auth/calendar.events`
 - `https://www.googleapis.com/auth/tasks`
 - `https://www.googleapis.com/auth/drive.file`
-

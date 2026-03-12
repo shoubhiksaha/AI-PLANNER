@@ -1,5 +1,7 @@
 const { logger } = require("firebase-functions/logger");
 const { defineString } = require('firebase-functions/params');
+const { UniversalAIAdapter } = require('../lib/UniversalAIAdapter');
+
 const GEMINI_API_KEY = defineString('GEMINI_API_KEY');
 
 function getMorningPrompt() {
@@ -124,20 +126,34 @@ async function callGeminiModel(model, apiKey, prompt, imagesArr) {
 }
 
 
-async function getPlannerDataFromImages(parsedImages, syncType) {
+async function getPlannerDataFromImages(parsedImages, syncType, timeZone = null, requestId = "system", byokConfig = null) {
     if (!parsedImages || parsedImages.length === 0) {
         throw new Error("INVALID_IMAGE_PAYLOAD");
-    }
-    const geminiApiKey = GEMINI_API_KEY.value();
-
-    if (!geminiApiKey) {
-        throw new Error("MISSING_GEMINI_API_KEY");
     }
 
     const prompt =
         syncType === 'evening' ? getEveningPrompt() :
             syncType === 'journal_date_only' ? getJournalDatePrompt() :
                 getMorningPrompt();
+
+    // Route to BYOK Universal Adapter if config exists
+    if (byokConfig && byokConfig.apiKey) {
+        try {
+            logger.info("Routing sync payload via BYOK UniversalAIAdapter", { requestId, provider: byokConfig.provider });
+            const adapter = new UniversalAIAdapter(byokConfig);
+            const rawResponse = await adapter.chat(prompt, "Please analyze the attached planner image(s).", parsedImages, requestId);
+            return JSON.parse(rawResponse);
+        } catch (error) {
+            logger.error(`BYOK Adapter Error: ${error.message}`, { requestId });
+            throw new Error(`BYOK_ERROR: ${error.message}`);
+        }
+    }
+
+    // Default Fallback: Server-side Gemini Routing
+    const geminiApiKey = GEMINI_API_KEY.value();
+    if (!geminiApiKey) {
+        throw new Error("MISSING_GEMINI_API_KEY");
+    }
 
     // Fallback Strategy: Diverse models to avoid shared quota limits
     const models = [

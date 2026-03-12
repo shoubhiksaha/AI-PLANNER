@@ -112,6 +112,43 @@
                 <span>📚 How to find these keys? (Guide)</span>
             </button>
 
+            <!-- Advanced Settings (BYOK) -->
+            <details class="group border border-gray-200 rounded-xl overflow-hidden mt-6 text-sm">
+                <summary class="font-bold text-gray-700 p-4 cursor-pointer bg-gray-50 flex items-center justify-between">
+                    <div>
+                        <span class="block">Advanced Config</span>
+                        <span class="text-xs font-normal text-gray-500">Bring Your Own Key (BYOK) API Routing</span>
+                    </div>
+                </summary>
+                <div class="p-4 space-y-4 bg-white border-t border-gray-100">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 uppercase mb-1">LLM Provider</label>
+                        <select id="byok-provider" class="w-full rounded-lg border border-gray-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="openai">OpenAI</option>
+                            <option value="anthropic">Anthropic</option>
+                            <option value="google">Google Gemini</option>
+                            <option value="azure">Azure OpenAI</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Key</label>
+                        <input type="password" id="byok-key" class="w-full rounded-lg border border-gray-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="sk-...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Model Name</label>
+                        <input type="text" id="byok-model" class="w-full rounded-lg border border-gray-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="gpt-4o">
+                    </div>
+                    <div>
+                         <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Base URL (For Azure)</label>
+                         <input type="text" id="byok-baseurl" class="w-full rounded-lg border border-gray-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="https://my-resource.openai.azure.com/">
+                    </div>
+                    <div>
+                         <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Version (For Azure)</label>
+                         <input type="text" id="byok-apiversion" class="w-full rounded-lg border border-gray-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="2023-05-15">
+                    </div>
+                </div>
+            </details>
+
             <button id="save-setup-btn"
                 class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all">
                 Save & Continue
@@ -124,18 +161,27 @@
         <!-- VIEW 3: DASHBOARD -->
         <div id="view-dashboard" class="view-hidden fade-in space-y-6">
             <!-- User Info & Navigation -->
-            <div class="flex items-center justify-between text-xs text-theme-muted border-b border-theme-border pb-3">
-                <span id="user-email">user@example.com</span>
-                <div class="flex items-center gap-3">
-                    <button id="toggle-history-btn"
-                        class="hover:text-theme-text font-medium transition-colors flex items-center gap-1">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        History
-                    </button>
-                    <button id="logout-btn" class="hover:text-red-500 font-medium transition-colors">Sign Out</button>
+            <div class="flex flex-col gap-3 text-xs text-theme-muted border-b border-theme-border pb-4">
+                <div class="flex items-center justify-between">
+                    <span id="user-email" class="font-medium text-theme-text opacity-70">user@example.com</span>
+                    <div class="flex items-center gap-3">
+                        <button id="toggle-history-btn" class="hover:text-theme-text font-medium transition-colors flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            History
+                        </button>
+                        <button id="logout-btn" class="hover:text-red-500 font-medium transition-colors">Sign Out</button>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between bg-emerald-50/50 dark:bg-emerald-900/10 text-emerald-900 dark:text-emerald-100 px-3 py-2.5 rounded-xl border border-emerald-100 dark:border-emerald-800/50">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">⚡</span>
+                        <div>
+                            <span class="font-bold tracking-tight text-sm" id="credit-count">...</span> <span class="opacity-80">Credits</span>
+                            <span class="px-1.5 py-0.5 ml-1 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 rounded font-bold text-[9px] uppercase tracking-wider shadow-sm" id="tier-badge">FREE</span>
+                        </div>
+                    </div>
+                    <button id="upgrade-btn" class="font-bold text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-white transition-colors text-sm">Upgrade →</button>
                 </div>
             </div>
 
@@ -283,6 +329,54 @@
                 class="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold py-3 rounded-xl transition-colors">
                 Got it, let's go!
             </button>
+        </div>
+    </div>
+
+    <!-- PRICING MODAL -->
+    <div id="pricing-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity opacity-0 duration-300">
+        <div class="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden relative transform transition-transform scale-95 duration-300" id="pricing-modal-content">
+            <button id="close-pricing-btn" class="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors z-10 bg-white/50 dark:bg-black/50 rounded-full backdrop-blur-md">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <div class="p-8 text-center bg-gradient-to-b from-blue-50/50 to-transparent dark:from-blue-900/10">
+                <h2 class="text-3xl font-bold text-theme-text tracking-tight mb-2">Upgrade Your Planner</h2>
+                <p class="text-theme-muted text-sm border-b border-theme-border pb-6">Choose the tier that fits your workflow. Cancel anytime.</p>
+            </div>
+            
+            <div class="p-6 pt-0 grid md:grid-cols-2 gap-6 relative">
+                <!-- Standard Tier -->
+                <div class="border border-indigo-100 dark:border-indigo-900 rounded-2xl p-6 bg-indigo-50/30 dark:bg-indigo-900/10 hover:shadow-lg transition-all flex flex-col h-full cursor-not-allowed opacity-80" title="Coming Soon">
+                   <div class="flex justify-between items-start mb-4">
+                       <div>
+                           <h3 class="text-xl font-bold text-indigo-900 dark:text-indigo-200">Standard</h3>
+                           <div class="text-sm font-medium text-indigo-600 dark:text-indigo-400 mt-1">₹29 <span class="text-xs font-normal opacity-70">/ month</span></div>
+                       </div>
+                   </div>
+                   <ul class="space-y-3 mb-8 flex-1">
+                       <li class="flex items-center text-sm text-theme-text text-left"><span class="text-indigo-500 mr-2 font-bold">✓</span> 100 AI Credits per month</li>
+                       <li class="flex items-center text-sm text-theme-text text-left"><span class="text-indigo-500 mr-2 font-bold">✓</span> Unlimited 1-page daily syncs</li>
+                       <li class="flex items-center text-sm text-theme-text text-left"><span class="text-indigo-500 mr-2 font-bold">✓</span> Up to 3-page journal batches</li>
+                   </ul>
+                   <button class="w-full mt-auto py-2.5 rounded-xl font-bold bg-indigo-600/50 text-white cursor-not-allowed" disabled>Coming Soon</button>
+                </div>
+                
+                <!-- Pro Tier (Popular) -->
+                <div class="border-2 border-emerald-500 rounded-2xl p-6 bg-white dark:bg-gray-800 shadow-xl relative flex flex-col h-full cursor-not-allowed opacity-90" title="Coming Soon">
+                   <div class="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-emerald-500 text-white text-[10px] uppercase tracking-wider font-bold py-1 px-3 rounded-full shadow-sm">Popular</div>
+                   <div class="flex justify-between items-start mb-4">
+                       <div>
+                           <h3 class="text-xl font-bold text-emerald-900 dark:text-emerald-100">Pro</h3>
+                           <div class="text-sm font-medium text-emerald-600 dark:text-emerald-400 mt-1">₹49 <span class="text-xs font-normal opacity-70">/ month</span></div>
+                       </div>
+                   </div>
+                   <ul class="space-y-3 mb-8 flex-1">
+                       <li class="flex items-center text-sm text-theme-text text-left"><span class="text-emerald-500 mr-2 font-bold">✓</span> 250 AI Credits per month</li>
+                       <li class="flex items-center text-sm text-theme-text text-left"><span class="text-emerald-500 mr-2 font-bold">✓</span> Massive 5-page batch uploads</li>
+                       <li class="flex items-center text-sm text-theme-text text-left"><span class="text-emerald-500 mr-2 font-bold">✓</span> Priority Model Access</li>
+                   </ul>
+                   <button class="w-full mt-auto py-2.5 rounded-xl font-bold bg-emerald-500/50 text-white cursor-not-allowed" disabled>Coming Soon</button>
+                </div>
+            </div>
         </div>
     </div>
 

@@ -305,7 +305,7 @@ describe('index.js Integration Tests', () => {
             // Default user exists
             mockGet.mockResolvedValue({
                 exists: true,
-                data: () => ({ notionKey: validEncryptedKey, notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+                data: () => ({ notionKey: validEncryptedKey, notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id', tierCredits: 10 })
             });
 
             // Dynamic fetch mock for both Gemini REST API and Notion upload
@@ -419,7 +419,7 @@ describe('index.js Integration Tests', () => {
 
         test('journal sync fails gracefully if user has no Notion settings', async () => {
             req.body.syncType = 'journal';
-            mockGet.mockResolvedValue({ exists: false, data: () => null });
+            mockGet.mockResolvedValue({ exists: true, data: () => ({ tierCredits: 10 }) });
 
             await myFunctions.syncPlanner(req, res);
 
@@ -459,7 +459,7 @@ describe('index.js Integration Tests', () => {
             // User has no spreadsheetId
             mockGet.mockResolvedValue({
                 exists: true,
-                data: () => ({ notionKey: 'v2:enc:data', notionDbId: 'test-db-id' })
+                data: () => ({ notionKey: 'v2:enc:data', notionDbId: 'test-db-id', tierCredits: 10 })
             });
             global.__geminiMockText = JSON.stringify({ date: "2025-01-01", todos: [], expenses: [], health: {} });
             _mockSheetsCreate.mockResolvedValue({ data: { spreadsheetId: 'new-sheet-id' } });
@@ -796,7 +796,7 @@ describe('index.js Integration Tests', () => {
             req.body.syncType = 'evening';
             mockGet.mockResolvedValue({
                 exists: true,
-                data: () => ({ spreadsheetId: 'test-sheet-id' })  // No notionKey, no notionDbId
+                data: () => ({ spreadsheetId: 'test-sheet-id', tierCredits: 10 })  // No notionKey, no notionDbId
             });
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(200);
@@ -861,7 +861,7 @@ describe('index.js Integration Tests', () => {
             const placeholderKey = encrypt('YOUR_NOTION_KEY', testKey);
             mockGet.mockResolvedValue({
                 exists: true,
-                data: () => ({ notionKey: placeholderKey, notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+                data: () => ({ notionKey: placeholderKey, notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id', tierCredits: 10 })
             });
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(200);
@@ -873,7 +873,7 @@ describe('index.js Integration Tests', () => {
             // Plaintext key (no ":" in it) triggers the needsMigration=true path
             mockGet.mockResolvedValue({
                 exists: true,
-                data: () => ({ notionKey: 'secret_plaintext_notion_key', notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+                data: () => ({ notionKey: 'secret_plaintext_notion_key', notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id', tierCredits: 10 })
             });
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(200);
@@ -887,7 +887,7 @@ describe('index.js Integration Tests', () => {
             // v2: prefix but invalid base64/crypto data will cause decryption to throw
             mockGet.mockResolvedValue({
                 exists: true,
-                data: () => ({ notionKey: 'v2:totally:invalid:crypto:data', notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+                data: () => ({ notionKey: 'v2:totally:invalid:crypto:data', notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id', tierCredits: 10 })
             });
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(200);
@@ -910,7 +910,7 @@ describe('index.js Integration Tests', () => {
             // This will fail decryption (wrong format) and fall to the catch
             mockGet.mockResolvedValue({
                 exists: true,
-                data: () => ({ notionKey: 'legacy:cbc:encrypted:key', notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+                data: () => ({ notionKey: 'legacy:cbc:encrypted:key', notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id', tierCredits: 10 })
             });
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(200);
@@ -931,7 +931,7 @@ describe('index.js Integration Tests', () => {
 
             mockGet.mockResolvedValue({
                 exists: true,
-                data: () => ({ notionKey: legacyKeyData, notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id' })
+                data: () => ({ notionKey: legacyKeyData, notionDbId: 'test-db-id', spreadsheetId: 'test-sheet-id', tierCredits: 10 })
             });
 
             await myFunctions.syncPlanner(req, res);

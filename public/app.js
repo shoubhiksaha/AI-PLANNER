@@ -179,13 +179,37 @@ async function checkUserSetup(user) {
         const userRef = doc(db, "users", user.email);
         const snap = await getDoc(userRef);
 
-        if (snap.exists() && snap.data().notionKey) {
-            // User has setup Notion -> Go to Dashboard
-            switchView('view-dashboard');
-            // Fetch sync history in the background
-            loadSyncHistory(user.email);
+        if (snap.exists()) {
+            const data = snap.data();
+            
+            // Populate BYOK UI
+            if (data.byokConfig) {
+                const conf = data.byokConfig;
+                document.getElementById('byok-provider').value = conf.provider || 'openai';
+                document.getElementById('byok-key').value = conf.apiKey || '';
+                document.getElementById('byok-model').value = conf.modelName || '';
+                if(conf.baseUrl) document.getElementById('byok-baseurl').value = conf.baseUrl;
+                if(conf.apiVersion) document.getElementById('byok-apiversion').value = conf.apiVersion;
+                if(conf.provider === 'azure') document.getElementById('byok-azure-fields').classList.remove('hidden');
+            }
+
+            // Populate Tier/Credits
+            const tierCredits = data.tierCredits || 0;
+            const boosterCredits = data.boosterCredits || 0;
+            document.getElementById('credit-count').textContent = tierCredits + boosterCredits;
+            document.getElementById('tier-badge').textContent = (data.tier || 'free').toUpperCase();
+
+            if (data.notionKey || data.byokConfig) {
+                // User has setup Notion or BYOK -> Go to Dashboard
+                switchView('view-dashboard');
+                // Fetch sync history in the background
+                loadSyncHistory(user.email);
+            } else {
+                switchView('view-setup');
+            }
         } else {
-            // No setup -> Go to Setup Screen
+            document.getElementById('credit-count').textContent = '15';
+            document.getElementById('tier-badge').textContent = 'FREE';
             switchView('view-setup');
         }
     } catch (err) {
@@ -194,10 +218,44 @@ async function checkUserSetup(user) {
     }
 }
 
+// PRICING MODAL LOGIC
+const pricingModal = document.getElementById('pricing-modal');
+document.getElementById('upgrade-btn').addEventListener('click', () => {
+    pricingModal.classList.remove('hidden');
+    // small delay to allow display:block to render before transitioning opacity
+    requestAnimationFrame(() => {
+        pricingModal.classList.remove('opacity-0');
+        document.getElementById('pricing-modal-content').classList.remove('scale-95');
+    });
+});
+document.getElementById('close-pricing-btn').addEventListener('click', closePricingModal);
+pricingModal.addEventListener('click', (e) => {
+    if (e.target === pricingModal) closePricingModal();
+});
+function closePricingModal() {
+    pricingModal.classList.add('opacity-0');
+    document.getElementById('pricing-modal-content').classList.add('scale-95');
+    setTimeout(() => pricingModal.classList.add('hidden'), 300);
+}
+
+// BYOK PROVIDER TOGGLE
+document.getElementById('byok-provider').addEventListener('change', (e) => {
+    const azureFields = document.getElementById('byok-azure-fields');
+    if (e.target.value === 'azure') {
+        azureFields.classList.remove('hidden');
+    } else {
+        azureFields.classList.add('hidden');
+    }
+});
+
 document.getElementById('save-setup-btn').addEventListener('click', async () => {
-    const key = document.getElementById('setup-key').value;
-    const dbId = document.getElementById('setup-db').value;
-    if (!key || !dbId) return alert("Please fill both fields");
+    const key = document.getElementById('setup-key').value.trim();
+    const dbId = document.getElementById('setup-db').value.trim();
+    const byokKeyInput = document.getElementById('byok-key').value.trim();
+
+    if ((!key || !dbId) && !byokKeyInput) {
+        return alert("Please either configure Notion or set an Advanced API Key.");
+    }
 
     const saveBtn = document.getElementById('save-setup-btn');
     const originalText = saveBtn.innerText;
@@ -207,14 +265,31 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
     try {
         const token = await ensureGoogleAccessToken();
 
-        // Send raw key to backend to be encrypted and saved securely
+        // Construct BYOK object if key is provided
+        const provider = document.getElementById('byok-provider').value;
+        const byokKey = document.getElementById('byok-key').value.trim();
+        let byokConfig = null;
+        if (byokKey) {
+            byokConfig = {
+                provider,
+                apiKey: byokKey,
+                modelName: document.getElementById('byok-model').value.trim() || 'gpt-4o'
+            };
+            if (provider === 'azure') {
+                byokConfig.baseUrl = document.getElementById('byok-baseurl').value.trim();
+                byokConfig.apiVersion = document.getElementById('byok-apiversion').value.trim() || '2023-05-15';
+            }
+        }
+
+        // Send payload to backend to be saved securely
         const res = await fetch('/setupNotion', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 token,
                 notionKey: key,
-                notionDbId: dbId
+                notionDbId: dbId,
+                byokConfig
             })
         });
 
