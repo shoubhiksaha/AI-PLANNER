@@ -47,7 +47,7 @@ function decryptStoredNotionKey(text) {
         }
         return { value: text, needsMigration: true };
     } catch (e) {
-        logger.error("Decryption failed for stored Notion key.", e);
+        logger.error("Decryption failed for stored Notion key.", { error: e.message });
         return { value: null, needsMigration: false };
     }
 }
@@ -106,7 +106,7 @@ async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
         logger.info(`Notion File Uploaded Successfully: ${id}`);
         return id;
     } catch (e) {
-        logger.error("Notion Direct Upload Error:", e);
+        logger.error("Notion Direct Upload Error:", { error: e.message });
         throw e;
     }
 }
@@ -156,7 +156,7 @@ async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, file
         });
         return true;
     } catch (err) {
-        logger.error("Notion Sync Error:", err);
+        logger.error("Notion Sync Error:", { error: err.message });
         return false;
     }
 }

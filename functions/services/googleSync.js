@@ -118,7 +118,7 @@ async function syncExpensesToSheet(sheets, plannerData, spreadsheetId) {
         });
         return rows.length;
     } catch (err) {
-        logger.error('Failed to sync expenses:', err);
+        logger.error('Failed to sync expenses:', { error: err.message });
         return 0; 
     }
 }
@@ -145,7 +145,7 @@ async function syncHealthToSheet(sheets, plannerData, spreadsheetId) {
         });
         return 1;
     } catch (err) {
-        logger.error('Failed to sync health:', err);
+        logger.error('Failed to sync health:', { error: err.message });
         return 0;
     }
 }

@@ -338,7 +338,7 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
         logger.info(`Data export for ${userEmail}`);
         return res.status(200).send(exportData);
     } catch (err) {
-        console.error("Export error:", err.message);
+        logger.error("Export error:", { error: err.message, requestId, authEmail: userEmail });
         return res.status(500).send({ error: "Failed to export data." });
     }
 });
@@ -378,7 +378,7 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
         logger.info(`Account deleted for ${userEmail}`);
         return res.status(200).send({ success: true, text: "Your account data has been permanently deleted." });
     } catch (err) {
-        console.error("Delete error:", err.message);
+        logger.error("Delete error:", { error: err.message, requestId, authEmail: userEmail });
         return res.status(500).send({ error: "Failed to delete account." });
     }
 });
@@ -428,7 +428,11 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
     let email = null; // Declare email here for broader scope
     let mode = null;
     let timeZone = body.timeZone;
-    if (typeof timeZone !== 'string' || timeZone.length > 50 || !/^[A-Za-z0-9_/\-]+$/.test(timeZone)) {
+    try {
+        if (!timeZone || typeof timeZone !== 'string' || !Intl.supportedValuesOf('timeZone').includes(timeZone)) {
+            timeZone = 'Asia/Kolkata';
+        }
+    } catch (e) {
         timeZone = 'Asia/Kolkata';
     }
     let parsedImages = [];
@@ -714,7 +718,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                             }
                             return syncBrainDumpToNotion(plannerData, decryptedNotionKey, userData.notionDbId, fileId);
                         } catch (err) {
-                            console.error("Notion sync failed:", err.message);
+                            logger.error("Notion sync failed:", { error: err.message, requestId, authEmail: email });
                             return false;
                         }
                     };
@@ -732,7 +736,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             // Helper to get value or log error
             const getResult = (result, name) => {
                 if (result.status === 'fulfilled') return result.value;
-                console.error(`${name} Sync Failed:`, result.reason?.message || result.reason);
+                logger.error(`${name} Sync Failed:`, { error: result.reason?.message || result.reason, requestId, authEmail: email });
                 return (name === 'Notion') ? false : 0;
             };
 
@@ -762,7 +766,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
     } catch (error) {
         const errMsg = error?.message || String(error || "Unknown error");
-        console.error("FATAL ERROR:", errMsg);
+        logger.error("FATAL ERROR:", { error: errMsg, requestId, authEmail: email });
 
         // Try to log the failure if we have user context
         try {
@@ -779,7 +783,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 }
             }
         } catch (logErr) {
-            console.error("Failed to log error history:", logErr);
+            logger.error("Failed to log error history:", { error: logErr.message, requestId, authEmail: email });
         }
 
         // Security: Don't leak internals to client
