@@ -95,7 +95,8 @@ const buildGoogleProvider = () => {
 // Mobile detection: Use redirect instead of popup on phones/tablets
 const isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
 
-const ensureGoogleAccessToken = async () => {
+const ensureGoogleAccessToken = async (forceRefresh = false) => {
+    if (forceRefresh) googleAccessToken = null;
     if (googleAccessToken) return googleAccessToken;
     if (!auth.currentUser) throw new Error("Please sign in again.");
 
@@ -452,46 +453,59 @@ const triggerSync = async (syncType) => {
     });
 
     try {
-        // Ensure a fresh/in-memory token when needed (no browser storage persistence)
-        const token = await ensureGoogleAccessToken();
-
-        // Primary route uses Hosting rewrite. Fallback hits function directly.
-        const { PRIMARY_API_URL, FALLBACK_API_URL } = getApiUrls(window.location.hostname);
-
-        const payload = {
-            token: token,
-            images: filesAsBase64,
-            syncType
-        };
-
-        // Note: We no longer send Notion keys in the payload for security.
-        // The backend automatically retrieves them securely from Firestore.
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes Frontend Timeout
-
+        const clientTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
         let res;
         let data;
-        try {
-            res = await fetch(PRIMARY_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: controller.signal
-            });
-            data = await parseJsonResponse(res);
-        } catch (primaryErr) {
-            console.warn("Primary API route failed, retrying direct function URL.", primaryErr);
-            res = await fetch(FALLBACK_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: controller.signal
-            });
-            data = await parseJsonResponse(res);
+        let attempt = 0;
+        let currentToken = await ensureGoogleAccessToken();
+
+        while (attempt < 2) {
+            const payload = {
+                token: currentToken,
+                images: filesAsBase64,
+                syncType,
+                timeZone: clientTimeZone
+            };
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes Frontend Timeout
+
+            try {
+                res = await fetch(PRIMARY_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+                data = await parseJsonResponse(res);
+            } catch (primaryErr) {
+                console.warn("Primary API route failed, retrying direct function URL.", primaryErr);
+                res = await fetch(FALLBACK_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+                data = await parseJsonResponse(res);
+            }
+
+            clearTimeout(timeoutId);
+
+            if (res.status === 401 && attempt === 0) {
+                console.warn("401 Unauthorized. Expired Google token detected, forcing refresh.");
+                attempt++;
+                try {
+                    currentToken = await ensureGoogleAccessToken(true);
+                    continue;
+                } catch (retryErr) {
+                    console.error("Token refresh failed:", retryErr);
+                    break;
+                }
+            }
+
+            break; // Exit loop on success or non-401 error
         }
 
-        clearTimeout(timeoutId);
         timers.forEach(t => clearTimeout(t)); // Stop simulated progress
 
         if (res.ok) {

@@ -115,7 +115,7 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
         const userRef = db.collection('users').doc(userEmail);
         await userRef.set({ notionKey: encryptedKey, notionDbId }, { merge: true });
 
-        console.log(`Stored encrypted Notion settings for ${userEmail}`);
+        logger.info(`Stored encrypted Notion settings for ${userEmail}`);
         return res.status(200).send({ success: true, text: "Notion setup saved securely." });
     } catch (err) {
         logger.error("Setup error:", err);
@@ -170,7 +170,7 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
             };
         }
 
-        console.log(`Data export for ${userEmail}`);
+        logger.info(`Data export for ${userEmail}`);
         return res.status(200).send(exportData);
     } catch (err) {
         console.error("Export error:", err.message);
@@ -210,7 +210,7 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
         const userRef = db.collection('users').doc(userEmail);
         await userRef.delete();
 
-        console.log(`Account deleted for ${userEmail}`);
+        logger.info(`Account deleted for ${userEmail}`);
         return res.status(200).send({ success: true, text: "Your account data has been permanently deleted." });
     } catch (err) {
         console.error("Delete error:", err.message);
@@ -262,6 +262,10 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
     let email = null; // Declare email here for broader scope
     let mode = null;
+    let timeZone = body.timeZone;
+    if (typeof timeZone !== 'string' || timeZone.length > 50 || !/^[A-Za-z0-9_/\-]+$/.test(timeZone)) {
+        timeZone = 'Asia/Kolkata';
+    }
     let parsedImages = [];
 
     try {
@@ -342,7 +346,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 })
             ]);
 
-            let journalDate = new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' });
+            let journalDate = new Date().toLocaleDateString('en-US', { timeZone });
             if (extraction && extraction.date) {
                 journalDate = extraction.date;
                 logger.info(`Extracted Journal Date: ${journalDate}`, { requestId, authEmail: email, syncMode: mode, journalDate });
@@ -385,24 +389,24 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         let plannerData;
 
         if (mode === 'morning') {
-            console.log(`Parsing planner images for morning sync...`);
-            plannerData = await getPlannerDataFromImages(parsedImages, 'morning');
+            logger.info("Parsing planner images for morning sync...", { requestId, authEmail: email });
+            plannerData = await getPlannerDataFromImages(parsedImages, 'morning', timeZone);
 
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
                 return res.status(400).send({ error: plannerData.error });
             }
 
-            console.log("Starting parallel Morning sync...");
+            logger.info("Starting parallel Morning sync...", { requestId, authEmail: email });
 
             // Parallel: Add Events to Calendar AND Add Tasks to Google Tasks.
             const [eventResults, taskCount] = await Promise.all([
-                syncCalendarEvents(calendar, plannerData),
+                syncCalendarEvents(calendar, plannerData, timeZone),
                 syncGoogleTasks(tasks, plannerData)
             ]);
 
             msg = `Morning Sync Complete! Created ${eventResults.events} events, ${eventResults.reminders} reminders, and ${taskCount} tasks.`;
-            console.log(msg);
+            logger.info(msg, { requestId, authEmail: email });
 
             await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
             await incrementUsageCounters(userRef, parsedImages.length);
@@ -410,7 +414,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
         } else if (mode === 'evening') {
             // Re-scan images specifically looking for evening data (expenses, mood, etc).
-            console.log(`Parsing planner images for evening sync...`);
+            logger.info("Parsing planner images for evening sync...", { requestId, authEmail: email });
             plannerData = await getPlannerDataFromImages(parsedImages, 'evening');
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
@@ -426,7 +430,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             // ---- AUTO-CREATE SPREADSHEET IF MISSING ----
             let spreadsheetId = userData.spreadsheetId;
             if (!spreadsheetId) {
-                console.log("No spreadsheet found. Creating new one...");
+                logger.info("No spreadsheet found. Creating new one...", { requestId, authEmail: email });
                 const newSheet = await sheets.spreadsheets.create({
                     resource: {
                         properties: { title: "AI Planner Data" },
@@ -452,7 +456,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             }
 
             // PARALLEL EXECUTION: Sheets (Expenses, Health) and Notion (Image+Text)
-            console.log("Starting parallel Evening sync...");
+            logger.info("Starting parallel Evening sync...", { requestId, authEmail: email });
 
             const promises = [
                 syncExpensesToSheet(sheets, plannerData, spreadsheetId),
@@ -467,7 +471,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                     const brainDumpPromise = async () => {
                         try {
                             if (!plannerData.brainDump) return false;
-                            console.log("Starting parallel Brain Dump to Notion (Zero Storage)...");
+                            logger.info("Starting parallel Brain Dump to Notion (Zero Storage)...", { requestId, authEmail: email });
                             let fileId = null;
                             const firstImage = parsedImages[0];
                             if (firstImage && firstImage.base64Data) {
@@ -516,7 +520,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             return res.status(400).send({ error: `Invalid syncType: ${mode}` });
         }
 
-        console.log(msg);
+        logger.info(msg, { requestId, authEmail: email });
         res.status(200).send({ text: msg });
 
     } catch (error) {

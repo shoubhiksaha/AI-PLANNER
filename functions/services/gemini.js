@@ -69,7 +69,7 @@ async function fetchWithTimeout(url, options, timeout = 60000) {
 
 // Helper to call Gemini with a specific model
 async function callGeminiModel(model, apiKey, prompt, imagesArr) {
-    console.log(`Attempting Gemini model: ${model}...`);
+    logger.info(`Attempting Gemini model: ${model}...`);
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const parts = imagesArr.map(img => ({ inlineData: { mimeType: img.mimeType, data: img.base64Data } }));
@@ -155,7 +155,7 @@ async function getPlannerDataFromImages(parsedImages, syncType) {
         } catch (error) {
             lastError = error;
             if (models.indexOf(model) < models.length - 1) {
-                console.log(`Falling back to next model...`);
+                logger.info(`Falling back to next model...`);
             }
         }
     }
