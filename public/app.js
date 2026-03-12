@@ -2,7 +2,7 @@
 // Extracted from inline <script type="module"> for CSP compliance
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
 
 // FIREBASE CONFIG
 const firebaseConfig = {
@@ -19,6 +19,20 @@ const auth = getAuth(app);
 
 if (window.location.hostname === "localhost" && window.location.search.includes("emulator=true")) {
     connectAuthEmulator(auth, "http://127.0.0.1:9099");
+    
+    // Non-production test auth path for E2E Playwright tests
+    window.e2eLogin = async (email, password) => {
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+        } catch (e) {
+            // Auto-provision the test user in the emulator if they don't exist
+            if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
+                await createUserWithEmailAndPassword(auth, email, password);
+            } else {
+                throw e;
+            }
+        }
+    };
 }
 
 // STATE

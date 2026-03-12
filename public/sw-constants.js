@@ -24,7 +24,8 @@
         '/gear.html',
         '/planner.html',
         'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap',
-        'https://cdn-icons-png.flaticon.com/512/2921/2921226.png'
+        '/icon-192.png',
+        '/icon-512.png'
     ];
 
 })(typeof module !== 'undefined' && module.exports ? module.exports : (self.SW_CONSTANTS = {}));

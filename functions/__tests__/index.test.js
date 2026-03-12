@@ -367,12 +367,14 @@ describe('index.js Integration Tests', () => {
                 return { ok: true, json: async () => ({}) };
             });
         });
-
         test('returns 413 Payload Too Large when body size exceeds 100MB', async () => {
+            req.body.syncType = 'morning';
+            req.body.token = 'valid-token';
             req.body = { data: "A".repeat(101_000_000) };
+            req.rawBody = Buffer.alloc(101_000_001); // Mock Firebase's raw bytes buffer
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(413);
-            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Payload too large" }));
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Payload too large. Max 100MB allowed." }));
         });
 
         test('returns 429 when rate limit exceeded', async () => {
@@ -386,7 +388,7 @@ describe('index.js Integration Tests', () => {
             req.body.token = null;
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(401);
-            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Missing Google OAuth Token" }));
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Unauthorized" }));
         });
 
         test('rejects request with invalid syncType', async () => {
@@ -979,14 +981,14 @@ describe('index.js Integration Tests', () => {
             req.method = 'GET';
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(405);
-            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Method not allowed" }));
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Method Not Allowed" }));
         });
 
         test('rejects non-JSON content-type for syncPlanner with 415', async () => {
             req.headers['content-type'] = 'text/plain';
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(415);
-            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Content-Type must be application/json" }));
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Unsupported Media Type. Expected application/json" }));
         });
     });
 
