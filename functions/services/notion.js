@@ -33,7 +33,7 @@ function decryptStoredNotionKey(text) {
             const val = _decryptGcmWithKey(text, getCryptoKeyNew());
             if (val) return { value: val, needsMigration: false };
         }
-    } catch (e) { }
+    } catch (e) { /* ignore */ }
 
     try {
         const oldKey = getCryptoKeyOld();
