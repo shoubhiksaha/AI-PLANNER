@@ -169,6 +169,7 @@ Config:
 | [SECURITY_CSP_PLAN.md](SECURITY_CSP_PLAN.md) | CSP migration plan (✅ all phases complete) |
 | [PROJECT_CHANGELOG](PROJECT_CHANGELOG_AND_CURRENT_ARCHITECTURE.md) | Full change history & current architecture |
 | [BREACH_RESPONSE_PLAN.md](BREACH_RESPONSE_PLAN.md) | Data breach response process |
+| [OAuth Verification Pack](docs/oauth-verification/README.md) | Scope justifications, reviewer demo script, and test account template |
 
 ---
 

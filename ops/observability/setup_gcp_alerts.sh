@@ -19,6 +19,8 @@ PROJECT_ID="${PROJECT_ID:-}"
 REGION="${REGION:-us-central1}"
 SERVICE_REGEX="${SERVICE_REGEX:-syncplanner.*}"
 EMAIL_ADDRESS="${EMAIL_ADDRESS:-}"
+SLACK_CHANNEL_ID="${SLACK_CHANNEL_ID:-}"
+SLACK_AUTH_TOKEN="${SLACK_AUTH_TOKEN:-}"
 NOTIFICATION_CHANNELS="${NOTIFICATION_CHANNELS:-}"
 
 if [[ -z "${PROJECT_ID}" ]]; then
@@ -65,6 +67,27 @@ if [[ -n "${EMAIL_ADDRESS}" ]]; then
         echo "Reusing existing email channel: ${existing_email_channel}"
     fi
     CHANNEL_IDS+=("${existing_email_channel}")
+fi
+
+if [[ -n "${SLACK_CHANNEL_ID}" && -n "${SLACK_AUTH_TOKEN}" ]]; then
+    echo "Ensuring Slack notification channel for ${SLACK_CHANNEL_ID}..."
+    existing_slack_channel="$(gcloud monitoring channels list \
+        --project "${PROJECT_ID}" \
+        --filter "type=\"slack\" AND labels.channel_name=\"${SLACK_CHANNEL_ID}\"" \
+        --format "value(name)" | head -n1 || true)"
+
+    if [[ -z "${existing_slack_channel}" ]]; then
+        existing_slack_channel="$(gcloud monitoring channels create \
+            --project "${PROJECT_ID}" \
+            --display-name "AI Planner Alerts Slack (${SLACK_CHANNEL_ID})" \
+            --type slack \
+            --channel-labels "channel_name=${SLACK_CHANNEL_ID},auth_token=${SLACK_AUTH_TOKEN}" \
+            --format "value(name)")"
+        echo "Created Slack channel: ${existing_slack_channel}"
+    else
+        echo "Reusing existing Slack channel: ${existing_slack_channel}"
+    fi
+    CHANNEL_IDS+=("${existing_slack_channel}")
 fi
 
 CHANNEL_JSON="[]"

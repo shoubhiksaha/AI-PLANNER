@@ -508,6 +508,16 @@ const triggerSync = async (syncType) => {
 
         timers.forEach(t => clearTimeout(t)); // Stop simulated progress
 
+        document.getElementById('file-upload').value = ''; // Reset input
+        filesAsBase64 = [];
+        document.getElementById('upload-ui').innerHTML = `
+            <span class="text-4xl block mb-2 opacity-80">📸</span>
+            <span class="text-sm font-medium text-theme-muted mb-1">Tap to Upload or Drag & Drop (Max 5)</span>
+            <span class="text-xs text-theme-muted opacity-75">e.g., Take a photo of your handwritten planner</span>
+            <div class="absolute inset-0 opacity-5 bg-[url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center mix-blend-overlay rounded-xl z-0 pointer-events-none"></div>
+        `;
+        updateDashButtons(false);
+
         if (res.ok) {
             statusArea.classList.remove('text-red-600', 'bg-red-50', 'text-blue-600', 'bg-blue-50');
             statusArea.classList.add('text-green-600', 'bg-green-50');

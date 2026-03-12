@@ -1,10 +1,12 @@
 name: E2E Smoke Test
 on:
-  deployment_status:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   smoke-test:
-    if: github.event.deployment_status.state == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -21,11 +23,17 @@ jobs:
           npm ci || npm install
           npx playwright install --with-deps chromium
 
+      - name: Serve Frontend Locally
+        working-directory: ./public
+        run: |
+          python3 -m http.server 3000 &
+          sleep 3
+
       - name: Run Playwright Smoke Test
         working-directory: ./e2e
         run: npx playwright test tests/sync.spec.js --project=chromium
         env:
-          BASE_URL: ${{ github.event.deployment_status.target_url }}
+          BASE_URL: http://localhost:3000
           CI: true
 
       - uses: actions/upload-artifact@v4
