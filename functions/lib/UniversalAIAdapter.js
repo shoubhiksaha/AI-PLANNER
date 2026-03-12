@@ -7,22 +7,45 @@ class UniversalAIAdapter {
      * @param {string} [config.baseUrl] - Optional override, required for azure
      * @param {string} [config.apiVersion] - Required for azure
      */
-    constructor({ apiKey, provider = 'openai', modelName = 'gpt-4o', baseUrl, apiVersion }) {
+    constructor({ apiKey, provider = 'openai', modelName, baseUrl, apiVersion }) {
         this.apiKey = apiKey;
         this.provider = provider.toLowerCase();
-        this.modelName = modelName;
-        this.baseUrl = baseUrl;
         this.apiVersion = apiVersion;
 
-        // Auto-configure URLs if not provided
-        if (!this.baseUrl) {
-            if (this.provider === 'openai') {
-                this.baseUrl = 'https://api.openai.com/v1/chat/completions';
-            } else if (this.provider === 'anthropic') {
-                this.baseUrl = 'https://api.anthropic.com/v1/messages';
-            } else if (this.provider === 'google') {
-                this.baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${this.modelName}:generateContent`;
+        // Auto-configure URLs and Default Models if not explicitly provided
+        if (this.provider === 'openai') {
+            this.baseUrl = baseUrl || 'https://api.openai.com/v1/chat/completions';
+            this.modelName = modelName || 'gpt-4o';
+        } else if (this.provider === 'anthropic') {
+            this.baseUrl = baseUrl || 'https://api.anthropic.com/v1/messages';
+            this.modelName = modelName || 'claude-3-haiku-20240307';
+        } else if (this.provider === 'google') {
+            this.modelName = modelName || 'gemini-1.5-flash';
+            this.baseUrl = baseUrl || `https://generativelanguage.googleapis.com/v1beta/models/${this.modelName}:generateContent`;
+        } else if (Object.values(['groq', 'deepseek', 'ollama', 'local']).includes(this.provider)) {
+            if (!baseUrl) throw new Error(`${this.provider} requires a 'baseUrl' to be configured.`);
+            this.baseUrl = baseUrl;
+            this.modelName = modelName || 'gpt-4o';
+        } else if (this.provider === 'azure') {
+            if (!baseUrl || !this.apiVersion) throw new Error("Azure provider requires 'baseUrl' (endpoint) and 'apiVersion'.");
+            this.baseUrl = baseUrl;
+            this.modelName = modelName || 'gpt-4o';
+        }
+    }
+
+    async _fetchWithTimeout(url, options, timeout = 60000) {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        try {
+            const response = await fetch(url, { ...options, signal: controller.signal });
+            clearTimeout(id);
+            return response;
+        } catch (error) {
+            clearTimeout(id);
+            if (error.name === 'AbortError') {
+                throw new Error(`LLM provider '${this.provider}' request timed out after ${timeout}ms.`);
             }
+            throw error;
         }
     }
 
@@ -73,7 +96,7 @@ class UniversalAIAdapter {
 
         if (this.provider === 'ollama') payload.stream = false;
 
-        const response = await fetch(this.baseUrl, {
+        const response = await this._fetchWithTimeout(this.baseUrl, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${this.apiKey}`,
@@ -103,7 +126,7 @@ class UniversalAIAdapter {
         }
 
         const url = `${this.baseUrl}/openai/deployments/${this.modelName}/chat/completions?api-version=${this.apiVersion}`;
-        const response = await fetch(url, {
+        const response = await this._fetchWithTimeout(url, {
             method: 'POST',
             headers: {
                 'api-key': this.apiKey, // Azure uses api-key instead of Bearer
@@ -134,7 +157,7 @@ class UniversalAIAdapter {
 
         const payload = { contents: [{ parts: parts }] };
 
-        const response = await fetch(url, {
+        const response = await this._fetchWithTimeout(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -170,7 +193,7 @@ class UniversalAIAdapter {
             messages: [{ role: 'user', content: content }]
         };
 
-        const response = await fetch(this.baseUrl, {
+        const response = await this._fetchWithTimeout(this.baseUrl, {
             method: 'POST',
             headers: {
                 'x-api-key': this.apiKey,

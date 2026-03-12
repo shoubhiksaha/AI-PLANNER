@@ -27,6 +27,7 @@ let filesAsBase64 = []; // Array to store multiple images (max 5)
 // Keep OAuth token only in memory (not session/local storage)
 let googleAccessToken = null;
 let profileUnsubscribe = null;
+let userProfile = null;
 
 const helpers = window.AppHelpers;
 if (!helpers) {
@@ -174,7 +175,8 @@ async function checkUserSetup(user) {
         if (profileUnsubscribe) profileUnsubscribe();
         profileUnsubscribe = onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
-                updateGamificationUI(docSnap.data());
+                userProfile = docSnap.data();
+                updateGamificationUI(userProfile);
             }
         });
 
@@ -202,13 +204,13 @@ function updateGamificationUI(data) {
     const hasBYOK = !!data.geminiKey || !!data.byokConfig;
 
     // Head HUD
-    document.getElementById('streak-badge').innerHTML = `🔥 ${currentStreak}`;
-    document.getElementById('credits-badge').innerHTML = hasBYOK ? `🪙 ∞` : `🪙 ${tierCredits + boosterCredits}`;
+    document.getElementById('streak-badge').textContent = `🔥 ${currentStreak}`;
+    document.getElementById('credits-badge').textContent = hasBYOK ? `🪙 ∞` : `🪙 ${tierCredits + boosterCredits}`;
     
     // Reports Metrics
-    document.getElementById('reports-current-streak').innerHTML = `🔥 ${currentStreak}`;
-    document.getElementById('reports-highest-streak').innerHTML = `${highestStreak}`;
-    document.getElementById('reports-streak-freezes').innerHTML = `❄️ ${streakFreezes}`;
+    document.getElementById('reports-current-streak').textContent = `🔥 ${currentStreak}`;
+    document.getElementById('reports-highest-streak').textContent = `${highestStreak}`;
+    document.getElementById('reports-streak-freezes').textContent = `❄️ ${streakFreezes}`;
 }
 
 document.getElementById('save-setup-btn').addEventListener('click', async () => {
@@ -661,9 +663,9 @@ document.getElementById('close-paywall').addEventListener('click', () => {
     document.getElementById('paywall-modal').classList.remove('flex');
 });
 
-const handlePaymentClick = (tierName) => {
+const handlePaymentClick = (e, tierName) => {
     // Placeholder for Cashfree SDK integration
-    const btn = event.currentTarget;
+    const btn = e.currentTarget;
     const origText = btn.innerHTML;
     btn.innerHTML = `<span class="spinner w-4 h-4 border-white mr-2"></span> Redirecting to Cashfree...`;
     setTimeout(() => {
@@ -672,9 +674,9 @@ const handlePaymentClick = (tierName) => {
     }, 1500);
 };
 
-document.getElementById('buy-booster-btn').addEventListener('click', () => handlePaymentClick('Booster Credits (₹19)'));
-document.getElementById('upgrade-standard-btn').addEventListener('click', () => handlePaymentClick('Standard Tier (₹29/mo)'));
-document.getElementById('upgrade-pro-btn').addEventListener('click', () => handlePaymentClick('Pro Tier (₹49/mo)'));
+document.getElementById('buy-booster-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
+document.getElementById('upgrade-standard-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
+document.getElementById('upgrade-pro-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Pro Tier (₹49/mo)'));
 const loadSyncHistory = async (email) => {
     import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, orderBy, limit, getDocs }) => {
         const db = getFirestore(app);

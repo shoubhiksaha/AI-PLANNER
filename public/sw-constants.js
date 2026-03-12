@@ -17,7 +17,6 @@
         '/index.html',
         '/manifest.json',
         '/tailwind.css',
-        '/styles.css',
         '/app-helpers.js',
         '/app.js',
         '/privacy.html',

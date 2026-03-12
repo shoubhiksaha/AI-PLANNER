@@ -158,7 +158,7 @@ function checkFeaturesAndCredits(userData, numImages, mode) {
         if (numImages > 5) return { allowed: false, error: "Pro tier is limited to 5 pages per sync.", code: 403 };
     }
 
-    const hasBYOK = !!userData.geminiKey || !!userData.byokConfig; 
+    const hasBYOK = !!userData.geminiKey || !!(userData.byokConfig && userData.byokConfig.apiKey); 
     let tierCredits = userData.tierCredits || 0;
     let boosterCredits = userData.boosterCredits || 0;
 
@@ -170,32 +170,24 @@ function checkFeaturesAndCredits(userData, numImages, mode) {
     return { allowed: true };
 }
 
-async function applyGamificationAndDeduct(userRef, userData, numImages) {
-    const hasBYOK = !!userData.geminiKey || !!userData.byokConfig; 
-    let tierCredits = userData.tierCredits || 0;
-    let boosterCredits = userData.boosterCredits || 0;
+async function applyGamificationMilestones(userRef) {
+    try {
+        return await admin.firestore().runTransaction(async (t) => {
+            const snap = await t.get(userRef);
+            if (!snap.exists) return null;
+            const userData = snap.data();
 
-    if (!hasBYOK) {
-        let creditsToDeduct = numImages;
-        if (tierCredits >= creditsToDeduct) {
-            tierCredits -= creditsToDeduct;
-        } else {
-            creditsToDeduct -= tierCredits;
-            tierCredits = 0;
-            boosterCredits -= creditsToDeduct;
-        }
-    }
+            let currentStreak = userData.currentStreak || 0;
+            let highestStreak = userData.highestStreak || 0;
+            let streakFreezes = userData.streakFreezes || 0;
+            let dailySyncCount = userData.dailySyncCount || 0;
+            let lastSyncDateStr = userData.lastSyncDate;
+            let boosterCredits = userData.boosterCredits || 0;
 
-    let currentStreak = userData.currentStreak || 0;
-    let highestStreak = userData.highestStreak || 0;
-    let streakFreezes = userData.streakFreezes || 0;
-    let dailySyncCount = userData.dailySyncCount || 0;
-    let lastSyncDateStr = userData.lastSyncDate;
+            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            let diffDays = 0;
 
-    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    let diffDays = 0;
-
-    if (!lastSyncDateStr) {
+            if (!lastSyncDateStr) {
         diffDays = 1;
         currentStreak = 1;
         dailySyncCount = 1;
@@ -272,18 +264,22 @@ async function applyGamificationAndDeduct(userRef, userData, numImages) {
         }
     }
 
-    const updates = {
-        tierCredits,
-        boosterCredits,
-        currentStreak,
-        highestStreak,
-        streakFreezes,
-        dailySyncCount,
-        lastSyncDate: todayStr
-    };
+            const updates = {
+                boosterCredits,
+                currentStreak,
+                highestStreak,
+                streakFreezes,
+                dailySyncCount,
+                lastSyncDate: todayStr
+            };
 
-    await userRef.set(updates, { merge: true });
-    return milestoneMsg;
+            t.set(userRef, updates, { merge: true });
+            return milestoneMsg;
+        });
+    } catch (err) {
+        console.warn("Best-effort gamification milestone calculation failed:", err);
+        return null;
+    }
 }
 
 async function getDecryptedNotionKeyAndMigrate(userRef, userData) {
@@ -522,13 +518,68 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         const userDoc = await userRef.get();
         let rawUserData = userDoc.exists ? userDoc.data() : {};
         
-        // Ensure Gamification Defaults exist
-        let userData = await initializeGamificationProfile(userRef, rawUserData);
+        // --- GAMIFICATION: Transactional Feature Guarding & Credit Check ---
+        let userData;
+        try {
+            userData = await db.runTransaction(async (t) => {
+                const docSnap = await t.get(userRef);
+                let rawData = docSnap.exists ? docSnap.data() : {};
+                
+                // Emulate initializeGamificationProfile
+                const defaults = {
+                    tier: 'free', tierCredits: 15, boosterCredits: 0,
+                    currentStreak: 0, highestStreak: 0, streakFreezes: 0,
+                    dailySyncCount: 0, lastSyncDate: null, subscriptionRenewalDate: null
+                };
+                let needsUpdate = false;
+                const updateObj = {};
+                for (const [key, val] of Object.entries(defaults)) {
+                    if (rawData[key] === undefined) {
+                        updateObj[key] = val;
+                        rawData[key] = val;
+                        needsUpdate = true;
+                    }
+                }
 
-        // --- GAMIFICATION: Feature Guarding & Credit Check ---
-        const check = checkFeaturesAndCredits(userData, parsedImages.length, mode);
-        if (!check.allowed) {
-            return res.status(check.code).send({ error: check.error });
+                const check = checkFeaturesAndCredits(rawData, parsedImages.length, mode);
+                if (!check.allowed) {
+                    throw new Error(JSON.stringify({ code: check.code, error: check.error }));
+                }
+
+                // Deduct credits to prevent concurrent overspending
+                const hasBYOK = !!rawData.geminiKey || !!(rawData.byokConfig && rawData.byokConfig.apiKey); 
+                if (!hasBYOK) {
+                    let tierCredits = rawData.tierCredits;
+                    let boosterCredits = rawData.boosterCredits;
+                    let creditsToDeduct = parsedImages.length;
+                    
+                    if (tierCredits >= creditsToDeduct) {
+                        tierCredits -= creditsToDeduct;
+                    } else {
+                        creditsToDeduct -= tierCredits;
+                        tierCredits = 0;
+                        boosterCredits -= creditsToDeduct;
+                    }
+                    updateObj.tierCredits = tierCredits;
+                    updateObj.boosterCredits = boosterCredits;
+                    rawData.tierCredits = tierCredits;
+                    rawData.boosterCredits = boosterCredits;
+                    needsUpdate = true;
+                }
+
+                if (needsUpdate) {
+                    t.set(userRef, updateObj, { merge: true });
+                }
+                return rawData;
+            });
+        } catch (err) {
+            try {
+                const parsed = JSON.parse(err.message);
+                return res.status(parsed.code).send({ error: parsed.error });
+            } catch(e) {
+                console.error("Credit check transaction failed:", err);
+                return res.status(500).send({ error: "Failed to verify or deduct sync credits." });
+            }
         }
 
         // Initialize Services
@@ -589,7 +640,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 children: childrenBlocks
             });
             msg = `Journal synced to Notion! Date: ${journalDate}`;
-            const milestoneMsg = await applyGamificationAndDeduct(userRef, userData, parsedImages.length);
+            const milestoneMsg = await applyGamificationMilestones(userRef);
             if (milestoneMsg) msg += `\n${milestoneMsg}`;
             await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
             await incrementUsageCounters(userRef, parsedImages.length);
@@ -619,7 +670,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             msg = `Morning Sync Complete! Created ${eventResults.events} events, ${eventResults.reminders} reminders, and ${taskCount} tasks.`;
             console.log(msg);
 
-            const milestoneMsg = await applyGamificationAndDeduct(userRef, userData, parsedImages.length);
+            const milestoneMsg = await applyGamificationMilestones(userRef);
             if (milestoneMsg) msg += `\n${milestoneMsg}`;
 
             await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
@@ -727,7 +778,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             if (successMessages.length === 0) msg = "Night Sync output: No items found to sync.";
             else msg = "Night Sync Complete: " + successMessages.join(" ");
 
-            const milestoneMsg = await applyGamificationAndDeduct(userRef, userData, parsedImages.length);
+            const milestoneMsg = await applyGamificationMilestones(userRef);
             if (milestoneMsg) msg += `\n${milestoneMsg}`;
 
             await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
