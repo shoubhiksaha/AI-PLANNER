@@ -433,7 +433,7 @@ describe('validateTokenFormat', () => {
     test('rejects non-string inputs', () => {
         expect(validateTokenFormat(null)).toBe(false);
         expect(validateTokenFormat(undefined)).toBe(false);
-        expect(validateTokenFormat(12345678901234567890)).toBe(false);
+        expect(validateTokenFormat(123456789012345)).toBe(false);
         expect(validateTokenFormat({})).toBe(false);
         expect(validateTokenFormat([])).toBe(false);
     });
