@@ -36,10 +36,18 @@ jest.mock('firebase-admin', () => {
         increment: jest.fn((n) => `mockIncrement(${n})`)
     };
 
+    const mockTransactionGet = jest.fn(async (ref) => ref.get());
+    const mockTransactionSet = jest.fn((ref, data, opts) => ref.set(data, opts));
+    const mockRunTransaction = jest.fn(async (callback) => {
+        const t = { get: mockTransactionGet, set: mockTransactionSet };
+        return await callback(t);
+    });
+
     return {
         initializeApp: jest.fn(),
         firestore: Object.assign(jest.fn(() => ({
-            collection: mockCollection
+            collection: mockCollection,
+            runTransaction: mockRunTransaction
         })), { FieldValue }),
         auth: jest.fn(() => ({
             verifyIdToken: mockVerifyIdToken

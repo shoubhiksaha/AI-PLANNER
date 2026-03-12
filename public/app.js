@@ -26,6 +26,8 @@ let currentUser = null;
 let filesAsBase64 = []; // Array to store multiple images (max 5)
 // Keep OAuth token only in memory (not session/local storage)
 let googleAccessToken = null;
+let profileUnsubscribe = null;
+let userProfile = null;
 
 const helpers = window.AppHelpers;
 if (!helpers) {
@@ -142,10 +144,15 @@ auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
         document.getElementById('user-email').textContent = user.email;
+        document.getElementById('gamification-bars').classList.remove('hidden');
+        document.getElementById('gamification-bars').classList.add('flex');
         await checkUserSetup(user);
     } else {
         currentUser = null;
         googleAccessToken = null;
+        if (profileUnsubscribe) { profileUnsubscribe(); profileUnsubscribe = null; }
+        document.getElementById('gamification-bars').classList.add('hidden');
+        document.getElementById('gamification-bars').classList.remove('flex');
         switchView('view-login');
     }
 });
@@ -157,12 +164,21 @@ document.getElementById('logout-btn').addEventListener('click', () => {
 // --- 2. SETUP FLOW ---
 async function checkUserSetup(user) {
     try {
-        const { getFirestore, doc, getDoc } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+        const { getFirestore, doc, getDoc, onSnapshot } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
         const db = getFirestore(app);
 
         // Check Firestore for profile
         const userRef = doc(db, "users", user.email);
         const snap = await getDoc(userRef);
+
+        // Setup real-time listener for Gamification & Tier logic
+        if (profileUnsubscribe) profileUnsubscribe();
+        profileUnsubscribe = onSnapshot(userRef, (docSnap) => {
+            if (docSnap.exists()) {
+                userProfile = docSnap.data();
+                updateGamificationUI(userProfile);
+            }
+        });
 
         if (snap.exists() && snap.data().notionKey) {
             // User has setup Notion -> Go to Dashboard
@@ -177,6 +193,24 @@ async function checkUserSetup(user) {
         console.error("Profile Load Error:", err);
         switchView('view-setup');
     }
+}
+
+function updateGamificationUI(data) {
+    const tierCredits = data.tierCredits || 0;
+    const boosterCredits = data.boosterCredits || 0;
+    const currentStreak = data.currentStreak || 0;
+    const highestStreak = data.highestStreak || 0;
+    const streakFreezes = data.streakFreezes || 0;
+    const hasBYOK = !!data.geminiKey || !!data.byokConfig;
+
+    // Head HUD
+    document.getElementById('streak-badge').textContent = `🔥 ${currentStreak}`;
+    document.getElementById('credits-badge').textContent = hasBYOK ? `🪙 ∞` : `🪙 ${tierCredits + boosterCredits}`;
+    
+    // Reports Metrics
+    document.getElementById('reports-current-streak').textContent = `🔥 ${currentStreak}`;
+    document.getElementById('reports-highest-streak').textContent = `${highestStreak}`;
+    document.getElementById('reports-streak-freezes').textContent = `❄️ ${streakFreezes}`;
 }
 
 document.getElementById('save-setup-btn').addEventListener('click', async () => {
@@ -222,8 +256,14 @@ document.getElementById('skip-setup-btn').addEventListener('click', () => {
 
 // Guide Modal
 const modal = document.getElementById('guide-modal');
-document.getElementById('open-guide').addEventListener('click', () => modal.classList.remove('hidden'));
-document.getElementById('close-guide').addEventListener('click', () => modal.classList.add('hidden'));
+document.getElementById('open-guide').addEventListener('click', () => {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+});
+document.getElementById('close-guide').addEventListener('click', () => {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+});
 
 // --- 3. DASHBOARD LOGIC ---
 const fileInput = document.getElementById('file-upload');
@@ -293,16 +333,27 @@ const renderThumbnails = () => {
 const handleFiles = async (files) => {
     if (!files || files.length === 0) return;
 
-    // Remaining capacity check
-    const remainingSlots = 5 - filesAsBase64.length;
+    // Feature Guarding: Check limits based on Tier
+    const tier = userProfile?.tier || 'free';
+    const limit = tier === 'free' ? 1 : tier === 'standard' ? 3 : 5;
+    const remainingSlots = limit - filesAsBase64.length;
+
     if (remainingSlots <= 0) {
-        alert("You have reached the maximum of 5 images.");
+        document.getElementById('paywall-message').textContent = tier === 'free' 
+            ? "Free tier is limited to 1 page per document. Upgrade to Standard or Pro to batch upload multiple pages!"
+            : "Standard tier limit reached. Upgrade to Pro for 5-page batch uploads!";
+        document.getElementById('paywall-modal').classList.remove('hidden');
+        document.getElementById('paywall-modal').classList.add('flex');
         return;
     }
 
     const filesToProcess = Array.from(files).slice(0, remainingSlots);
     if (files.length > remainingSlots) {
-        alert(`You can only add ${remainingSlots} more image(s). Only the first ${remainingSlots} were added.`);
+        document.getElementById('paywall-message').textContent = tier === 'free' 
+            ? `Free tier is limited to 1 page per document. Only the first image was added. Upgrade to batch upload!`
+            : `Your tier limit is ${limit} pages. Only ${remainingSlots} images were added. Upgrade for more!`;
+        document.getElementById('paywall-modal').classList.remove('hidden');
+        document.getElementById('paywall-modal').classList.add('flex');
     }
 
     dropZone.innerHTML = '<div class="spinner border-theme-text"></div><p class="mt-2 text-sm text-theme-muted">Processing images...</p>';
@@ -545,7 +596,87 @@ document.getElementById('back-to-dash-btn').addEventListener('click', () => {
     switchView('view-dashboard');
 });
 
-// Sync History Loader
+// Reports Navigation
+document.getElementById('toggle-reports-btn').addEventListener('click', () => {
+    switchView('view-reports');
+    if (currentUser) loadHeatmap(currentUser.email);
+});
+document.getElementById('back-to-dash-btn-reports').addEventListener('click', () => {
+    switchView('view-dashboard');
+});
+
+// Reports Heatmap Loader
+const loadHeatmap = async (email) => {
+    import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, where, getDocs }) => {
+        const db = getFirestore(app);
+        const heatmapGrid = document.getElementById('heatmap-grid');
+        if (!heatmapGrid) return;
+
+        heatmapGrid.innerHTML = '<div class="w-full flex justify-center py-4"><div class="spinner border-theme-text w-5 h-5"></div></div>';
+
+        try {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+            const q = query(
+                collection(db, "users", email, "syncHistory"),
+                where("timestamp", ">=", thirtyDaysAgo)
+            );
+            const snap = await getDocs(q);
+            
+            const daysMap = {};
+            snap.forEach(doc => {
+                const data = doc.data();
+                if(data.status === 'success' && data.timestamp) {
+                    const dateStr = data.timestamp.toDate().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                    daysMap[dateStr] = (daysMap[dateStr] || 0) + 1;
+                }
+            });
+
+            const boxes = [];
+            const today = new Date();
+            for(let i=29; i>=0; i--) {
+                const d = new Date(today);
+                d.setDate(d.getDate() - i);
+                const dStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                const count = daysMap[dStr] || 0;
+                
+                let colorClass = 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
+                if (count === 1) colorClass = 'bg-emerald-200 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-800';
+                else if (count === 2) colorClass = 'bg-emerald-400 dark:bg-emerald-700/60 border-emerald-500 dark:border-emerald-600';
+                else if (count >= 3) colorClass = 'bg-emerald-600 dark:bg-emerald-500 border-emerald-700 dark:border-emerald-400';
+
+                boxes.push(`<div title="${dStr}: ${count} sync(s)" class="w-5 h-5 sm:w-6 sm:h-6 rounded border ${colorClass} transition-all duration-300 cursor-help hover:scale-110 hover:shadow-sm"></div>`);
+            }
+            
+            heatmapGrid.innerHTML = boxes.join('');
+        } catch (err) {
+            console.error(err);
+            heatmapGrid.innerHTML = '<div class="text-xs text-red-500 w-full text-center">Failed to load heatmap</div>';
+        }
+    });
+};
+
+// --- MONETIZATION & CASHFREE PLACEHOLDERS ---
+document.getElementById('close-paywall').addEventListener('click', () => {
+    document.getElementById('paywall-modal').classList.add('hidden');
+    document.getElementById('paywall-modal').classList.remove('flex');
+});
+
+const handlePaymentClick = (e, tierName) => {
+    // Placeholder for Cashfree SDK integration
+    const btn = e.currentTarget;
+    const origText = btn.innerHTML;
+    btn.innerHTML = `<span class="spinner w-4 h-4 border-white mr-2"></span> Redirecting to Cashfree...`;
+    setTimeout(() => {
+        alert(`Cashfree Gateway Simulation for ${tierName}. Integration planned for next phase!`);
+        btn.innerHTML = origText;
+    }, 1500);
+};
+
+document.getElementById('buy-booster-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
+document.getElementById('upgrade-standard-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
+document.getElementById('upgrade-pro-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Pro Tier (₹49/mo)'));
 const loadSyncHistory = async (email) => {
     import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, orderBy, limit, getDocs }) => {
         const db = getFirestore(app);

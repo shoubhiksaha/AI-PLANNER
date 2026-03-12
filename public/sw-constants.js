@@ -10,14 +10,13 @@
 (function (exports) {
     'use strict';
 
-    exports.CACHE_NAME = 'ai-planner-v2';
+    exports.CACHE_NAME = 'ai-planner-v3';
 
     exports.ASSETS_TO_CACHE = [
         '/',
         '/index.html',
         '/manifest.json',
         '/tailwind.css',
-        '/styles.css',
         '/app-helpers.js',
         '/app.js',
         '/privacy.html',

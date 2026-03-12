@@ -66,7 +66,7 @@ describe('Service Worker Constants', () => {
     });
 
     test('ASSETS_TO_CACHE includes all critical app files', () => {
-        const requiredAssets = ['/', '/index.html', '/app.js', '/styles.css', '/manifest.json'];
+        const requiredAssets = ['/', '/index.html', '/app.js', '/manifest.json'];
         requiredAssets.forEach(asset => {
             expect(ASSETS_TO_CACHE).toContain(asset);
         });

@@ -114,6 +114,174 @@ async function resolveUserEmailFromGoogleToken(token) {
     return email.toLowerCase();
 }
 
+/**
+ * Ensures the user profile has the required base gamification/monetization fields.
+ * If missing, pads the user document with the Free Tier defaults and saves it.
+ */
+async function initializeGamificationProfile(userRef, userData) {
+    let needsUpdate = false;
+    const defaults = {
+        tier: 'free',
+        tierCredits: 15, // Free tier monthly allowance
+        boosterCredits: 0,
+        currentStreak: 0,
+        highestStreak: 0,
+        streakFreezes: 0,
+        dailySyncCount: 0,
+        lastSyncDate: null,
+        subscriptionRenewalDate: null
+    };
+
+    const updateObj = {};
+    for (const [key, val] of Object.entries(defaults)) {
+        if (userData[key] === undefined) {
+            updateObj[key] = val;
+            userData[key] = val; // Mutate local object so current execution has it
+            needsUpdate = true;
+        }
+    }
+
+    if (needsUpdate) {
+        await userRef.set(updateObj, { merge: true });
+    }
+    return userData;
+}
+
+function checkFeaturesAndCredits(userData, numImages, mode) {
+    const tier = userData.tier || 'free';
+    if (tier === 'free') {
+        if (numImages > 1) return { allowed: false, error: "Free tier is limited to 1 page per sync. Upgrade to Standard/Pro for multi-page batch processing 🚀", code: 403 };
+    } else if (tier === 'standard') {
+        if (mode === 'journal' && numImages > 3) return { allowed: false, error: "Standard tier is limited to 3 pages per Journal sync. Upgrade to Pro for 5 pages 🚀", code: 403 };
+        if ((mode === 'morning' || mode === 'evening') && numImages > 1) return { allowed: false, error: "Standard tier is limited to 1 page per Morning/Evening sync. Upgrade to Pro for 5 pages 🚀", code: 403 };
+    } else if (tier === 'pro') {
+        if (numImages > 5) return { allowed: false, error: "Pro tier is limited to 5 pages per sync.", code: 403 };
+    }
+
+    const hasBYOK = !!userData.geminiKey || !!(userData.byokConfig && userData.byokConfig.apiKey); 
+    let tierCredits = userData.tierCredits || 0;
+    let boosterCredits = userData.boosterCredits || 0;
+
+    if (!hasBYOK) {
+        if (tierCredits + boosterCredits < numImages) {
+            return { allowed: false, error: `Insufficient credits. Need ${numImages}, but have ${tierCredits + boosterCredits}. Please buy Booster Credits or Upgrade!`, code: 402 };
+        }
+    }
+    return { allowed: true };
+}
+
+async function applyGamificationMilestones(userRef) {
+    try {
+        return await admin.firestore().runTransaction(async (t) => {
+            const snap = await t.get(userRef);
+            if (!snap.exists) return null;
+            const userData = snap.data();
+
+            let currentStreak = userData.currentStreak || 0;
+            let highestStreak = userData.highestStreak || 0;
+            let streakFreezes = userData.streakFreezes || 0;
+            let dailySyncCount = userData.dailySyncCount || 0;
+            let lastSyncDateStr = userData.lastSyncDate;
+            let boosterCredits = userData.boosterCredits || 0;
+
+            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            let diffDays = 0;
+
+            if (!lastSyncDateStr) {
+        diffDays = 1;
+        currentStreak = 1;
+        dailySyncCount = 1;
+    } else {
+        const todayParts = todayStr.split('-').map(Number);
+        const lastParts = lastSyncDateStr.split('-').map(Number);
+        const todayDate = new Date(todayParts[0], todayParts[1]-1, todayParts[2]);
+        const lastDate = new Date(lastParts[0], lastParts[1]-1, lastParts[2]);
+        diffDays = Math.round((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) {
+            dailySyncCount += 1;
+        } else if (diffDays === 1) {
+            currentStreak += 1;
+            dailySyncCount = 1;
+        } else {
+            let daysMissed = diffDays - 1;
+            if (streakFreezes >= daysMissed) {
+                streakFreezes -= daysMissed;
+                currentStreak += 1; 
+            } else {
+                currentStreak = 1;
+            }
+            dailySyncCount = 1;
+        }
+    }
+
+    if (currentStreak > highestStreak) highestStreak = currentStreak;
+
+    let milestoneMsg = null;
+    if (diffDays > 0 && currentStreak > 0 && currentStreak % 5 === 0) {
+        const fiveDaysAgo = new Date();
+        fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+        
+        const historySnap = await userRef.collection('syncHistory')
+            .where('timestamp', '>=', fiveDaysAgo)
+            .get();
+        
+        const dailyCountsMap = {};
+        dailyCountsMap[todayStr] = dailySyncCount;
+        
+        historySnap.forEach(doc => {
+            const data = doc.data();
+            if (data.timestamp && data.status === 'success') {
+                const dateStr = data.timestamp.toDate().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                if (dateStr !== todayStr) { 
+                    dailyCountsMap[dateStr] = (dailyCountsMap[dateStr] || 0) + 1;
+                }
+            }
+        });
+
+        const counts = [];
+        const todayParts = todayStr.split('-').map(Number);
+        for (let i = 0; i < 5; i++) {
+            const d = new Date(todayParts[0], todayParts[1]-1, todayParts[2]);
+            d.setDate(d.getDate() - i);
+            const dStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            counts.push(dailyCountsMap[dStr] || 0);
+        }
+        
+        const minDaily = Math.min(...counts);
+
+        if (minDaily >= 3) {
+            milestoneMsg = `🎉 Amazing! ${currentStreak}-Day Streak (Min 3/day). Awarded Badge + 2 Freezes + 10 Booster Credits!`;
+            streakFreezes += 2;
+            boosterCredits += 10;
+        } else if (minDaily >= 2) {
+            milestoneMsg = `🔥 Great Job! ${currentStreak}-Day Streak (Min 2/day). Awarded Badge + 1 Freeze!`;
+            streakFreezes += 1;
+        } else if (minDaily >= 1) {
+            milestoneMsg = `🌟 Good Job! ${currentStreak}-Day Streak! Awarded Digital Badge!`;
+        } else {
+             milestoneMsg = `❄️ ${currentStreak}-Day Streak sustained using a Freeze!`;
+        }
+    }
+
+            const updates = {
+                boosterCredits,
+                currentStreak,
+                highestStreak,
+                streakFreezes,
+                dailySyncCount,
+                lastSyncDate: todayStr
+            };
+
+            t.set(userRef, updates, { merge: true });
+            return milestoneMsg;
+        });
+    } catch (err) {
+        console.warn("Best-effort gamification milestone calculation failed:", err);
+        return null;
+    }
+}
+
 async function getDecryptedNotionKeyAndMigrate(userRef, userData) {
     if (!userData?.notionKey) {
         return null;
@@ -344,11 +512,75 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         const auth = new google.auth.OAuth2();
         auth.setCredentials({ access_token: token });
 
-        // Load User Config from Firestore (This is where Notion Keys are securely stored)
+        // Load & Initialize User Config from Firestore
         const db = admin.firestore();
         const userRef = db.collection('users').doc(userEmail);
         const userDoc = await userRef.get();
-        let userData = userDoc.exists ? userDoc.data() : {};
+        let rawUserData = userDoc.exists ? userDoc.data() : {};
+        
+        // --- GAMIFICATION: Transactional Feature Guarding & Credit Check ---
+        let userData;
+        try {
+            userData = await db.runTransaction(async (t) => {
+                const docSnap = await t.get(userRef);
+                let rawData = docSnap.exists ? docSnap.data() : {};
+                
+                // Emulate initializeGamificationProfile
+                const defaults = {
+                    tier: 'free', tierCredits: 15, boosterCredits: 0,
+                    currentStreak: 0, highestStreak: 0, streakFreezes: 0,
+                    dailySyncCount: 0, lastSyncDate: null, subscriptionRenewalDate: null
+                };
+                let needsUpdate = false;
+                const updateObj = {};
+                for (const [key, val] of Object.entries(defaults)) {
+                    if (rawData[key] === undefined) {
+                        updateObj[key] = val;
+                        rawData[key] = val;
+                        needsUpdate = true;
+                    }
+                }
+
+                const check = checkFeaturesAndCredits(rawData, parsedImages.length, mode);
+                if (!check.allowed) {
+                    throw new Error(JSON.stringify({ code: check.code, error: check.error }));
+                }
+
+                // Deduct credits to prevent concurrent overspending
+                const hasBYOK = !!rawData.geminiKey || !!(rawData.byokConfig && rawData.byokConfig.apiKey); 
+                if (!hasBYOK) {
+                    let tierCredits = rawData.tierCredits;
+                    let boosterCredits = rawData.boosterCredits;
+                    let creditsToDeduct = parsedImages.length;
+                    
+                    if (tierCredits >= creditsToDeduct) {
+                        tierCredits -= creditsToDeduct;
+                    } else {
+                        creditsToDeduct -= tierCredits;
+                        tierCredits = 0;
+                        boosterCredits -= creditsToDeduct;
+                    }
+                    updateObj.tierCredits = tierCredits;
+                    updateObj.boosterCredits = boosterCredits;
+                    rawData.tierCredits = tierCredits;
+                    rawData.boosterCredits = boosterCredits;
+                    needsUpdate = true;
+                }
+
+                if (needsUpdate) {
+                    t.set(userRef, updateObj, { merge: true });
+                }
+                return rawData;
+            });
+        } catch (err) {
+            try {
+                const parsed = JSON.parse(err.message);
+                return res.status(parsed.code).send({ error: parsed.error });
+            } catch(e) {
+                console.error("Credit check transaction failed:", err);
+                return res.status(500).send({ error: "Failed to verify or deduct sync credits." });
+            }
+        }
 
         // Initialize Services
         const calendar = google.calendar({ version: 'v3', auth });
@@ -377,7 +609,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
             const [fileUploadIds, extraction] = await Promise.all([
                 Promise.all(journalUploadPromises),
-                getPlannerDataFromImages(parsedImages, 'journal_date_only').catch(err => {
+                getPlannerDataFromImages(parsedImages, 'journal_date_only', userData).catch(err => {
                     console.warn("Date extraction failed:", err.message);
                     return { date: null };
                 })
@@ -408,6 +640,8 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 children: childrenBlocks
             });
             msg = `Journal synced to Notion! Date: ${journalDate}`;
+            const milestoneMsg = await applyGamificationMilestones(userRef);
+            if (milestoneMsg) msg += `\n${milestoneMsg}`;
             await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
             await incrementUsageCounters(userRef, parsedImages.length);
             return res.status(200).send({ text: msg });
@@ -418,7 +652,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
         if (mode === 'morning') {
             console.log(`Parsing planner images for morning sync...`);
-            plannerData = await getPlannerDataFromImages(parsedImages, 'morning');
+            plannerData = await getPlannerDataFromImages(parsedImages, 'morning', userData);
 
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
@@ -436,6 +670,9 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             msg = `Morning Sync Complete! Created ${eventResults.events} events, ${eventResults.reminders} reminders, and ${taskCount} tasks.`;
             console.log(msg);
 
+            const milestoneMsg = await applyGamificationMilestones(userRef);
+            if (milestoneMsg) msg += `\n${milestoneMsg}`;
+
             await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
             await incrementUsageCounters(userRef, parsedImages.length);
             return res.status(200).send({ text: msg });
@@ -443,7 +680,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         } else if (mode === 'evening') {
             // Re-scan images specifically looking for evening data (expenses, mood, etc).
             console.log(`Parsing planner images for evening sync...`);
-            plannerData = await getPlannerDataFromImages(parsedImages, 'evening');
+            plannerData = await getPlannerDataFromImages(parsedImages, 'evening', userData);
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
                 return res.status(400).send({ error: plannerData.error });
@@ -540,6 +777,9 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
             if (successMessages.length === 0) msg = "Night Sync output: No items found to sync.";
             else msg = "Night Sync Complete: " + successMessages.join(" ");
+
+            const milestoneMsg = await applyGamificationMilestones(userRef);
+            if (milestoneMsg) msg += `\n${milestoneMsg}`;
 
             await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
             await incrementUsageCounters(userRef, parsedImages.length);
@@ -667,104 +907,65 @@ async function fetchWithTimeout(url, options, timeout = 60000) {
     }
 }
 
-// Helper to call Gemini with a specific model
-async function callGeminiModel(model, apiKey, prompt, imagesArr) {
-    console.log(`Attempting Gemini model: ${model}...`);
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    const parts = imagesArr.map(img => ({ inlineData: { mimeType: img.mimeType, data: img.base64Data } }));
-    parts.push({ text: prompt });
-
-    const payload = {
-        contents: [{ parts }],
-        generationConfig: { responseMimeType: "application/json" }
-    };
-
-    let attempt = 0;
-    const maxRetries = 5;
-
-    while (attempt <= maxRetries) {
-        try {
-            const response = await fetchWithTimeout(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            }, 120000); // 120s timeout per attempt (Increased for reliability)
-
-            if (!response.ok) {
-                if (response.status === 429) {
-                    attempt++;
-                    if (attempt <= maxRetries) {
-                        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500; // Exponential backoff + jitter
-                        console.warn(`Rate limit (429) for ${model}. Retrying in ${delay.toFixed(0)}ms (Attempt ${attempt}/${maxRetries})...`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
-                    }
-                    throw new Error("RATE_LIMIT_EXHAUSTED");
-                }
-                if (response.status >= 500) throw new Error("SERVER_ERROR");
-                const body = await response.text();
-                throw new Error(`API_ERROR_${response.status}: ${body}`);
-            }
-
-            const result = await response.json();
-            if (!result.candidates || !result.candidates[0].content.parts[0].text) {
-                throw new Error("INVALID_RESPONSE");
-            }
-            return JSON.parse(result.candidates[0].content.parts[0].text);
-
-        } catch (error) {
-            const errMsg = error?.message || String(error || "Unknown error");
-            // Keep retrying if it's a 429 loop, otherwise throw to switch models
-            if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
-
-            console.warn(`Model ${model} failed: ${errMsg}`);
-            throw error;
-        }
-    }
-}
-
-
-async function getPlannerDataFromImages(parsedImages, syncType) {
+async function getPlannerDataFromImages(parsedImages, syncType, userData) {
     if (!parsedImages || parsedImages.length === 0) {
         throw new Error("INVALID_IMAGE_PAYLOAD");
     }
-    const geminiApiKey = GEMINI_API_KEY.value();
 
-    if (!geminiApiKey) {
-        throw new Error("MISSING_GEMINI_API_KEY");
-    }
-
-    // Choose prompt based on sync type
-    // Choose prompt based on sync type
     const prompt =
         syncType === 'evening' ? getEveningPrompt() :
             syncType === 'journal_date_only' ? getJournalDatePrompt() :
                 getMorningPrompt();
 
-    // Fallback Strategy: Diverse models to avoid shared quota limits
-    const models = [
-        "gemini-2.5-flash-lite", // "Ultra Fast" & Stable (Best for timeouts)
-        "gemini-2.5-flash",      // Balanced & Stable
-        "gemini-2.0-flash-lite", // Previous gen fast model
-        "gemini-flash-latest"    // Fallback
-    ];
+    const UniversalAIAdapter = require('./lib/UniversalAIAdapter');
+    let adapter;
+    const hasBYOK = userData && userData.byokConfig && userData.byokConfig.apiKey;
 
-    let lastError = null;
-
-    for (const model of models) {
+    if (hasBYOK) {
+        console.log(`Using BYOK adapter for provider: ${userData.byokConfig.provider}`);
+        adapter = new UniversalAIAdapter(userData.byokConfig);
         try {
-            return await callGeminiModel(model, geminiApiKey, prompt, parsedImages);
+            const responseText = await adapter.chat(prompt, parsedImages);
+            let cleaned = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+            return JSON.parse(cleaned);
         } catch (error) {
-            lastError = error;
-            // Continue to next model if available
-            if (models.indexOf(model) < models.length - 1) {
-                console.log(`Falling back to next model...`);
+            throw new Error(`BYOK Adapter Failed: ${error.message}`);
+        }
+    } else {
+        const geminiApiKey = GEMINI_API_KEY.value();
+        if (!geminiApiKey) {
+            throw new Error("MISSING_GEMINI_API_KEY");
+        }
+
+        const models = [
+            "gemini-2.5-flash-lite", 
+            "gemini-2.5-flash",      
+            "gemini-2.0-flash-lite", 
+            "gemini-flash-latest"    
+        ];
+
+        let lastError = null;
+        for (const model of models) {
+            try {
+                console.log(`Attempting Gemini model: ${model}...`);
+                adapter = new UniversalAIAdapter({
+                    apiKey: geminiApiKey,
+                    provider: 'google',
+                    modelName: model
+                });
+                const responseText = await adapter.chat(prompt, parsedImages);
+                let cleaned = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+                return JSON.parse(cleaned);
+            } catch (error) {
+                lastError = error;
+                if (models.indexOf(model) < models.length - 1) {
+                    console.log(`Falling back to next model...`);
+                }
             }
         }
+        throw new Error(`All Gemini models failed. Last error: ${lastError?.message || "Unknown error"}`);
     }
-
-    throw new Error(`All Gemini models failed. Last error: ${lastError?.message || "Unknown error"}`);
 }
 
 async function syncCalendarEvents(calendar, plannerData) {

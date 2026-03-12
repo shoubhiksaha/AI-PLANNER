@@ -1,4 +1,7 @@
 /* AI Planner - Custom Styles */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* === THEME VARIABLES === */
 :root {
@@ -30,7 +33,7 @@
 
 /* === BASE STYLES === */
 body {
-    font-family: 'Outfit', sans-serif;
+    font-family: Outfit, sans-serif;
     background-color: var(--bg-main);
     color: var(--text-main);
     transition: background-color 0.3s ease, color 0.3s ease;
@@ -68,10 +71,10 @@ body {
 
 /* === ANIMATIONS === */
 .fade-in {
-    animation: fadeIn 0.3s ease-in-out;
+    animation: fade-in 0.3s ease-in-out;
 }
 
-@keyframes fadeIn {
+@keyframes fade-in {
     from {
         opacity: 0;
         transform: translateY(10px);
@@ -106,7 +109,7 @@ body {
     display: none;
     flex-direction: column;
     gap: 4px;
-    animation: fadeIn 0.2s ease;
+    animation: fade-in 0.2s ease;
     align-items: center;
 }
 
@@ -149,7 +152,7 @@ body {
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
-    animation: fadeIn 0.2s forwards;
+    animation: fade-in 0.2s forwards;
 }
 
 .dark-mode .theme-item:hover::after,
