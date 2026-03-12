@@ -15,9 +15,11 @@
     "tailwindcss": "^3.4.19"
   },
   "scripts": {
-    "test": "cd functions && npm test && cd .. && jest --verbose --config public/jest.config.js",
+    "test": "npm run test:all",
     "test:backend": "cd functions && npm test",
     "test:frontend": "jest --verbose --config public/jest.config.js",
+    "test:e2e": "cd e2e && npx playwright test tests/sync.spec.js --project=chromium",
+    "test:all": "npm run test:backend && npm run test:frontend && npm run test:e2e",
     "test:rules": "cd functions && npm run test:rules"
   },
   "repository": {

@@ -69,6 +69,16 @@ graph TD
 
 ---
 
+## 📊 Production SLOs (Service Level Objectives)
+
+| Metric | Target | Description |
+|--------|--------|-------------|
+| **Success Rate (Availability)** | **99.9%** | API sync functions should return 200 OK or 4xx for expected application drops. |
+| **Latency (p95)** | **< 30s** | 95% of Gemini extraction and Notion upload chains should complete under 30 seconds. |
+| **Error Budget** | **0.1% / month** | Allowable 5xx failures per month trigger Slack/Email alerts via GCP Logging before causing outages. |
+
+---
+
 ## 📈 Project Evolution
 
 ### V1: The MVP
