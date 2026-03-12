@@ -1,7 +1,7 @@
 const { logger } = require("firebase-functions/logger");
 const { parseDateTime } = require("../utils");
 
-async function syncCalendarEvents(calendar, plannerData) {
+async function syncCalendarEvents(calendar, plannerData, timeZone = 'Asia/Kolkata') {
     let counts = { events: 0, reminders: 0 };
     for (const item of (plannerData.schedule || [])) {
         if ((item.block || item.reminder) && item.task) {
@@ -21,14 +21,14 @@ async function syncCalendarEvents(calendar, plannerData) {
 
             const sTime = toLocalISO(startTime);
             const eTime = toLocalISO(endTime);
-            console.log(`Creating Event: "${item.task}" Start: ${sTime} End: ${eTime}`);
+            logger.info(`Creating Event: "${item.task}" Start: ${sTime} End: ${eTime}`);
 
             await calendar.events.insert({
                 calendarId: 'primary',
                 resource: {
                     summary: item.task,
-                    start: { dateTime: sTime, timeZone: 'Asia/Kolkata' },
-                    end: { dateTime: eTime, timeZone: 'Asia/Kolkata' },
+                    start: { dateTime: sTime, timeZone: timeZone },
+                    end: { dateTime: eTime, timeZone: timeZone },
                     reminders: {
                         useDefault: false,
                         overrides: item.reminder ? [{ method: 'popup', minutes: 10 }] : [],
@@ -86,7 +86,7 @@ async function updateCompletedTasks(tasks, plannerData) {
         const matchingGoogleTask = googleTasks.find(gTask => gTask.title.trim().toLowerCase() === plannerTaskTitle.trim().toLowerCase());
 
         if (matchingGoogleTask) {
-            console.log(`Marking task completed: "${matchingGoogleTask.title}"`);
+            logger.info(`Marking task completed: "${matchingGoogleTask.title}"`);
             await tasks.tasks.patch({
                 tasklist: '@default',
                 task: matchingGoogleTask.id,

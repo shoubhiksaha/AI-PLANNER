@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy Policy - AI Planner</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="/tailwind.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&display=swap" rel="stylesheet">
     <style>
         body {
@@ -78,9 +78,8 @@
                     uploaded, the data resides on Notion's servers and is governed by Notion's Privacy Policy.</p>
             </div>
             <div>
-                <h4 class="font-bold">Google Workspace (Calendar/Tasks)</h4>
-                <p class="text-sm">We use read/write access to your Google Calendar and Tasks to sync your schedule. We
-                    do not store your calendar data.</p>
+                <h4 class="font-bold">Google Workspace (Calendar/Tasks/Drive/Sheets)</h4>
+                <p class="text-sm">We use read/write access to your Google Calendar and Tasks to sync your schedule. For the Evening Sync feature, we also request minimal Drive and Sheets access to automatically initialize and append to an "AI Planner Data" spreadsheet for your expenses and health tracking. We do not store your calendar or spreadsheet data.</p>
             </div>
         </div>
     </section>
@@ -90,7 +89,7 @@
         <p class="mb-2">We implement multiple layers of security:</p>
         <ul class="list-disc pl-6 space-y-2">
             <li><strong>Encryption in Transit</strong>: All data transmitted over HTTPS.</li>
-            <li><strong>Encryption at Rest</strong>: Your Notion API keys are encrypted with AES-256-CBC before storage.
+            <li><strong>Encryption at Rest</strong>: Your Notion API keys are encrypted with AES-256-GCM before storage.
                 The encryption key is managed via Google Cloud Secret Manager and never exposed in code.</li>
             <li><strong>Content Security Policy</strong>: Strict CSP headers prevent cross-site scripting (XSS) attacks.
             </li>
@@ -109,7 +108,7 @@
         </div>
         <ul class="list-disc pl-6 space-y-2">
             <li><strong>Email Address</strong>: Stored in Firestore to identify your account.</li>
-            <li><strong>Notion Integration Keys</strong>: Encrypted with AES-256-CBC and stored in Firestore. We cannot
+            <li><strong>Notion Integration Keys</strong>: Encrypted with AES-256-GCM and stored in Firestore. We cannot
                 read these without the Secret Manager encryption key.</li>
             <li><strong>No images, journal text, calendar data, or planner content is ever stored.</strong></li>
         </ul>

@@ -68,7 +68,7 @@ async function getDecryptedNotionKeyAndMigrate(userRef, userData) {
 // Helper to upload file to Notion (Direct Upload - Corrected 2-Step Flow)
 async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
     try {
-        console.log("Step 1: Init Notion Upload...");
+        logger.info("Step 1: Init Notion Upload...");
         const createRes = await fetch("https://api.notion.com/v1/file_uploads", {
             method: "POST",
             headers: {
@@ -86,7 +86,7 @@ async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
         const uploadObj = await createRes.json();
         const { id, upload_url } = uploadObj;
 
-        console.log(`Step 1 Success. ID: ${id}. Step 2: Uploading Binary...`);
+        logger.info(`Step 1 Success. ID: ${id}. Step 2: Uploading Binary...`);
 
         const form = new FormData();
         const blob = new Blob([fileBuffer], { type: mimeType });
@@ -103,7 +103,7 @@ async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
 
         if (!uploadRes.ok) throw new Error(`Notion Binary Upload Failed: ${await uploadRes.text()}`);
 
-        console.log(`Notion File Uploaded Successfully: ${id}`);
+        logger.info(`Notion File Uploaded Successfully: ${id}`);
         return id;
     } catch (e) {
         logger.error("Notion Direct Upload Error:", e);
