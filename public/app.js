@@ -88,6 +88,7 @@ const buildGoogleProvider = () => {
     const provider = new GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/calendar.events');
     provider.addScope('https://www.googleapis.com/auth/tasks');
+    provider.addScope('https://www.googleapis.com/auth/drive.file'); // Required for creating/editing the Expense Spreadsheet during Evening Sync
     return provider;
 };
 
