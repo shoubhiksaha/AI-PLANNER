@@ -305,9 +305,12 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
     const token = body.token;
     if (!token) return res.status(400).send({ error: "Missing token" });
 
+    const requestId = require('crypto').randomUUID();
+    let userEmail = "unknown";
+
     try {
         const decodedToken = await admin.auth().verifyIdToken(token);
-        const userEmail = decodedToken.email?.toLowerCase();
+        userEmail = decodedToken.email?.toLowerCase();
         if (!userEmail) return res.status(401).send({ error: "No email in token" });
 
         const rl = await checkRateLimit(userEmail, 'exportUserData', RATE_LIMIT_DEFAULT);
@@ -360,9 +363,12 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
     const token = body.token;
     if (!token) return res.status(400).send({ error: "Missing token" });
 
+    const requestId = require('crypto').randomUUID();
+    let userEmail = "unknown";
+
     try {
         const decodedToken = await admin.auth().verifyIdToken(token);
-        const userEmail = decodedToken.email?.toLowerCase();
+        userEmail = decodedToken.email?.toLowerCase();
         if (!userEmail) return res.status(401).send({ error: "No email in token" });
 
         const rl = await checkRateLimit(userEmail, 'deleteUserAccount', RATE_LIMIT_DEFAULT);
