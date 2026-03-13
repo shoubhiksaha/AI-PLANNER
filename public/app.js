@@ -725,11 +725,13 @@ const triggerSync = async (syncType) => {
 
         document.getElementById('file-upload').value = ''; // Reset input
         filesAsBase64 = [];
-        document.getElementById('upload-ui').innerHTML = `
-            <span class="text-4xl block mb-2 opacity-80">📸</span>
-            <span class="text-sm font-medium text-theme-muted mb-1">Tap to Upload or Drag & Drop (Max 5)</span>
-            <span class="text-xs text-theme-muted opacity-75">e.g., Take a photo of your handwritten planner</span>
-            <div class="absolute inset-0 opacity-5 bg-[url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center mix-blend-overlay rounded-xl z-0 pointer-events-none"></div>
+        dropZone.innerHTML = `
+            <div id="upload-ui" class="text-center group-hover:scale-105 transition-transform pointer-events-none w-full h-full flex flex-col items-center justify-center relative">
+                <span class="text-4xl block mb-2 opacity-80">📸</span>
+                <span class="text-sm font-medium text-theme-muted mb-1">Tap to Upload or Drag & Drop (Max 5)</span>
+                <span class="text-xs text-theme-muted opacity-75">e.g., Take a photo of your handwritten planner</span>
+                <div class="absolute inset-0 opacity-5 bg-[url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center mix-blend-overlay rounded-xl z-0 pointer-events-none"></div>
+            </div>
         `;
         updateDashButtons(false);
 
