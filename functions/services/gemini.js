@@ -124,20 +124,46 @@ async function callGeminiModel(model, apiKey, prompt, imagesArr) {
 }
 
 
-async function getPlannerDataFromImages(parsedImages, syncType) {
+async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = null) {
     if (!parsedImages || parsedImages.length === 0) {
         throw new Error("INVALID_IMAGE_PAYLOAD");
-    }
-    const geminiApiKey = GEMINI_API_KEY.value();
-
-    if (!geminiApiKey) {
-        throw new Error("MISSING_GEMINI_API_KEY");
     }
 
     const prompt =
         syncType === 'evening' ? getEveningPrompt() :
             syncType === 'journal_date_only' ? getJournalDatePrompt() :
                 getMorningPrompt();
+
+    // --- BYOK UNIVERSAL ADAPTER FORK ---
+    if (byokConfig && byokConfig.apiKey) {
+        const { UniversalAIAdapter } = require('./UniversalAIAdapter');
+        const adapter = new UniversalAIAdapter({
+            apiKey: byokConfig.apiKey,
+            provider: byokConfig.provider,
+            modelName: byokConfig.modelName
+        });
+        
+        const reqId = require('crypto').randomUUID(); 
+        logger.info(`Executing Universal AI Adapter route`, { provider: byokConfig.provider, modelName: byokConfig.modelName });
+        
+        let resultRaw = await adapter.chat("", prompt, parsedImages, reqId);
+        
+        if (resultRaw.startsWith('```json')) {
+            resultRaw = resultRaw.replace(/```json\n?/, '').replace(/```$/, '').trim();
+        }
+        try {
+            return JSON.parse(resultRaw);
+        } catch(e) {
+             logger.error("Failed to parse Universal AI JSON output", { error: e.message, raw: resultRaw });
+             throw new Error("Invalid final structured output from AI Adapter.");
+        }
+    }
+
+    // --- DEFAULT GEMINI BEHAVIOR ---
+    const geminiApiKey = GEMINI_API_KEY.value();
+    if (!geminiApiKey) {
+        throw new Error("MISSING_GEMINI_API_KEY");
+    }
 
     // Fallback Strategy: Diverse models to avoid shared quota limits
     const models = [

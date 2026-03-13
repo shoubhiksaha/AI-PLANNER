@@ -17,6 +17,10 @@ const {
     uploadFileToNotion, 
     syncBrainDumpToNotion 
 } = require('./services/notion');
+const {
+    generateAndWrapDEK,
+    unwrapAndDecrypt
+} = require('./services/kms');
 
 // Initialize Firebase Admin with explicit bucket
 admin.initializeApp({
@@ -288,6 +292,58 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
     }
 });
 
+// --- SETUP ENDPOINT: setupBYOK ---
+exports.setupBYOK = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    if (req.method !== 'POST') {
+        return res.status(405).send({ error: "Method not allowed" });
+    }
+    if (!isJsonRequest(req)) {
+        return res.status(415).send({ error: "Content-Type must be application/json" });
+    }
+
+    const body = req.body || {};
+    const token = body.token;
+    const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+    const provider = body.provider || 'openai';
+    const modelName = body.modelName || 'gpt-4o';
+    const baseUrl = body.baseUrl;
+
+    if (!token || !apiKey) {
+        return res.status(400).send({ error: "Invalid setup payload" });
+    }
+
+    try {
+        const userEmail = await resolveUserEmailFromGoogleToken(token);
+
+        const rl = await checkRateLimit(userEmail, 'setupBYOK', RATE_LIMIT_DEFAULT);
+        if (!rl.allowed) {
+            res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
+            return res.status(429).send({ error: "Too many requests. Please try again later." });
+        }
+
+        const kmsPayload = await generateAndWrapDEK(apiKey);
+        const db = admin.firestore();
+        const userRef = db.collection('users').doc(userEmail);
+        const byokDataToSave = {
+            ...kmsPayload,
+            provider,
+            modelName
+        };
+        if (baseUrl) byokDataToSave.baseUrl = baseUrl;
+        await userRef.set({ byokKmsData: byokDataToSave }, { merge: true });
+
+        logger.info(`Stored wrapped BYOK KMS Data for ${userEmail}`);
+        return res.status(200).send({ success: true, text: "BYOK settings saved securely." });
+    } catch (err) {
+        logger.error("BYOK Setup error:", err);
+        return res.status(500).send({ error: "Failed to securely save keys." });
+    }
+});
+
 // --- GDPR: Export User Data ---
 exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
     setStandardHeaders(res);
@@ -546,6 +602,41 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             }
         }
 
+        // --- BYOK TRAFFIC COP ---
+        let byokConfig = null;
+        const statelessKey = req.headers['x-byok-token'];
+        const statelessProvider = req.headers['x-byok-provider'];
+        const statelessModel = req.headers['x-byok-model'];
+        const statelessBaseUrl = req.headers['x-byok-baseurl'];
+
+        if (statelessKey) {
+            byokConfig = {
+                apiKey: statelessKey,
+                provider: statelessProvider || 'openai',
+                modelName: statelessModel || 'gpt-4o'
+            };
+            if (statelessBaseUrl) byokConfig.baseUrl = statelessBaseUrl;
+            logger.info("Traffic Cop: Routing via Stateless X-BYOK-Token header", { requestId, authEmail: email });
+        } else if (userData.byokKmsData) {
+            try {
+                logger.info("Traffic Cop: Attempting KMS Envelope Decryption", { requestId, authEmail: email });
+                const decryptedKey = await unwrapAndDecrypt(
+                    userData.byokKmsData.encryptedKey, 
+                    userData.byokKmsData.wrappedDek, 
+                    userData.byokKmsData.iv, 
+                    userData.byokKmsData.authTag
+                );
+                byokConfig = {
+                    apiKey: decryptedKey,
+                    provider: userData.byokKmsData.provider || 'openai',
+                    modelName: userData.byokKmsData.modelName || 'gpt-4o'
+                };
+                if (userData.byokKmsData.baseUrl) byokConfig.baseUrl = userData.byokKmsData.baseUrl;
+            } catch (err) {
+                logger.error("KMS Decryption error", { error: err.message, requestId, authEmail: email });
+            }
+        }
+
         // Initialize Services
         const calendar = google.calendar({ version: 'v3', auth });
         const tasks = google.tasks({ version: 'v1', auth });
@@ -579,7 +670,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
             const [fileUploadIds, extraction] = await Promise.all([
                 Promise.all(journalUploadPromises),
-                getPlannerDataFromImages(parsedImages, 'journal_date_only').catch(err => {
+                getPlannerDataFromImages(parsedImages, 'journal_date_only', byokConfig).catch(err => {
                     logger.warn("Date extraction failed for journal:", { requestId, authEmail: email, syncMode: mode, error: err.message });
                     return { date: null };
                 })
@@ -631,7 +722,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
         if (mode === 'morning') {
             logger.info("Parsing planner images for morning sync...", { requestId, authEmail: email });
-            plannerData = await getPlannerDataFromImages(parsedImages, 'morning', timeZone);
+            plannerData = await getPlannerDataFromImages(parsedImages, 'morning', byokConfig);
 
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
@@ -659,7 +750,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         } else if (mode === 'evening') {
             // Re-scan images specifically looking for evening data (expenses, mood, etc).
             logger.info("Parsing planner images for evening sync...", { requestId, authEmail: email });
-            plannerData = await getPlannerDataFromImages(parsedImages, 'evening');
+            plannerData = await getPlannerDataFromImages(parsedImages, 'evening', byokConfig);
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
                 return res.status(400).send({ error: plannerData.error });

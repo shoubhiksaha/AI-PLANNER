@@ -16,6 +16,7 @@
   },
   "main": "index.js",
   "dependencies": {
+    "@google-cloud/kms": "^5.4.0",
     "@google/generative-ai": "^0.24.1",
     "@notionhq/client": "^5.6.0",
     "firebase-functions": "^7.1.1",

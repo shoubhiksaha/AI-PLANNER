@@ -228,10 +228,71 @@ function updateGamificationUI(data) {
     document.getElementById('reports-streak-freezes').textContent = `❄️ ${streakFreezes}`;
 }
 
+// Restore BYOK UI state
+const statelessConfigStr = localStorage.getItem('byok_stateless_config');
+if (statelessConfigStr) {
+    try {
+        const config = JSON.parse(statelessConfigStr);
+        const apiKeyInput = document.getElementById('byok-api-key');
+        const providerSelect = document.getElementById('byok-provider');
+        const statelessRadio = document.querySelector('input[name="byok-mode"][value="stateless"]');
+        if (apiKeyInput && statelessRadio && providerSelect) {
+            apiKeyInput.value = config.apiKey;
+            if (config.provider === 'openai' && config.customUrl) {
+                providerSelect.value = 'custom:custom';
+                document.getElementById('byok-custom-fields').classList.remove('hidden');
+                document.getElementById('byok-custom-url').value = config.customUrl;
+                document.getElementById('byok-custom-model').value = config.modelName;
+            } else {
+                providerSelect.value = `${config.provider}:${config.modelName}`;
+            }
+            statelessRadio.checked = true;
+        }
+    } catch(e){}
+} else {
+    const statelessKey = localStorage.getItem('byok_stateless_key');
+    if (statelessKey) {
+        const apiKeyInput = document.getElementById('byok-api-key');
+        if (apiKeyInput) apiKeyInput.value = statelessKey;
+        document.querySelector('input[name="byok-mode"][value="stateless"]').checked = true;
+    }
+}
+
+// Provider dropdown toggle
+document.getElementById('byok-provider')?.addEventListener('change', (e) => {
+    const customFields = document.getElementById('byok-custom-fields');
+    if (e.target.value === 'custom:custom') {
+        customFields.classList.remove('hidden');
+    } else {
+        customFields.classList.add('hidden');
+    }
+});
+
 document.getElementById('save-setup-btn').addEventListener('click', async () => {
     const key = document.getElementById('setup-key').value;
     const dbId = document.getElementById('setup-db').value;
-    if (!key || !dbId) return alert("Please fill both fields");
+    
+    // BYOK Config
+    const byokMode = document.querySelector('input[name="byok-mode"]:checked').value;
+    const byokKey = document.getElementById('byok-api-key').value.trim();
+    const providerVal = document.getElementById('byok-provider').value;
+    
+    let provider, modelName, customUrl;
+    if (providerVal === 'custom:custom') {
+        provider = 'openai'; // OpenAI compatible
+        customUrl = document.getElementById('byok-custom-url').value.trim();
+        modelName = document.getElementById('byok-custom-model').value.trim();
+        if (byokKey && (!customUrl || !modelName)) {
+            alert("Please provide the Custom Base URL and Model Name");
+            return;
+        }
+    } else {
+        [provider, modelName] = providerVal.split(':');
+    }
+
+    if (!key || !dbId) {
+        if (!confirm("Notion fields are empty. You won't be able to use Journal mode. Continue anyway?")) return;
+    }
 
     const saveBtn = document.getElementById('save-setup-btn');
     const originalText = saveBtn.innerText;
@@ -241,23 +302,40 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
     try {
         const token = await ensureGoogleAccessToken();
 
-        // Send raw key to backend to be encrypted and saved securely
-        const res = await fetch('/setupNotion', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                token,
-                notionKey: key,
-                notionDbId: dbId
-            })
-        });
+        // Save Notion Keys
+        if (key && dbId) {
+            const res = await fetch('/setupNotion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, notionKey: key, notionDbId: dbId })
+            });
+            if (!res.ok) throw new Error("Failed to secure Notion keys.");
+        }
 
-        if (!res.ok) throw new Error("Failed to secure keys.");
+        // Save BYOK Keys
+        if (byokKey) {
+            const byokConfig = { apiKey: byokKey, provider, modelName, customUrl };
+            if (byokMode === 'stateless') {
+                localStorage.setItem('byok_stateless_config', JSON.stringify(byokConfig));
+                localStorage.removeItem('byok_stateless_key'); // Clean up old
+            } else if (byokMode === 'kms') {
+                localStorage.removeItem('byok_stateless_config');
+                localStorage.removeItem('byok_stateless_key');
+                const byokRes = await fetch('/setupBYOK', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, apiKey: byokKey, provider, modelName, baseUrl: customUrl })
+                });
+                if (!byokRes.ok) throw new Error("Failed to securely envelope BYOK keys.");
+            }
+        } else {
+            localStorage.removeItem('byok_stateless_config');
+            localStorage.removeItem('byok_stateless_key');
+        }
 
-        // Optimistic switch
         switchView('view-dashboard');
     } catch (err) {
-        console.error("Failed to save Notion settings:", err);
+        console.error("Failed to save settings:", err);
         alert("Could not save settings securely. Please try again.");
     } finally {
         saveBtn.innerText = originalText;
@@ -521,10 +599,28 @@ const triggerSync = async (syncType) => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes Frontend Timeout
 
+            // Inject BYOK Stateless Token if it exists
+            const fetchHeaders = { 'Content-Type': 'application/json' };
+            const storedConfigStr = localStorage.getItem('byok_stateless_config');
+            if (storedConfigStr) {
+                try {
+                    const config = JSON.parse(storedConfigStr);
+                    fetchHeaders['X-BYOK-Token'] = config.apiKey;
+                    fetchHeaders['X-BYOK-Provider'] = config.provider;
+                    fetchHeaders['X-BYOK-Model'] = config.modelName;
+                    if (config.customUrl) fetchHeaders['X-BYOK-BaseURL'] = config.customUrl;
+                } catch(e) {}
+            } else {
+                const storedToken = localStorage.getItem('byok_stateless_key');
+                if (storedToken) {
+                    fetchHeaders['X-BYOK-Token'] = storedToken;
+                }
+            }
+
             try {
                 res = await fetch(PRIMARY_API_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: fetchHeaders,
                     body: JSON.stringify(payload),
                     signal: controller.signal
                 });
@@ -533,7 +629,7 @@ const triggerSync = async (syncType) => {
                 console.warn("Primary API route failed, retrying direct function URL.", primaryErr);
                 res = await fetch(FALLBACK_API_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: fetchHeaders,
                     body: JSON.stringify(payload),
                     signal: controller.signal
                 });
