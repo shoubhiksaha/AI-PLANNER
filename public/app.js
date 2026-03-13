@@ -81,6 +81,110 @@ const logToGCP = (errorEvent) => {
 window.addEventListener('error', logToGCP);
 window.addEventListener('unhandledrejection', logToGCP);
 
+// --- COMPONENT LOADERS ---
+async function loadSyncHistory(email) {
+    import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, orderBy, limit, getDocs }) => {
+        const db = getFirestore(app);
+        const historyList = document.getElementById('history-list');
+        if (!historyList) return;
+
+        try {
+            historyList.innerHTML = '<div class="flex justify-center py-4"><div class="spinner border-theme-text w-5 h-5"></div></div>';
+
+            const q = query(
+                collection(db, "users", email, "syncHistory"),
+                orderBy("timestamp", "desc"),
+                limit(10)
+            );
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                historyList.innerHTML = '<div class="text-center text-sm text-theme-muted py-6">No sync history found yet. Sync a planner to see results here!</div>';
+                return;
+            }
+
+            let html = '';
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const d = data.timestamp ? data.timestamp.toDate() : new Date();
+                const timeString = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                const typeIcon = data.syncType === 'morning' ? '☀️' : data.syncType === 'evening' ? '🌙' : '📖';
+                const statusColor = data.status === 'success' ? 'text-emerald-600' : 'text-red-500';
+                const statusIcon = data.status === 'success' ? '✓' : '⚠️';
+
+                html += `
+                    <div class="p-3 border flex justify-between items-center rounded-xl border-theme-border mb-2 bg-theme-bg/50">
+                        <div>
+                            <span class="font-medium text-theme-text text-sm flex items-center gap-2 mb-1">
+                                ${typeIcon} <span class="capitalize">${data.syncType}</span>
+                                <span class="text-[10px] text-theme-muted font-normal bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full">${data.imageCount || 1} pg</span>
+                            </span>
+                            <p class="text-xs ${statusColor} font-medium leading-snug">${statusIcon} ${data.message}</p>
+                        </div>
+                        <span class="text-[10px] text-theme-muted ml-2 text-right">${timeString}</span>
+                    </div>
+                `;
+            });
+            historyList.innerHTML = html;
+        } catch (e) {
+            console.error("Error loading history:", e);
+            historyList.innerHTML = '<div class="text-center text-xs text-red-500 py-6">Failed to load history.</div>';
+        }
+    });
+};
+
+async function loadHeatmap(email) {
+    import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, where, getDocs }) => {
+        const db = getFirestore(app);
+        const heatmapGrid = document.getElementById('heatmap-grid');
+        if (!heatmapGrid) return;
+
+        heatmapGrid.innerHTML = '<div class="w-full flex justify-center py-4"><div class="spinner border-theme-text w-5 h-5"></div></div>';
+
+        try {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+            const q = query(
+                collection(db, "users", email, "syncHistory"),
+                where("timestamp", ">=", thirtyDaysAgo)
+            );
+            const snap = await getDocs(q);
+            
+            const daysMap = {};
+            snap.forEach(doc => {
+                const data = doc.data();
+                if(data.status === 'success' && data.timestamp) {
+                    const dateStr = data.timestamp.toDate().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                    daysMap[dateStr] = (daysMap[dateStr] || 0) + 1;
+                }
+            });
+
+            const boxes = [];
+            const today = new Date();
+            for(let i=29; i>=0; i--) {
+                const d = new Date(today);
+                d.setDate(d.getDate() - i);
+                const dStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                const count = daysMap[dStr] || 0;
+                
+                let colorClass = 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
+                if (count === 1) colorClass = 'bg-emerald-200 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-800';
+                else if (count === 2) colorClass = 'bg-emerald-400 dark:bg-emerald-700/60 border-emerald-500 dark:border-emerald-600';
+                else if (count >= 3) colorClass = 'bg-emerald-600 dark:bg-emerald-500 border-emerald-700 dark:border-emerald-400';
+
+                boxes.push(`<div title="${dStr}: ${count} sync(s)" class="w-5 h-5 sm:w-6 sm:h-6 rounded border ${colorClass} transition-all duration-300 cursor-help hover:scale-110 hover:shadow-sm"></div>`);
+            }
+            
+            heatmapGrid.innerHTML = boxes.join('');
+        } catch (err) {
+            console.error(err);
+            heatmapGrid.innerHTML = '<div class="text-xs text-red-500 w-full text-center">Failed to load heatmap</div>';
+        }
+    });
+};
+
 // NAVIGATION
 const switchView = (viewId) => {
     switchViewHelper(viewId);
@@ -937,57 +1041,6 @@ document.getElementById('change-notion-btn')?.addEventListener('click', () => {
     }
 });
 
-// Reports Heatmap Loader
-async function loadHeatmap(email) {
-    import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, where, getDocs }) => {
-        const db = getFirestore(app);
-        const heatmapGrid = document.getElementById('heatmap-grid');
-        if (!heatmapGrid) return;
-
-        heatmapGrid.innerHTML = '<div class="w-full flex justify-center py-4"><div class="spinner border-theme-text w-5 h-5"></div></div>';
-
-        try {
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-            const q = query(
-                collection(db, "users", email, "syncHistory"),
-                where("timestamp", ">=", thirtyDaysAgo)
-            );
-            const snap = await getDocs(q);
-            
-            const daysMap = {};
-            snap.forEach(doc => {
-                const data = doc.data();
-                if(data.status === 'success' && data.timestamp) {
-                    const dateStr = data.timestamp.toDate().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-                    daysMap[dateStr] = (daysMap[dateStr] || 0) + 1;
-                }
-            });
-
-            const boxes = [];
-            const today = new Date();
-            for(let i=29; i>=0; i--) {
-                const d = new Date(today);
-                d.setDate(d.getDate() - i);
-                const dStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-                const count = daysMap[dStr] || 0;
-                
-                let colorClass = 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
-                if (count === 1) colorClass = 'bg-emerald-200 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-800';
-                else if (count === 2) colorClass = 'bg-emerald-400 dark:bg-emerald-700/60 border-emerald-500 dark:border-emerald-600';
-                else if (count >= 3) colorClass = 'bg-emerald-600 dark:bg-emerald-500 border-emerald-700 dark:border-emerald-400';
-
-                boxes.push(`<div title="${dStr}: ${count} sync(s)" class="w-5 h-5 sm:w-6 sm:h-6 rounded border ${colorClass} transition-all duration-300 cursor-help hover:scale-110 hover:shadow-sm"></div>`);
-            }
-            
-            heatmapGrid.innerHTML = boxes.join('');
-        } catch (err) {
-            console.error(err);
-            heatmapGrid.innerHTML = '<div class="text-xs text-red-500 w-full text-center">Failed to load heatmap</div>';
-        }
-    });
-};
 
 // --- MONETIZATION & CASHFREE PLACEHOLDERS ---
 document.getElementById('close-paywall').addEventListener('click', () => {
@@ -1009,57 +1062,6 @@ const handlePaymentClick = (e, tierName) => {
 document.getElementById('buy-booster-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
 document.getElementById('upgrade-standard-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
 document.getElementById('upgrade-pro-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Pro Tier (₹49/mo)'));
-async function loadSyncHistory(email) {
-    import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, orderBy, limit, getDocs }) => {
-        const db = getFirestore(app);
-        const historyList = document.getElementById('history-list');
-        if (!historyList) return;
-
-        try {
-            historyList.innerHTML = '<div class="flex justify-center py-4"><div class="spinner border-theme-text w-5 h-5"></div></div>';
-
-            const q = query(
-                collection(db, "users", email, "syncHistory"),
-                orderBy("timestamp", "desc"),
-                limit(10)
-            );
-            const querySnapshot = await getDocs(q);
-
-            if (querySnapshot.empty) {
-                historyList.innerHTML = '<div class="text-center text-sm text-theme-muted py-6">No sync history found yet. Sync a planner to see results here!</div>';
-                return;
-            }
-
-            let html = '';
-            querySnapshot.forEach((doc) => {
-                const data = doc.data();
-                const d = data.timestamp ? data.timestamp.toDate() : new Date();
-                const timeString = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-                const typeIcon = data.syncType === 'morning' ? '☀️' : data.syncType === 'evening' ? '🌙' : '📖';
-                const statusColor = data.status === 'success' ? 'text-emerald-600' : 'text-red-500';
-                const statusIcon = data.status === 'success' ? '✓' : '⚠️';
-
-                html += `
-                    <div class="p-3 border flex justify-between items-center rounded-xl border-theme-border mb-2 bg-theme-bg/50">
-                        <div>
-                            <span class="font-medium text-theme-text text-sm flex items-center gap-2 mb-1">
-                                ${typeIcon} <span class="capitalize">${data.syncType}</span>
-                                <span class="text-[10px] text-theme-muted font-normal bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full">${data.imageCount || 1} pg</span>
-                            </span>
-                            <p class="text-xs ${statusColor} font-medium leading-snug">${statusIcon} ${data.message}</p>
-                        </div>
-                        <span class="text-[10px] text-theme-muted ml-2 text-right">${timeString}</span>
-                    </div>
-                `;
-            });
-            historyList.innerHTML = html;
-        } catch (e) {
-            console.error("Error loading history:", e);
-            historyList.innerHTML = '<div class="text-center text-xs text-red-500 py-6">Failed to load history.</div>';
-        }
-    });
-};
 
 async function deleteMyAccount() {
     const confirmed = confirm(
