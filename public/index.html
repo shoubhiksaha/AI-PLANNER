@@ -110,6 +110,10 @@
             <button id="open-guide" class="text-blue-600 text-sm hover:underline flex items-center">
                 <span>📚 How to find these keys? (Guide)</span>
             </button>
+            <button id="back-to-dash-from-setup"
+                class="text-xs font-medium text-theme-text hover:bg-theme-border/50 px-3 py-1.5 rounded-full transition-colors border border-theme-border mt-2 hidden">
+                ← Back to Dashboard
+            </button>
 
             <!-- BYOK ADVANCED SETTINGS -->
             <details class="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden mt-6">
@@ -193,6 +197,7 @@
                     <div id="gamification-bars" class="gap-2 mt-1 hidden">
                         <span id="streak-badge" class="font-bold text-orange-500 px-1.5 py-0.5 rounded bg-orange-500/10" title="Current Streak">🔥 0</span>
                         <span id="credits-badge" class="font-bold text-yellow-500 px-1.5 py-0.5 rounded bg-yellow-500/10" title="Credits Available">🪙 0</span>
+                        <button id="open-upgrade-btn" class="font-bold text-xs px-2 py-0.5 rounded bg-gradient-to-r from-amber-400 to-orange-500 text-white hover:from-amber-300 hover:to-orange-400 transition-all" title="Upgrade Plan">👑 Upgrade</button>
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
@@ -207,6 +212,10 @@
                                 d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                         </svg>
                         History
+                    </button>
+                    <button id="open-settings-btn"
+                        class="hover:text-slate-600 font-medium transition-colors flex items-center gap-1" title="Settings & BYOK">
+                        ⚙️
                     </button>
                     <button id="logout-btn" class="hover:text-red-500 font-medium transition-colors">Sign Out</button>
                 </div>

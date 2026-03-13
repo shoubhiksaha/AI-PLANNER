@@ -739,6 +739,23 @@ document.getElementById('back-to-dash-btn-reports').addEventListener('click', ()
     switchView('view-dashboard');
 });
 
+// Settings Navigation (re-enter setup view from dashboard)
+document.getElementById('open-settings-btn').addEventListener('click', () => {
+    // Show the "Back to Dashboard" button when coming from dashboard
+    const backBtn = document.getElementById('back-to-dash-from-setup');
+    if (backBtn) backBtn.classList.remove('hidden');
+    switchView('view-setup');
+});
+document.getElementById('back-to-dash-from-setup')?.addEventListener('click', () => {
+    switchView('view-dashboard');
+});
+
+// Upgrade Button → Open Paywall Modal
+document.getElementById('open-upgrade-btn')?.addEventListener('click', () => {
+    document.getElementById('paywall-modal').classList.remove('hidden');
+    document.getElementById('paywall-modal').classList.add('flex');
+});
+
 // Reports Heatmap Loader
 const loadHeatmap = async (email) => {
     import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, where, getDocs }) => {
