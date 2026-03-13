@@ -749,9 +749,6 @@ const triggerSync = async (syncType) => {
 };
 
 // --- GDPR: Export & Delete ---
-document.getElementById('btn-export').addEventListener('click', exportMyData);
-document.getElementById('btn-delete-account').addEventListener('click', deleteMyAccount);
-
 async function exportMyData() {
     try {
         if (!auth.currentUser) { alert('Please sign in first.'); return; }
@@ -830,10 +827,10 @@ document.querySelectorAll('[data-drawer]').forEach(btn => {
                 switchView('view-setup');
                 break;
             case 'export':
-                exportUserData();
+                exportMyData();
                 break;
             case 'delete':
-                deleteAccount();
+                deleteMyAccount();
                 break;
             case 'logout':
                 auth.signOut();
