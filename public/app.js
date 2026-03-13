@@ -158,7 +158,10 @@ loginBtn.addEventListener('click', async () => {
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         currentUser = user;
-        document.getElementById('user-email').textContent = user.email;
+        // Show user display name (from Google profile as default)
+        const displayName = user.displayName || user.email.split('@')[0];
+        document.getElementById('user-display-name').textContent = `Hi, ${displayName}`;
+        document.getElementById('drawer-user-email').textContent = user.email;
         document.getElementById('gamification-bars').classList.remove('hidden');
         document.getElementById('gamification-bars').classList.add('flex');
         await checkUserSetup(user);
@@ -170,10 +173,6 @@ auth.onAuthStateChanged(async (user) => {
         document.getElementById('gamification-bars').classList.remove('flex');
         switchView('view-login');
     }
-});
-
-document.getElementById('logout-btn').addEventListener('click', () => {
-    auth.signOut();
 });
 
 // --- 2. SETUP FLOW ---
@@ -196,10 +195,35 @@ async function checkUserSetup(user) {
         });
 
         if (snap.exists() && snap.data().notionKey) {
+            // Update display name from Firestore if stored
+            if (snap.data().displayName) {
+                document.getElementById('user-display-name').textContent = `Hi, ${snap.data().displayName}`;
+            }
+            // Update plan badge
+            const tier = snap.data().tier || 'free';
+            const planBadge = document.getElementById('current-plan-badge');
+            if (planBadge) {
+                planBadge.textContent = tier === 'free' ? 'Free Plan' : tier === 'standard' ? 'Standard' : 'Pro';
+            }
+            // Show Notion connected status in settings
+            const notionStatus = document.getElementById('notion-status-badge');
+            if (notionStatus) { notionStatus.classList.remove('hidden'); notionStatus.classList.add('flex'); }
+            const notionFields = document.getElementById('notion-setup-fields');
+            if (notionFields) notionFields.classList.add('hidden');
             // User has setup Notion -> Go to Dashboard
             switchView('view-dashboard');
             // Fetch sync history in the background
             loadSyncHistory(user.email);
+        } else if (snap.exists() && !snap.data().displayName) {
+            // User exists but no display name -> Ask for name first
+            switchView('view-name-prompt');
+            const googleName = user.displayName || '';
+            document.getElementById('user-display-name-input').value = googleName;
+        } else if (!snap.exists()) {
+            // Brand new user -> Ask for name
+            switchView('view-name-prompt');
+            const googleName = user.displayName || '';
+            document.getElementById('user-display-name-input').value = googleName;
         } else {
             // No setup -> Go to Setup Screen
             switchView('view-setup');
@@ -238,9 +262,9 @@ if (statelessConfigStr) {
         const statelessRadio = document.querySelector('input[name="byok-mode"][value="stateless"]');
         if (apiKeyInput && statelessRadio && providerSelect) {
             apiKeyInput.value = config.apiKey;
-            if (config.provider === 'openai' && config.customUrl) {
-                providerSelect.value = 'custom:custom';
-                document.getElementById('byok-custom-fields').classList.remove('hidden');
+            if (config.customUrl) {
+                providerSelect.value = 'custom:cloud';
+                showCustomFields('cloud');
                 document.getElementById('byok-custom-url').value = config.customUrl;
                 document.getElementById('byok-custom-model').value = config.modelName;
             } else {
@@ -258,15 +282,37 @@ if (statelessConfigStr) {
     }
 }
 
-// Provider dropdown toggle
-document.getElementById('byok-provider')?.addEventListener('change', (e) => {
-    const customFields = document.getElementById('byok-custom-fields');
-    if (e.target.value === 'custom:custom') {
-        customFields.classList.remove('hidden');
+// Custom provider sub-category field logic
+function showCustomFields(subType) {
+    const fields = document.getElementById('byok-custom-fields');
+    const label = document.getElementById('custom-type-label');
+    const urlInput = document.getElementById('byok-custom-url');
+    const versionGroup = document.getElementById('custom-api-version-group');
+    fields.classList.remove('hidden');
+    versionGroup.classList.add('hidden');
+    if (subType === 'cloud') {
+        label.textContent = '☁️ Standard Cloud API (OpenAI-compatible)';
+        urlInput.placeholder = 'https://api.example.com/v1/chat/completions';
+    } else if (subType === 'local') {
+        label.textContent = '🏠 Local / Self-Hosted (e.g., Ollama)';
+        urlInput.placeholder = 'http://localhost:11434/v1/chat/completions';
+    } else if (subType === 'enterprise') {
+        label.textContent = '🏢 Enterprise Endpoint';
+        urlInput.placeholder = 'https://your-company.openai.azure.com';
+        versionGroup.classList.remove('hidden');
+    }
+}
+
+document.getElementById('byok-provider').addEventListener('change', (e) => {
+    const val = e.target.value;
+    if (val.startsWith('custom:')) {
+        showCustomFields(val.split(':')[1]);
     } else {
-        customFields.classList.add('hidden');
+        document.getElementById('byok-custom-fields').classList.add('hidden');
     }
 });
+
+
 
 document.getElementById('save-setup-btn').addEventListener('click', async () => {
     const key = document.getElementById('setup-key').value;
@@ -277,20 +323,31 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
     const byokKey = document.getElementById('byok-api-key').value.trim();
     const providerVal = document.getElementById('byok-provider').value;
     
-    let provider, modelName, customUrl;
-    if (providerVal === 'custom:custom') {
-        provider = 'openai'; // OpenAI compatible
+    let provider, modelName, customUrl, apiVersion;
+    if (providerVal.startsWith('custom:')) {
+        const subType = providerVal.split(':')[1];
         customUrl = document.getElementById('byok-custom-url').value.trim();
         modelName = document.getElementById('byok-custom-model').value.trim();
+        apiVersion = document.getElementById('byok-custom-api-version')?.value.trim();
+        if (subType === 'local') {
+            provider = 'ollama';
+        } else if (subType === 'enterprise') {
+            provider = customUrl?.includes('azure') ? 'azure' : 'openai';
+        } else {
+            provider = 'openai'; // Standard cloud = OpenAI compatible
+        }
         if (byokKey && (!customUrl || !modelName)) {
-            alert("Please provide the Custom Base URL and Model Name");
+            alert("Please provide the API Base URL and Model Name");
             return;
         }
     } else {
         [provider, modelName] = providerVal.split(':');
     }
 
-    if (!key || !dbId) {
+    // Only warn about empty Notion fields if the Notion setup section is visible
+    // (i.e. user hasn't already connected Notion)
+    const notionFieldsVisible = !document.getElementById('notion-setup-fields')?.classList.contains('hidden');
+    if (notionFieldsVisible && (!key || !dbId)) {
         if (!confirm("Notion fields are empty. You won't be able to use Journal mode. Continue anyway?")) return;
     }
 
@@ -721,22 +778,163 @@ async function exportMyData() {
     }
 }
 
-// History Navigation
-document.getElementById('toggle-history-btn').addEventListener('click', () => {
-    switchView('view-history');
-    if (currentUser) loadSyncHistory(currentUser.email);
-});
-document.getElementById('back-to-dash-btn').addEventListener('click', () => {
-    switchView('view-dashboard');
+// --- NAVIGATION ---
+
+// History back button
+document.getElementById('back-to-dash-btn').addEventListener('click', () => switchView('view-dashboard'));
+
+// Reports back button
+document.getElementById('back-to-dash-btn-reports').addEventListener('click', () => switchView('view-dashboard'));
+
+// Settings back button
+document.getElementById('back-to-dash-from-setup')?.addEventListener('click', () => switchView('view-dashboard'));
+
+// --- HAMBURGER DRAWER ---
+const drawerContainer = document.getElementById('drawer-container');
+const openDrawer = () => {
+    drawerContainer.classList.remove('hidden');
+    // Double rAF ensures the browser paints the hidden->visible state before
+    // adding the class that triggers the CSS transition
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            drawerContainer.classList.add('drawer-open');
+        });
+    });
+};
+const closeDrawer = () => { drawerContainer.classList.remove('drawer-open'); setTimeout(() => drawerContainer.classList.add('hidden'), 300); };
+
+document.getElementById('hamburger-btn').addEventListener('click', openDrawer);
+document.getElementById('close-drawer').addEventListener('click', closeDrawer);
+document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
+
+// Drawer item handlers
+document.querySelectorAll('[data-drawer]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        closeDrawer();
+        const action = btn.dataset.drawer;
+        switch(action) {
+            case 'upgrade':
+                document.getElementById('pricing-modal').classList.remove('hidden');
+                document.getElementById('pricing-modal').classList.add('flex');
+                break;
+            case 'reports':
+                switchView('view-reports');
+                if (currentUser) loadHeatmap(currentUser.email);
+                break;
+            case 'history':
+                switchView('view-history');
+                if (currentUser) loadSyncHistory(currentUser.email);
+                break;
+            case 'settings':
+                document.getElementById('back-to-dash-from-setup')?.classList.remove('hidden');
+                switchView('view-setup');
+                break;
+            case 'export':
+                exportUserData();
+                break;
+            case 'delete':
+                deleteAccount();
+                break;
+            case 'logout':
+                auth.signOut();
+                break;
+        }
+    });
 });
 
-// Reports Navigation
-document.getElementById('toggle-reports-btn').addEventListener('click', () => {
-    switchView('view-reports');
-    if (currentUser) loadHeatmap(currentUser.email);
+// --- PRICING MODAL ---
+const pricingModal = document.getElementById('pricing-modal');
+document.getElementById('current-plan-badge')?.addEventListener('click', () => {
+    pricingModal.classList.remove('hidden');
+    pricingModal.classList.add('flex');
 });
-document.getElementById('back-to-dash-btn-reports').addEventListener('click', () => {
-    switchView('view-dashboard');
+document.getElementById('close-pricing')?.addEventListener('click', () => {
+    pricingModal.classList.add('hidden');
+    pricingModal.classList.remove('flex');
+});
+
+// Pricing toggle: Monthly <-> Upfront
+let pricingMode = 'monthly';
+const toggleMonthly = document.getElementById('toggle-monthly');
+const toggleUpfront = document.getElementById('toggle-upfront');
+const saveBadge = document.getElementById('save-badge');
+
+const updatePricingUI = () => {
+    const isMonthly = pricingMode === 'monthly';
+    toggleMonthly.classList.toggle('pricing-toggle-active', isMonthly);
+    toggleMonthly.classList.toggle('text-theme-muted', !isMonthly);
+    toggleMonthly.classList.toggle('text-theme-text', isMonthly);
+    toggleUpfront.classList.toggle('pricing-toggle-active', !isMonthly);
+    toggleUpfront.classList.toggle('text-theme-muted', isMonthly);
+    toggleUpfront.classList.toggle('text-theme-text', !isMonthly);
+    
+    // Show/hide upfront options and save badge
+    document.getElementById('standard-upfront-opts')?.classList.toggle('hidden', isMonthly);
+    document.getElementById('pro-upfront-opts')?.classList.toggle('hidden', isMonthly);
+    document.getElementById('standard-annual-tag')?.classList.toggle('hidden', isMonthly);
+    document.getElementById('pro-annual-tag')?.classList.toggle('hidden', isMonthly);
+    saveBadge?.classList.toggle('hidden', isMonthly);
+    
+    // Update hero prices
+    if (isMonthly) {
+        document.getElementById('standard-price').innerHTML = '₹29<span class="text-sm font-medium text-theme-muted"> /mo</span>';
+        document.getElementById('pro-price').innerHTML = '₹49<span class="text-sm font-medium text-theme-muted"> /mo</span>';
+    } else {
+        updateUpfrontPrices();
+    }
+};
+
+const updateUpfrontPrices = () => {
+    const stdDuration = document.querySelector('input[name="standard-duration"]:checked')?.value || 'annual';
+    const proDuration = document.querySelector('input[name="pro-duration"]:checked')?.value || 'annual';
+    
+    document.getElementById('standard-price').innerHTML = stdDuration === 'annual' 
+        ? '₹290<span class="text-sm font-medium text-theme-muted"> /year</span>'
+        : '₹79<span class="text-sm font-medium text-theme-muted"> /90 days</span>';
+    document.getElementById('standard-annual-tag')?.classList.toggle('hidden', stdDuration !== 'annual');
+    
+    document.getElementById('pro-price').innerHTML = proDuration === 'annual'
+        ? '₹490<span class="text-sm font-medium text-theme-muted"> /year</span>'
+        : '₹129<span class="text-sm font-medium text-theme-muted"> /90 days</span>';
+    document.getElementById('pro-annual-tag')?.classList.toggle('hidden', proDuration !== 'annual');
+};
+
+toggleMonthly?.addEventListener('click', () => { pricingMode = 'monthly'; updatePricingUI(); });
+toggleUpfront?.addEventListener('click', () => { pricingMode = 'upfront'; updatePricingUI(); });
+document.querySelectorAll('input[name="standard-duration"], input[name="pro-duration"]').forEach(r => {
+    r.addEventListener('change', updateUpfrontPrices);
+});
+
+// --- PAYWALL MODAL ---
+document.getElementById('close-paywall')?.addEventListener('click', () => {
+    document.getElementById('paywall-modal').classList.add('hidden');
+    document.getElementById('paywall-modal').classList.remove('flex');
+});
+
+// --- NAME PROMPT ---
+document.getElementById('save-name-btn')?.addEventListener('click', async () => {
+    const nameInput = document.getElementById('user-display-name-input');
+    const name = nameInput.value.trim();
+    if (!name) { nameInput.focus(); return; }
+    
+    try {
+        const { getFirestore, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js');
+        const db = getFirestore(app);
+        await setDoc(doc(db, 'users', currentUser.email), { displayName: name }, { merge: true });
+        document.getElementById('user-display-name').textContent = `Hi, ${name}`;
+        switchView('view-setup');
+    } catch(e) {
+        console.error('Failed to save name:', e);
+        switchView('view-setup');
+    }
+});
+
+// --- NOTION CHANGE BUTTON ---
+document.getElementById('change-notion-btn')?.addEventListener('click', () => {
+    if (confirm('Do you want to change your Notion connection? This will require re-entering your keys.')) {
+        document.getElementById('notion-status-badge').classList.add('hidden');
+        document.getElementById('notion-setup-fields').classList.remove('hidden');
+    }
 });
 
 // Reports Heatmap Loader

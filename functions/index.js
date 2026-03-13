@@ -447,7 +447,7 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
 
 // --- MAIN ENDPOINT: syncPlanner ---
 // Handles the image upload from the frontend, uses Gemini to parse, and syncs
-exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 300, secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2, GEMINI_API_KEY] }, async (req, res) => {
+exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 300, secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2] }, async (req, res) => {
     // Generate Request ID for structured logging and trace tying
     const requestId = require('crypto').randomUUID();
     const startTimeMs = Date.now();
