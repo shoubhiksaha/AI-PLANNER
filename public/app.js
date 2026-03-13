@@ -500,7 +500,7 @@ const handleFiles = async (files) => {
 
     if (remainingSlots <= 0) {
         document.getElementById('paywall-message').textContent = tier === 'free' 
-            ? "Free tier is limited to 1 page per document. Upgrade to Standard or Pro to batch upload multiple pages!"
+            ? "Batch uploading is available only on paid tiers. Upgrade to Standard or Pro to upload multiple pages!"
             : "Standard tier limit reached. Upgrade to Pro for 5-page batch uploads!";
         document.getElementById('paywall-modal').classList.remove('hidden');
         document.getElementById('paywall-modal').classList.add('flex');
@@ -510,7 +510,7 @@ const handleFiles = async (files) => {
     const filesToProcess = Array.from(files).slice(0, remainingSlots);
     if (files.length > remainingSlots) {
         document.getElementById('paywall-message').textContent = tier === 'free' 
-            ? `Free tier is limited to 1 page per document. Only the first image was added. Upgrade to batch upload!`
+            ? `Batch uploading is available only on paid tiers. Only the first image was added. Upgrade to unlock!`
             : `Your tier limit is ${limit} pages. Only ${remainingSlots} images were added. Upgrade for more!`;
         document.getElementById('paywall-modal').classList.remove('hidden');
         document.getElementById('paywall-modal').classList.add('flex');
