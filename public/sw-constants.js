@@ -10,7 +10,7 @@
 (function (exports) {
     'use strict';
 
-    exports.CACHE_NAME = 'ai-planner-v8';
+    exports.CACHE_NAME = 'ai-planner-v9';
 
     exports.ASSETS_TO_CACHE = [
         '/',
