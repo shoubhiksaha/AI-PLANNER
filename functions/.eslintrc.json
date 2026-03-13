@@ -1,0 +1,18 @@
+{
+  "env": {
+    "es6": true,
+    "node": true,
+    "jest": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022
+  },
+  "extends": [
+    "eslint:recommended"
+  ],
+  "rules": {
+    "no-undef": "error",
+    "no-unused-vars": "warn",
+    "no-empty": "warn"
+  }
+}

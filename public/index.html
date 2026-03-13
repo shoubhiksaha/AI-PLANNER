@@ -50,11 +50,17 @@
             </div>
 
             <button id="login-btn"
-                class="w-full max-w-sm py-3.5 px-6 bg-theme-card hover:bg-theme-bg border border-theme-border rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-center group mb-12">
+                class="w-full max-w-sm py-3.5 px-6 bg-theme-card hover:bg-theme-bg border border-theme-border rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-center group mb-4">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
                     class="w-6 h-6 mr-3 group-hover:scale-110 transition-transform">
                 <span class="text-theme-text font-medium">Continue with Google</span>
             </button>
+
+            <!-- SCOPE EXPLANATION -->
+            <p class="text-[10.5px] text-theme-muted text-center max-w-sm px-4 mb-8 leading-tight">
+                To sync your evening data, we request narrowed Google Drive & Sheets access. 
+                This scope is used <strong>solely</strong> to create and append your "AI Planner Data" spreadsheet. We cannot read your personal files.
+            </p>
 
             <!-- FOOTER LINKS -->
             <div
@@ -105,6 +111,70 @@
                 <span>📚 How to find these keys? (Guide)</span>
             </button>
 
+            <!-- BYOK ADVANCED SETTINGS -->
+            <details class="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden mt-6">
+                <summary class="flex items-center justify-between p-4 cursor-pointer font-bold text-slate-700 select-none">
+                    <span class="flex items-center gap-2">🔒 Bring Your Own Key (BYOK) <span class="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded text-slate-500 uppercase">Power Users</span></span>
+                    <svg class="w-4 h-4 transition-transform group-open:rotate-180 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </summary>
+                <div class="p-4 pt-0 space-y-4 border-t border-slate-200 mt-2">
+                    <p class="text-xs text-slate-500 leading-relaxed">
+                        Want unlimited syncs? Enter your own OpenAI, Anthropic, Gemini, or Azure API Key. We'll use your quota instead of ours.
+                    </p>
+                    
+                    <div class="space-y-3">
+                        <label class="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-white transition-colors">
+                            <input type="radio" name="byok-mode" value="stateless" class="mt-0.5 accent-emerald-500" checked>
+                            <div class="flex flex-col">
+                                <span class="text-sm font-bold text-slate-700 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Session-Only (Maximum Privacy)</span>
+                                <span class="text-[10px] text-slate-500 mt-0.5">Key is saved ONLY to your device and deleted from RAM instantly after sync.</span>
+                            </div>
+                        </label>
+                        
+                        <label class="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-white transition-colors">
+                            <input type="radio" name="byok-mode" value="kms" class="mt-0.5 accent-blue-500">
+                            <div class="flex flex-col">
+                                <span class="text-sm font-bold text-slate-700 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Save Securely (Cloud KMS)</span>
+                                <span class="text-[10px] text-slate-500 mt-0.5">Key is envelope-encrypted via GCP KMS. Enables background batch syncing.</span>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div class="space-y-3">
+                        <label class="block text-xs font-bold text-gray-600 uppercase mb-1">AI Provider & Model</label>
+                        <select id="byok-provider" class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none">
+                            <option value="openai:gpt-4o">OpenAI (GPT-4o)</option>
+                            <option value="anthropic:claude-3-5-sonnet-20240620">Anthropic (Claude 3.5 Sonnet)</option>
+                            <option value="google:gemini-2.5-flash">Google (Gemini 2.5 Flash)</option>
+                            <option value="azure:gpt-4o">Azure OpenAI</option>
+                            <option value="custom:custom">Other / Custom (OpenAI Compatible)</option>
+                        </select>
+                        
+                        <div id="byok-custom-fields" class="space-y-3 hidden mt-3 bg-slate-100 p-3 rounded-lg border border-slate-200 border-dashed">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Custom Base URL</label>
+                                <input type="url" id="byok-custom-url"
+                                    class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
+                                    placeholder="https://api.together.xyz/v1/chat/completions">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Custom Model Name</label>
+                                <input type="text" id="byok-custom-model"
+                                    class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
+                                    placeholder="mistralai/Mixtral-8x7B-Instruct-v0.1">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Key</label>
+                        <input type="password" id="byok-api-key"
+                            class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
+                            placeholder="sk-...">
+                    </div>
+                </div>
+            </details>
+
             <button id="save-setup-btn"
                 class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all">
                 Save & Continue
@@ -144,9 +214,11 @@
 
             <label for="file-upload" id="drop-zone"
                 class="file-input block w-full h-40 border-2 border-dashed border-theme-border rounded-xl cursor-pointer flex flex-col items-center justify-center transition-all bg-theme-bg relative group overflow-hidden">
-                <div id="upload-ui" class="text-center group-hover:scale-105 transition-transform pointer-events-none">
-                    <span class="text-3xl block mb-2">📸</span>
-                    <span class="text-sm font-medium text-theme-muted">Tap to Upload or Drag & Drop (Max 5)</span>
+                <div id="upload-ui" class="text-center group-hover:scale-105 transition-transform pointer-events-none w-full h-full flex flex-col items-center justify-center relative">
+                    <span class="text-4xl block mb-2 opacity-80">📸</span>
+                    <span class="text-sm font-medium text-theme-muted mb-1">Tap to Upload or Drag & Drop (Max 5)</span>
+                    <span class="text-xs text-theme-muted opacity-75">e.g., Take a photo of your handwritten planner</span>
+                    <div class="absolute inset-0 opacity-5 bg-[url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center mix-blend-overlay rounded-xl z-0 pointer-events-none"></div>
                 </div>
                 <!-- Previews injected via JS -->
             </label>

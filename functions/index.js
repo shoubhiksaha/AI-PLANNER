@@ -1,11 +1,26 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { logger } = require("firebase-functions/logger");
 const admin = require("firebase-admin");
-// Imports moved inside function for Cold Start optimization
-// const fetch = require("node-fetch"); // Removed: Using Native Node 20 fetch
-// const { GoogleGenerativeAI } = require("@google/generative-ai"); // MOVED
-// const { google } = require("googleapis"); // MOVED
-// const { Client } = require("@notionhq/client"); // MOVED
+// Import Extracted Services
+const { checkRateLimit } = require('./services/rateLimit');
+const { getPlannerDataFromImages } = require('./services/gemini');
+const { 
+    syncCalendarEvents, 
+    syncGoogleTasks, 
+    updateCompletedTasks, 
+    syncExpensesToSheet, 
+    syncHealthToSheet 
+} = require('./services/googleSync');
+const { 
+    encrypt, 
+    getDecryptedNotionKeyAndMigrate, 
+    uploadFileToNotion, 
+    syncBrainDumpToNotion 
+} = require('./services/notion');
+const {
+    generateAndWrapDEK,
+    unwrapAndDecrypt
+} = require('./services/kms');
 
 // Initialize Firebase Admin with explicit bucket
 admin.initializeApp({
@@ -47,56 +62,10 @@ const {
 const ALGORITHM = 'aes-256-gcm';
 const LEGACY_ALGORITHM = 'aes-256-cbc';
 
-// Helper: Get derived keys for rotation
-// New key (V2) is preferred; falls back to V1 if V2 is not set
-function getCryptoKeyNew() {
-    const v2 = NOTION_ENCRYPTION_KEY_V2.value();
-    if (v2) return deriveKey(v2);
-    return deriveKey(NOTION_ENCRYPTION_KEY.value());
-}
-
-function getCryptoKeyOld() {
-    return deriveKey(NOTION_ENCRYPTION_KEY.value());
-}
-
-// Wrappers that inject the secret key — always encrypt with newest key
-function encrypt(text) {
-    if (!text) return text;
-    return _encryptWithKey(text, getCryptoKeyNew());
-}
-
-// Decrypt: try new key first, then old key (for rotation compatibility)
-function decryptStoredNotionKey(text) {
-    if (!text) return text;
-
-    // 1. Try new key (V2 or current)
-    try {
-        if (text.startsWith('v2:')) {
-            const val = _decryptGcmWithKey(text, getCryptoKeyNew());
-            if (val) return { value: val, needsMigration: false };
-        }
-    } catch (e) { /* fall through to old key */ }
-
-    // 2. Try old key (V1) — if V2 exists, this means key rotation happened
-    try {
-        const oldKey = getCryptoKeyOld();
-        if (text.startsWith('v2:')) {
-            const val = _decryptGcmWithKey(text, oldKey);
-            return { value: val, needsMigration: !!val };
-        }
-        if (text.includes(':')) {
-            const val = _decryptCbcWithKey(text, oldKey);
-            return { value: val, needsMigration: !!val };
-        }
-        // Plaintext leftover
-        return { value: text, needsMigration: true };
-    } catch (e) {
-        logger.error("Decryption failed for stored Notion key.", e);
-        return { value: null, needsMigration: false };
-    }
-}
+// Crypto logic and Rate Limits have been extracted to services/
 
 async function resolveUserEmailFromGoogleToken(token) {
+    const { validateTokenFormat } = require("./utils");
     if (!validateTokenFormat(token)) {
         throw new Error("INVALID_TOKEN_FORMAT");
     }
@@ -114,15 +83,12 @@ async function resolveUserEmailFromGoogleToken(token) {
     return email.toLowerCase();
 }
 
-/**
- * Ensures the user profile has the required base gamification/monetization fields.
- * If missing, pads the user document with the Free Tier defaults and saves it.
- */
+// Gamification Helper exports
 async function initializeGamificationProfile(userRef, userData) {
     let needsUpdate = false;
     const defaults = {
         tier: 'free',
-        tierCredits: 15, // Free tier monthly allowance
+        tierCredits: 15,
         boosterCredits: 0,
         currentStreak: 0,
         highestStreak: 0,
@@ -136,7 +102,7 @@ async function initializeGamificationProfile(userRef, userData) {
     for (const [key, val] of Object.entries(defaults)) {
         if (userData[key] === undefined) {
             updateObj[key] = val;
-            userData[key] = val; // Mutate local object so current execution has it
+            userData[key] = val;
             needsUpdate = true;
         }
     }
@@ -188,81 +154,81 @@ async function applyGamificationMilestones(userRef) {
             let diffDays = 0;
 
             if (!lastSyncDateStr) {
-        diffDays = 1;
-        currentStreak = 1;
-        dailySyncCount = 1;
-    } else {
-        const todayParts = todayStr.split('-').map(Number);
-        const lastParts = lastSyncDateStr.split('-').map(Number);
-        const todayDate = new Date(todayParts[0], todayParts[1]-1, todayParts[2]);
-        const lastDate = new Date(lastParts[0], lastParts[1]-1, lastParts[2]);
-        diffDays = Math.round((todayDate - lastDate) / (1000 * 60 * 60 * 24));
-
-        if (diffDays === 0) {
-            dailySyncCount += 1;
-        } else if (diffDays === 1) {
-            currentStreak += 1;
-            dailySyncCount = 1;
-        } else {
-            let daysMissed = diffDays - 1;
-            if (streakFreezes >= daysMissed) {
-                streakFreezes -= daysMissed;
-                currentStreak += 1; 
-            } else {
+                diffDays = 1;
                 currentStreak = 1;
-            }
-            dailySyncCount = 1;
-        }
-    }
+                dailySyncCount = 1;
+            } else {
+                const todayParts = todayStr.split('-').map(Number);
+                const lastParts = lastSyncDateStr.split('-').map(Number);
+                const todayDate = new Date(todayParts[0], todayParts[1]-1, todayParts[2]);
+                const lastDate = new Date(lastParts[0], lastParts[1]-1, lastParts[2]);
+                diffDays = Math.round((todayDate - lastDate) / (1000 * 60 * 60 * 24));
 
-    if (currentStreak > highestStreak) highestStreak = currentStreak;
-
-    let milestoneMsg = null;
-    if (diffDays > 0 && currentStreak > 0 && currentStreak % 5 === 0) {
-        const fiveDaysAgo = new Date();
-        fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
-        
-        const historySnap = await userRef.collection('syncHistory')
-            .where('timestamp', '>=', fiveDaysAgo)
-            .get();
-        
-        const dailyCountsMap = {};
-        dailyCountsMap[todayStr] = dailySyncCount;
-        
-        historySnap.forEach(doc => {
-            const data = doc.data();
-            if (data.timestamp && data.status === 'success') {
-                const dateStr = data.timestamp.toDate().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-                if (dateStr !== todayStr) { 
-                    dailyCountsMap[dateStr] = (dailyCountsMap[dateStr] || 0) + 1;
+                if (diffDays === 0) {
+                    dailySyncCount += 1;
+                } else if (diffDays === 1) {
+                    currentStreak += 1;
+                    dailySyncCount = 1;
+                } else {
+                    let daysMissed = diffDays - 1;
+                    if (streakFreezes >= daysMissed) {
+                        streakFreezes -= daysMissed;
+                        currentStreak += 1; 
+                    } else {
+                        currentStreak = 1;
+                    }
+                    dailySyncCount = 1;
                 }
             }
-        });
 
-        const counts = [];
-        const todayParts = todayStr.split('-').map(Number);
-        for (let i = 0; i < 5; i++) {
-            const d = new Date(todayParts[0], todayParts[1]-1, todayParts[2]);
-            d.setDate(d.getDate() - i);
-            const dStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-            counts.push(dailyCountsMap[dStr] || 0);
-        }
-        
-        const minDaily = Math.min(...counts);
+            if (currentStreak > highestStreak) highestStreak = currentStreak;
 
-        if (minDaily >= 3) {
-            milestoneMsg = `🎉 Amazing! ${currentStreak}-Day Streak (Min 3/day). Awarded Badge + 2 Freezes + 10 Booster Credits!`;
-            streakFreezes += 2;
-            boosterCredits += 10;
-        } else if (minDaily >= 2) {
-            milestoneMsg = `🔥 Great Job! ${currentStreak}-Day Streak (Min 2/day). Awarded Badge + 1 Freeze!`;
-            streakFreezes += 1;
-        } else if (minDaily >= 1) {
-            milestoneMsg = `🌟 Good Job! ${currentStreak}-Day Streak! Awarded Digital Badge!`;
-        } else {
-             milestoneMsg = `❄️ ${currentStreak}-Day Streak sustained using a Freeze!`;
-        }
-    }
+            let milestoneMsg = null;
+            if (diffDays > 0 && currentStreak > 0 && currentStreak % 5 === 0) {
+                const fiveDaysAgo = new Date();
+                fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+                
+                const historySnap = await userRef.collection('syncHistory')
+                    .where('timestamp', '>=', fiveDaysAgo)
+                    .get();
+                
+                const dailyCountsMap = {};
+                dailyCountsMap[todayStr] = dailySyncCount;
+                
+                historySnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.timestamp && data.status === 'success') {
+                        const dateStr = data.timestamp.toDate().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                        if (dateStr !== todayStr) { 
+                            dailyCountsMap[dateStr] = (dailyCountsMap[dateStr] || 0) + 1;
+                        }
+                    }
+                });
+
+                const counts = [];
+                const todayParts = todayStr.split('-').map(Number);
+                for (let i = 0; i < 5; i++) {
+                    const d = new Date(todayParts[0], todayParts[1]-1, todayParts[2]);
+                    d.setDate(d.getDate() - i);
+                    const dStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                    counts.push(dailyCountsMap[dStr] || 0);
+                }
+                
+                const minDaily = Math.min(...counts);
+
+                if (minDaily >= 3) {
+                    milestoneMsg = `🎉 Amazing! ${currentStreak}-Day Streak (Min 3/day). Awarded Badge + 2 Freezes + 10 Booster Credits!`;
+                    streakFreezes += 2;
+                    boosterCredits += 10;
+                } else if (minDaily >= 2) {
+                    milestoneMsg = `🔥 Great Job! ${currentStreak}-Day Streak (Min 2/day). Awarded Badge + 1 Freeze!`;
+                    streakFreezes += 1;
+                } else if (minDaily >= 1) {
+                    milestoneMsg = `🌟 Good Job! ${currentStreak}-Day Streak! Awarded Digital Badge!`;
+                } else {
+                     milestoneMsg = `❄️ ${currentStreak}-Day Streak sustained using a Freeze!`;
+                }
+            }
 
             const updates = {
                 boosterCredits,
@@ -280,51 +246,6 @@ async function applyGamificationMilestones(userRef) {
         console.warn("Best-effort gamification milestone calculation failed:", err);
         return null;
     }
-}
-
-async function getDecryptedNotionKeyAndMigrate(userRef, userData) {
-    if (!userData?.notionKey) {
-        return null;
-    }
-
-    const { value, needsMigration } = decryptStoredNotionKey(userData.notionKey);
-    if (!value) {
-        return null;
-    }
-
-    if (needsMigration) {
-        await userRef.set({ notionKey: encrypt(value) }, { merge: true });
-    }
-
-    return value;
-}
-
-// --- RATE LIMITING (Firestore-backed) ---
-async function checkRateLimit(email, endpoint, limit) {
-    const db = admin.firestore();
-    const docId = `${email}_${endpoint}`;
-    const ref = db.collection('rateLimits').doc(docId);
-    const now = Date.now();
-
-    const doc = await ref.get();
-    if (doc.exists) {
-        const data = doc.data();
-        const windowStart = data.windowStart || 0;
-        const count = data.count || 0;
-
-        if (now - windowStart < RATE_LIMIT_WINDOW_MS) {
-            if (count >= limit) {
-                const retryAfterMs = RATE_LIMIT_WINDOW_MS - (now - windowStart);
-                return { allowed: false, retryAfterMs };
-            }
-            await ref.set({ count: count + 1, windowStart }, { merge: true });
-            return { allowed: true };
-        }
-    }
-
-    // New window
-    await ref.set({ count: 1, windowStart: now });
-    return { allowed: true };
 }
 
 // --- SETUP ENDPOINT: setupNotion ---
@@ -363,10 +284,62 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
         const userRef = db.collection('users').doc(userEmail);
         await userRef.set({ notionKey: encryptedKey, notionDbId }, { merge: true });
 
-        console.log(`Stored encrypted Notion settings for ${userEmail}`);
+        logger.info(`Stored encrypted Notion settings for ${userEmail}`);
         return res.status(200).send({ success: true, text: "Notion setup saved securely." });
     } catch (err) {
         logger.error("Setup error:", err);
+        return res.status(500).send({ error: "Failed to securely save keys." });
+    }
+});
+
+// --- SETUP ENDPOINT: setupBYOK ---
+exports.setupBYOK = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    if (req.method !== 'POST') {
+        return res.status(405).send({ error: "Method not allowed" });
+    }
+    if (!isJsonRequest(req)) {
+        return res.status(415).send({ error: "Content-Type must be application/json" });
+    }
+
+    const body = req.body || {};
+    const token = body.token;
+    const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+    const provider = body.provider || 'openai';
+    const modelName = body.modelName || 'gpt-4o';
+    const baseUrl = body.baseUrl;
+
+    if (!token || !apiKey) {
+        return res.status(400).send({ error: "Invalid setup payload" });
+    }
+
+    try {
+        const userEmail = await resolveUserEmailFromGoogleToken(token);
+
+        const rl = await checkRateLimit(userEmail, 'setupBYOK', RATE_LIMIT_DEFAULT);
+        if (!rl.allowed) {
+            res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
+            return res.status(429).send({ error: "Too many requests. Please try again later." });
+        }
+
+        const kmsPayload = await generateAndWrapDEK(apiKey);
+        const db = admin.firestore();
+        const userRef = db.collection('users').doc(userEmail);
+        const byokDataToSave = {
+            ...kmsPayload,
+            provider,
+            modelName
+        };
+        if (baseUrl) byokDataToSave.baseUrl = baseUrl;
+        await userRef.set({ byokKmsData: byokDataToSave }, { merge: true });
+
+        logger.info(`Stored wrapped BYOK KMS Data for ${userEmail}`);
+        return res.status(200).send({ success: true, text: "BYOK settings saved securely." });
+    } catch (err) {
+        logger.error("BYOK Setup error:", err);
         return res.status(500).send({ error: "Failed to securely save keys." });
     }
 });
@@ -388,9 +361,12 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
     const token = body.token;
     if (!token) return res.status(400).send({ error: "Missing token" });
 
+    const requestId = require('crypto').randomUUID();
+    let userEmail = "unknown";
+
     try {
         const decodedToken = await admin.auth().verifyIdToken(token);
-        const userEmail = decodedToken.email?.toLowerCase();
+        userEmail = decodedToken.email?.toLowerCase();
         if (!userEmail) return res.status(401).send({ error: "No email in token" });
 
         const rl = await checkRateLimit(userEmail, 'exportUserData', RATE_LIMIT_DEFAULT);
@@ -418,10 +394,10 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
             };
         }
 
-        console.log(`Data export for ${userEmail}`);
+        logger.info(`Data export for ${userEmail}`);
         return res.status(200).send(exportData);
     } catch (err) {
-        console.error("Export error:", err.message);
+        logger.error("Export error:", { error: err.message, requestId, authEmail: userEmail });
         return res.status(500).send({ error: "Failed to export data." });
     }
 });
@@ -443,9 +419,12 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
     const token = body.token;
     if (!token) return res.status(400).send({ error: "Missing token" });
 
+    const requestId = require('crypto').randomUUID();
+    let userEmail = "unknown";
+
     try {
         const decodedToken = await admin.auth().verifyIdToken(token);
-        const userEmail = decodedToken.email?.toLowerCase();
+        userEmail = decodedToken.email?.toLowerCase();
         if (!userEmail) return res.status(401).send({ error: "No email in token" });
 
         const rl = await checkRateLimit(userEmail, 'deleteUserAccount', RATE_LIMIT_DEFAULT);
@@ -458,53 +437,94 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
         const userRef = db.collection('users').doc(userEmail);
         await userRef.delete();
 
-        console.log(`Account deleted for ${userEmail}`);
+        logger.info(`Account deleted for ${userEmail}`);
         return res.status(200).send({ success: true, text: "Your account data has been permanently deleted." });
     } catch (err) {
-        console.error("Delete error:", err.message);
+        logger.error("Delete error:", { error: err.message, requestId, authEmail: userEmail });
         return res.status(500).send({ error: "Failed to delete account." });
     }
 });
 
-// --- MAIN FUNCTION: syncPlanner ---
-exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 300, secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2] }, async (req, res) => {
+// --- MAIN ENDPOINT: syncPlanner ---
+// Handles the image upload from the frontend, uses Gemini to parse, and syncs
+exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 300, secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2, GEMINI_API_KEY] }, async (req, res) => {
+    // Generate Request ID for structured logging and trace tying
+    const requestId = require('crypto').randomUUID();
+    const startTimeMs = Date.now();
+
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
 
+    logger.info("Incoming sync request started", { requestId, method: req.method });
+
     if (req.method !== 'POST') {
-        return res.status(405).send({ error: "Method not allowed" });
+        const durationMs = Date.now() - startTimeMs;
+        logger.warn("Method not allowed", { requestId, durationMs, status: 405 });
+        return res.status(405).send({ error: "Method Not Allowed" });
     }
+
     if (!isJsonRequest(req)) {
-        return res.status(415).send({ error: "Content-Type must be application/json" });
+        const durationMs = Date.now() - startTimeMs;
+        logger.warn("Invalid Content-Type", { requestId, durationMs, status: 415 });
+        return res.status(415).send({ error: "Unsupported Media Type. Expected application/json" });
     }
 
     const body = req.body || {};
 
-    // Body size guard: reject payloads over 100MB to prevent OOM
+    // Validation: enforce body limit via header rather than heavy stringify
     const MAX_BODY_SIZE = 100_000_000;
-    if (JSON.stringify(body).length > MAX_BODY_SIZE) {
-        return res.status(413).send({ error: "Payload too large" });
+    if (req.rawBody && req.rawBody.length > MAX_BODY_SIZE) {
+        const durationMs = Date.now() - startTimeMs;
+        logger.warn("Payload size validation failed", { requestId, durationMs, size: req.rawBody.length, status: 413 });
+        return res.status(413).send({ error: "Payload too large. Max 100MB allowed." });
     }
 
     const token = body.token;
-    const mode = sanitizeSyncType(body.syncType);
+    if (!token) {
+        const durationMs = Date.now() - startTimeMs;
+        logger.warn("Missing auth token", { requestId, durationMs, status: 401 });
+        return res.status(401).send({ error: "Unauthorized" });
+    }
 
-    // Support backward compatibility for a single image, but standardize on array
-    const rawImages = body.images || (body.imageData ? [body.imageData] : []);
-    const parsedImages = parseImageDataArray(rawImages);
-
-    if (!token) return res.status(401).send({ error: "Missing Google OAuth Token" });
-    if (!ALLOWED_SYNC_TYPES.has(mode)) return res.status(400).send({ error: "Invalid syncType" });
-    if (!parsedImages || parsedImages.length === 0) return res.status(400).send({ error: "Invalid image data format, size, or too many images (max 5)." });
+    let email = null; // Declare email here for broader scope
+    let mode = null;
+    let timeZone = body.timeZone;
+    try {
+        if (!timeZone || typeof timeZone !== 'string' || !Intl.supportedValuesOf('timeZone').includes(timeZone)) {
+            timeZone = 'Asia/Kolkata';
+        }
+    } catch (e) {
+        timeZone = 'Asia/Kolkata';
+    }
+    let parsedImages = [];
 
     try {
-        const userEmail = await resolveUserEmailFromGoogleToken(token);
-        console.log(`User: ${userEmail}, Sync: ${mode}`);
+        email = await resolveUserEmailFromGoogleToken(token);
+        mode = sanitizeSyncType(body.syncType);
 
-        const rl = await checkRateLimit(userEmail, 'syncPlanner', RATE_LIMIT_SYNC);
+        // Support backward compatibility for a single image, but standardize on array
+        const rawImages = body.images || (body.imageData ? [body.imageData] : []);
+        parsedImages = parseImageDataArray(rawImages);
+
+        logger.info("Processing sync payload", { requestId, authEmail: email, syncMode: mode, imageCount: parsedImages ? parsedImages.length : 0 });
+
+        if (!ALLOWED_SYNC_TYPES.has(mode)) {
+            const durationMs = Date.now() - startTimeMs;
+            logger.warn("Invalid syncType", { requestId, authEmail: email, syncMode: mode, durationMs, status: 400 });
+            return res.status(400).send({ error: "Invalid syncType" });
+        }
+        if (!parsedImages || parsedImages.length === 0) {
+            const durationMs = Date.now() - startTimeMs;
+            logger.warn("Invalid image data", { requestId, authEmail: email, syncMode: mode, durationMs, status: 400 });
+            return res.status(400).send({ error: "Invalid image data format, size, or too many images (max 5)." });
+        }
+
+        const rl = await checkRateLimit(email, 'syncPlanner', RATE_LIMIT_SYNC);
         if (!rl.allowed) {
             res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
+            const durationMs = Date.now() - startTimeMs;
+            logger.warn("Rate limit exceeded", { requestId, authEmail: email, syncMode: mode, durationMs, status: 429 });
             return res.status(429).send({ error: "Too many requests. Please try again later." });
         }
 
@@ -514,7 +534,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
         // Load & Initialize User Config from Firestore
         const db = admin.firestore();
-        const userRef = db.collection('users').doc(userEmail);
+        const userRef = db.collection('users').doc(email);
         const userDoc = await userRef.get();
         let rawUserData = userDoc.exists ? userDoc.data() : {};
         
@@ -582,6 +602,41 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             }
         }
 
+        // --- BYOK TRAFFIC COP ---
+        let byokConfig = null;
+        const statelessKey = req.headers['x-byok-token'];
+        const statelessProvider = req.headers['x-byok-provider'];
+        const statelessModel = req.headers['x-byok-model'];
+        const statelessBaseUrl = req.headers['x-byok-baseurl'];
+
+        if (statelessKey) {
+            byokConfig = {
+                apiKey: statelessKey,
+                provider: statelessProvider || 'openai',
+                modelName: statelessModel || 'gpt-4o'
+            };
+            if (statelessBaseUrl) byokConfig.baseUrl = statelessBaseUrl;
+            logger.info("Traffic Cop: Routing via Stateless X-BYOK-Token header", { requestId, authEmail: email });
+        } else if (userData.byokKmsData) {
+            try {
+                logger.info("Traffic Cop: Attempting KMS Envelope Decryption", { requestId, authEmail: email });
+                const decryptedKey = await unwrapAndDecrypt(
+                    userData.byokKmsData.encryptedKey, 
+                    userData.byokKmsData.wrappedDek, 
+                    userData.byokKmsData.iv, 
+                    userData.byokKmsData.authTag
+                );
+                byokConfig = {
+                    apiKey: decryptedKey,
+                    provider: userData.byokKmsData.provider || 'openai',
+                    modelName: userData.byokKmsData.modelName || 'gpt-4o'
+                };
+                if (userData.byokKmsData.baseUrl) byokConfig.baseUrl = userData.byokKmsData.baseUrl;
+            } catch (err) {
+                logger.error("KMS Decryption error", { error: err.message, requestId, authEmail: email });
+            }
+        }
+
         // Initialize Services
         const calendar = google.calendar({ version: 'v3', auth });
         const tasks = google.tasks({ version: 'v1', auth });
@@ -591,17 +646,23 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         let msg = "";
         if (mode === 'journal') {
             if (!userData.notionKey || !userData.notionDbId) {
+                const durationMs = Date.now() - startTimeMs;
+                logger.warn("Notion not setup for journal sync", { requestId, authEmail: email, syncMode: mode, durationMs, status: 400 });
                 return res.status(400).send({ error: "Notion not setup. Please provide keys." });
             }
 
             // Create Notion Client (Lazy Load)
             const { Client } = require("@notionhq/client");
             const decryptedNotionKey = await getDecryptedNotionKeyAndMigrate(userRef, userData);
-            if (!decryptedNotionKey) return res.status(401).send({ error: "Invalid or corrupt Notion settings. Please re-setup Notion." });
+            if (!decryptedNotionKey) {
+                const durationMs = Date.now() - startTimeMs;
+                logger.error("Failed to decrypt Notion key for journal sync", { requestId, authEmail: email, syncMode: mode, durationMs, status: 401 });
+                return res.status(401).send({ error: "Invalid or corrupt Notion settings. Please re-setup Notion." });
+            }
             const notion = new Client({ auth: decryptedNotionKey });
 
             // PARALLEL EXECUTION: Upload Limitless Image(s) to Notion Directly (Zero Storage) & Extract Date
-            console.log("Starting parallel Journal processing (Zero Storage)...");
+            logger.info("Starting parallel Journal processing (Zero Storage)...", { requestId, authEmail: email, syncMode: mode });
 
             const journalUploadPromises = parsedImages.map(img =>
                 uploadFileToNotion(decryptedNotionKey, Buffer.from(img.base64Data, 'base64'), img.mimeType)
@@ -609,16 +670,16 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
             const [fileUploadIds, extraction] = await Promise.all([
                 Promise.all(journalUploadPromises),
-                getPlannerDataFromImages(parsedImages, 'journal_date_only', userData).catch(err => {
-                    console.warn("Date extraction failed:", err.message);
+                getPlannerDataFromImages(parsedImages, 'journal_date_only', byokConfig).catch(err => {
+                    logger.warn("Date extraction failed for journal:", { requestId, authEmail: email, syncMode: mode, error: err.message });
                     return { date: null };
                 })
             ]);
 
-            let journalDate = new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' });
+            let journalDate = new Date().toLocaleDateString('en-US', { timeZone });
             if (extraction && extraction.date) {
                 journalDate = extraction.date;
-                console.log(`Extracted Journal Date: ${journalDate}`);
+                logger.info(`Extracted Journal Date: ${journalDate}`, { requestId, authEmail: email, syncMode: mode, journalDate });
             }
 
             // Create Notion Page with File Attachments
@@ -644,6 +705,15 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             if (milestoneMsg) msg += `\n${milestoneMsg}`;
             await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
             await incrementUsageCounters(userRef, parsedImages.length);
+            const durationMs = Date.now() - startTimeMs;
+            logger.info("Sync transaction complete", {
+                requestId,
+                authEmail: email,
+                syncMode: mode,
+                durationMs,
+                status: 200,
+                type: 'latency'
+            });
             return res.status(200).send({ text: msg });
         }
 
@@ -651,24 +721,24 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         let plannerData;
 
         if (mode === 'morning') {
-            console.log(`Parsing planner images for morning sync...`);
-            plannerData = await getPlannerDataFromImages(parsedImages, 'morning', userData);
+            logger.info("Parsing planner images for morning sync...", { requestId, authEmail: email });
+            plannerData = await getPlannerDataFromImages(parsedImages, 'morning', byokConfig);
 
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
                 return res.status(400).send({ error: plannerData.error });
             }
 
-            console.log("Starting parallel Morning sync...");
+            logger.info("Starting parallel Morning sync...", { requestId, authEmail: email });
 
             // Parallel: Add Events to Calendar AND Add Tasks to Google Tasks.
             const [eventResults, taskCount] = await Promise.all([
-                syncCalendarEvents(calendar, plannerData),
+                syncCalendarEvents(calendar, plannerData, timeZone),
                 syncGoogleTasks(tasks, plannerData)
             ]);
 
             msg = `Morning Sync Complete! Created ${eventResults.events} events, ${eventResults.reminders} reminders, and ${taskCount} tasks.`;
-            console.log(msg);
+            logger.info(msg, { requestId, authEmail: email });
 
             const milestoneMsg = await applyGamificationMilestones(userRef);
             if (milestoneMsg) msg += `\n${milestoneMsg}`;
@@ -679,8 +749,8 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
         } else if (mode === 'evening') {
             // Re-scan images specifically looking for evening data (expenses, mood, etc).
-            console.log(`Parsing planner images for evening sync...`);
-            plannerData = await getPlannerDataFromImages(parsedImages, 'evening', userData);
+            logger.info("Parsing planner images for evening sync...", { requestId, authEmail: email });
+            plannerData = await getPlannerDataFromImages(parsedImages, 'evening', byokConfig);
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
                 return res.status(400).send({ error: plannerData.error });
@@ -695,7 +765,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             // ---- AUTO-CREATE SPREADSHEET IF MISSING ----
             let spreadsheetId = userData.spreadsheetId;
             if (!spreadsheetId) {
-                console.log("No spreadsheet found. Creating new one...");
+                logger.info("No spreadsheet found. Creating new one...", { requestId, authEmail: email });
                 const newSheet = await sheets.spreadsheets.create({
                     resource: {
                         properties: { title: "AI Planner Data" },
@@ -721,7 +791,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             }
 
             // PARALLEL EXECUTION: Sheets (Expenses, Health) and Notion (Image+Text)
-            console.log("Starting parallel Evening sync...");
+            logger.info("Starting parallel Evening sync...", { requestId, authEmail: email });
 
             const promises = [
                 syncExpensesToSheet(sheets, plannerData, spreadsheetId),
@@ -736,7 +806,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                     const brainDumpPromise = async () => {
                         try {
                             if (!plannerData.brainDump) return false;
-                            console.log("Starting parallel Brain Dump to Notion (Zero Storage)...");
+                            logger.info("Starting parallel Brain Dump to Notion (Zero Storage)...", { requestId, authEmail: email });
                             let fileId = null;
                             const firstImage = parsedImages[0];
                             if (firstImage && firstImage.base64Data) {
@@ -745,7 +815,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                             }
                             return syncBrainDumpToNotion(plannerData, decryptedNotionKey, userData.notionDbId, fileId);
                         } catch (err) {
-                            console.error("Notion sync failed:", err.message);
+                            logger.error("Notion sync failed:", { error: err.message, requestId, authEmail: email });
                             return false;
                         }
                     };
@@ -763,7 +833,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             // Helper to get value or log error
             const getResult = (result, name) => {
                 if (result.status === 'fulfilled') return result.value;
-                console.error(`${name} Sync Failed:`, result.reason?.message || result.reason);
+                logger.error(`${name} Sync Failed:`, { error: result.reason?.message || result.reason, requestId, authEmail: email });
                 return (name === 'Notion') ? false : 0;
             };
 
@@ -788,12 +858,12 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             return res.status(400).send({ error: `Invalid syncType: ${mode}` });
         }
 
-        console.log(msg);
+        logger.info(msg, { requestId, authEmail: email });
         res.status(200).send({ text: msg });
 
     } catch (error) {
         const errMsg = error?.message || String(error || "Unknown error");
-        console.error("FATAL ERROR:", errMsg);
+        logger.error("FATAL ERROR:", { error: errMsg, requestId, authEmail: email });
 
         // Try to log the failure if we have user context
         try {
@@ -810,7 +880,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 }
             }
         } catch (logErr) {
-            console.error("Failed to log error history:", logErr);
+            logger.error("Failed to log error history:", { error: logErr.message, requestId, authEmail: email });
         }
 
         // Security: Don't leak internals to client
@@ -845,336 +915,7 @@ async function incrementUsageCounters(userRef, imageCount) {
     }
 }
 
-// Helper to upload file to Notion (Direct Upload - Corrected 2-Step Flow)
-async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
-    try {
-        console.log("Step 1: Init Notion Upload...");
-        // Step 1: Create File Upload Object
-        const createRes = await fetch("https://api.notion.com/v1/file_uploads", {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-                "Notion-Version": "2022-06-28"
-            },
-            body: JSON.stringify({
-                filename: "journal.jpg",
-                content_type: mimeType
-            })
-        });
-
-        if (!createRes.ok) throw new Error(`Notion Init Upload Failed: ${await createRes.text()}`);
-        const uploadObj = await createRes.json();
-        const { id, upload_url } = uploadObj;
-
-        console.log(`Step 1 Success. ID: ${id}. Step 2: Uploading Binary...`);
-
-        // Step 2: Upload File Content to the returned URL
-        const form = new FormData();
-        const blob = new Blob([fileBuffer], { type: mimeType });
-        form.append("file", blob, "journal.jpg");
-
-        const uploadRes = await fetch(upload_url, {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Notion-Version": "2022-06-28"
-            },
-            body: form
-        });
-
-        if (!uploadRes.ok) throw new Error(`Notion Binary Upload Failed: ${await uploadRes.text()}`);
-
-        console.log(`Notion File Uploaded Successfully: ${id}`);
-        return id;
-    } catch (e) {
-        logger.error("Notion Direct Upload Error:", e);
-        throw e;
-    }
-}
-
-// Helper to fetch with timeout
-async function fetchWithTimeout(url, options, timeout = 60000) {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
-    try {
-        const response = await fetch(url, { ...options, signal: controller.signal });
-        clearTimeout(id);
-        return response;
-    } catch (error) {
-        clearTimeout(id);
-        throw error;
-    }
-}
-
-
-async function getPlannerDataFromImages(parsedImages, syncType, userData) {
-    if (!parsedImages || parsedImages.length === 0) {
-        throw new Error("INVALID_IMAGE_PAYLOAD");
-    }
-
-    const prompt =
-        syncType === 'evening' ? getEveningPrompt() :
-            syncType === 'journal_date_only' ? getJournalDatePrompt() :
-                getMorningPrompt();
-
-    const UniversalAIAdapter = require('./lib/UniversalAIAdapter');
-    let adapter;
-    const hasBYOK = userData && userData.byokConfig && userData.byokConfig.apiKey;
-
-    if (hasBYOK) {
-        console.log(`Using BYOK adapter for provider: ${userData.byokConfig.provider}`);
-        adapter = new UniversalAIAdapter(userData.byokConfig);
-        try {
-            const responseText = await adapter.chat(prompt, parsedImages);
-            let cleaned = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-            return JSON.parse(cleaned);
-        } catch (error) {
-            throw new Error(`BYOK Adapter Failed: ${error.message}`);
-        }
-    } else {
-        const geminiApiKey = GEMINI_API_KEY.value();
-        if (!geminiApiKey) {
-            throw new Error("MISSING_GEMINI_API_KEY");
-        }
-
-        const models = [
-            "gemini-2.5-flash-lite", 
-            "gemini-2.5-flash",      
-            "gemini-2.0-flash-lite", 
-            "gemini-flash-latest"    
-        ];
-
-        let lastError = null;
-        for (const model of models) {
-            try {
-                console.log(`Attempting Gemini model: ${model}...`);
-                adapter = new UniversalAIAdapter({
-                    apiKey: geminiApiKey,
-                    provider: 'google',
-                    modelName: model
-                });
-                const responseText = await adapter.chat(prompt, parsedImages);
-                let cleaned = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-                return JSON.parse(cleaned);
-            } catch (error) {
-                lastError = error;
-                if (models.indexOf(model) < models.length - 1) {
-                    console.log(`Falling back to next model...`);
-                }
-            }
-        }
-        throw new Error(`All Gemini models failed. Last error: ${lastError?.message || "Unknown error"}`);
-    }
-}
-
-async function syncCalendarEvents(calendar, plannerData) {
-    let counts = { events: 0, reminders: 0 };
-    for (const item of (plannerData.schedule || [])) {
-        if ((item.block || item.reminder) && item.task) {
-            const startTime = parseDateTime(item.time, plannerData.date);
-
-            // Safety check: Skip if time couldn't be parsed
-            if (!startTime) continue;
-
-            // Assume event lasts 1 hour.
-            const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
-
-            // Fix: Use localized time strings for Google Calendar to prevent UTC shift
-            // We want "2023-10-25T09:00:00" not "2023-10-25T09:00:00.000Z" (which GCal treats as UTC)
-            // The cleanest way is to use the sv-SE locale which follows ISO format but uses local time values
-            const toLocalISO = (date) => {
-                const offset = date.getTimezoneOffset() * 60000;
-                return new Date(date.getTime() - offset).toISOString().slice(0, 19);
-            };
-
-            const sTime = toLocalISO(startTime);
-            const eTime = toLocalISO(endTime);
-            console.log(`Creating Event: "${item.task}" Start: ${sTime} End: ${eTime}`);
-
-            await calendar.events.insert({
-                calendarId: 'primary',
-                resource: {
-                    summary: item.task,
-                    start: { dateTime: sTime, timeZone: 'Asia/Kolkata' },
-                    end: { dateTime: eTime, timeZone: 'Asia/Kolkata' },
-                    reminders: {
-                        useDefault: false,
-                        overrides: item.reminder ? [{ method: 'popup', minutes: 10 }] : [],
-                    },
-                },
-            });
-            if (item.block) counts.events++;
-            if (item.reminder) counts.reminders++;
-        }
-    }
-    return counts;
-}
-
-async function syncGoogleTasks(tasks, plannerData) {
-    let count = 0;
-    const dueDate = new Date(plannerData.date);
-    dueDate.setHours(23, 59, 59, 999);
-
-    for (const item of (plannerData.todos || [])) {
-        if (item.task) {
-            await tasks.tasks.insert({
-                tasklist: '@default',
-                requestBody: {
-                    title: item.task,
-                    status: item.done ? 'completed' : 'needsAction',
-                    due: dueDate.toISOString()
-                }
-            });
-            count++;
-        }
-    }
-    return count;
-}
-
-async function updateCompletedTasks(tasks, plannerData) {
-    // Get completed tasks from planner
-    const completedPlannerTasks = (plannerData.todos || [])
-        .filter(todo => todo.done === true)
-        .map(todo => todo.task);
-
-    if (completedPlannerTasks.length === 0) return 0;
-
-    // Get active tasks from Google
-    const res = await tasks.tasks.list({
-        tasklist: '@default',
-        showCompleted: false,
-    });
-
-    const googleTasks = res.data.items;
-    if (!googleTasks || googleTasks.length === 0) return 0;
-
-    let updatedCount = 0;
-    for (const plannerTaskTitle of completedPlannerTasks) {
-        // Fuzzy match or exact match depending on need, exact for now
-        const matchingGoogleTask = googleTasks.find(gTask => gTask.title.trim().toLowerCase() === plannerTaskTitle.trim().toLowerCase());
-
-        if (matchingGoogleTask) {
-            console.log(`Marking task completed: "${matchingGoogleTask.title}"`);
-            await tasks.tasks.patch({
-                tasklist: '@default',
-                task: matchingGoogleTask.id,
-                requestBody: { status: 'completed' }
-            });
-            updatedCount++;
-        }
-    }
-    return updatedCount;
-}
-
-async function syncExpensesToSheet(sheets, plannerData, spreadsheetId) {
-    if (!plannerData.expenses || plannerData.expenses.length === 0) return 0;
-
-    // Format: Date | Item | Amount
-    const rows = plannerData.expenses.map(expense => [
-        plannerData.date, // Just use the string date for simplicity, or format it
-        expense.item,
-        expense.amount
-    ]);
-
-    // Assuming a sheet named "Expenses"
-    const range = 'Expenses!A:C';
-
-    try {
-        await sheets.spreadsheets.values.append({
-            spreadsheetId: spreadsheetId,
-            range: range,
-            valueInputOption: 'USER_ENTERED',
-            requestBody: { values: rows },
-        });
-        return rows.length;
-    } catch (err) {
-        logger.error('Failed to sync expenses:', err);
-        return 0; // Don't crash the whole sync
-    }
-}
-
-async function syncHealthToSheet(sheets, plannerData, spreadsheetId) {
-    if (!plannerData.health || Object.keys(plannerData.health).length === 0) return 0;
-
-    // Format: Date | Exercise | Water | Sleep | Energy
-    const row = [
-        plannerData.date,
-        plannerData.health.exercise || "",
-        plannerData.health.water || 0,
-        plannerData.health.sleep || 0,
-        plannerData.health.energy || 0
-    ];
-
-    // Assuming a sheet named "Health"
-    const range = 'Health!A:E';
-
-    try {
-        await sheets.spreadsheets.values.append({
-            spreadsheetId: spreadsheetId,
-            range: range,
-            valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [row] },
-        });
-        return 1;
-    } catch (err) {
-        logger.error('Failed to sync health:', err);
-        return 0;
-    }
-}
-
-// Simplified Helper: Only supports Direct File Upload IDs (Zero Storage)
-async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, fileId) {
-    if ((!plannerData.brainDump || plannerData.brainDump.trim() === '') && !fileId) return false;
-
-    if (!notionApiKey || notionApiKey.includes("YOUR_")) {
-        console.warn("Notion API Key not configured.");
-        return false;
-    }
-
-    const { Client } = require("@notionhq/client"); // Lazy Load
-    const notion = new Client({ auth: notionApiKey });
-    const pageTitle = `Brain Dump - ${plannerData.date}`;
-
-    try {
-        const children = [];
-
-        // Add Brain Dump Text
-        if (plannerData.brainDump) {
-            children.push({
-                object: 'block',
-                type: 'paragraph',
-                paragraph: {
-                    rich_text: [{ type: 'text', text: { content: plannerData.brainDump } }]
-                }
-            });
-        }
-
-        // Add Visual Reference (Image File Attachment)
-        if (fileId) {
-            children.push({
-                object: 'block',
-                type: 'image',
-                image: {
-                    type: 'file_upload',
-                    file_upload: { id: fileId }
-                }
-            });
-        }
-
-        await notion.pages.create({
-            parent: { database_id: databaseId },
-            properties: {
-                "Name": { title: [{ text: { content: pageTitle } }] }
-            },
-            children: children
-        });
-        return true;
-    } catch (err) {
-        logger.error("Notion Sync Error:", err);
-        return false;
-    }
-}
+// Logic delegated to GoogleSync and Notion services
 
 // --- GCP Error Reporting: Frontend Ingestion Endpoint ---
 exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req, res) => {
@@ -1206,55 +947,4 @@ exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req
 });
 
 
-// Improved parseDateTime with validation
-
-function getMorningPrompt() {
-    return `Analyze the attached image of a daily planner.
-            Step 1: Extract all relevant data.
-            - Extract the handwritten date as a string (e.g., "6-August-2025").
-            - Extract the schedule items with tasks into a "schedule" array. Each object should have "time", "task", "block" (boolean), and "reminder" (boolean). Ignore empty or crossed-out tasks.
-            - Extract the to-do list items into a "todos" array. Each object should have "task" (string) and "done" (boolean). Ignore empty lines.
-            - Extract the handwritten total for Blocks, the total for Reminders, and the total for To-Dos as numbers.
-
-            Step 2: Verify your work meticulously.
-            - Count how many items in your extracted "schedule" have "block": true. Compare this to the handwritten total for Blocks.
-            - Count how many items in your extracted "schedule" have "reminder": true. Compare this to the handwritten total for Reminders.
-            - Count the total number of items in your extracted "todos" array. Compare this to the handwritten total for To-Dos.
-
-            Step 3: Finalize the output.
-            - If ALL THREE of your counts from Step 2 PERFECTLY MATCH the handwritten totals, return a single JSON object with the "date", "schedule", and "todos".
-            - If ANY of your counts DO NOT MATCH, you have made a mistake. Re-examine the entire image, correct your extraction, and repeat Step 2. Do this re-check twice.
-            - If after two re-checks the counts still do not match, return a JSON object with an "error" key. The value should be a string explaining the specific mismatch, for example: "I counted 7 blocked events, but the planner says 8."
-
-            Do not include any explanatory text. Your final output must only be the clean JSON object.`;
-}
-
-function getEveningPrompt() {
-    return `Analyze the attached image of a filled-out daily planner (Evening Review).
-            Step 1: Extract relevant data.
-            - "date": The handwritten date on the page (string).
-            - "todos": Look at the To-Dos list. Return an array of objects ({ "task": string, "done": boolean }). Only include tasks that are CLEARLY marked as done (checked off).
-            - "expenses": Look at the Expenses section. Return an array of objects ({ "item": string, "amount": number }).
-            - "health": Look at the Health/Wellness section. Extract:
-                - "exercise": Details of exercise (string).
-                - "water": Number of filled water circles (number).
-                - "sleep": Hours of sleep (number).
-                - "energy": Energy level 1-5 (number).
-            - "brainDump": Extract the text from the Brain Dump / Ideas section (string).
-
-            Step 2: Verify.
-            - Check the "Total Expenses" sum if written, compared to sum of items.
-            - Check the "To-Do" count.
-
-            Step 3: Output.
-            - Return a single JSON object with keys: "date", "todos", "expenses", "health", "brainDump".
-            - Ensure output is well-formed JSON.
-            `;
-}
-
-function getJournalDatePrompt() {
-    return `Extract the handwritten date from this planner page.
-            Return a single JSON object: { "date": "string" }.
-            The date string should be formatted clearly (e.g., "15-January-2025").
-            If no date is found, return { "date": null }.`;
-}
+// Gemini prompts have been extracted to services/gemini.js

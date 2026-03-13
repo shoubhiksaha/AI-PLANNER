@@ -13,7 +13,7 @@
 ![Security](https://img.shields.io/badge/Security-CSP%20Enforced-brightgreen)
 ![Tech](https://img.shields.io/badge/Stack-Firebase%20%7C%20Node.js%20%7C%20Gemini-blue)
 [![CI/CD](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/main.yml/badge.svg)](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/main.yml)
-![Tests](https://img.shields.io/badge/Tests-114%20Passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-202%20Passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/Coverage-80%25%2B-brightgreen)
 
 ---
@@ -35,7 +35,7 @@ Unlike traditional apps that store user images in an S3 bucket or database, **AI
 
 | Layer | Implementation |
 |-------|---------------|
-| **Encryption** | AES-256-CBC for Notion keys; encryption key in Secret Manager |
+| **Encryption** | AES-256-GCM for Notion keys (CBC legacy fallback); encryption key in Secret Manager |
 | **CSP** | Strict Content Security Policy with SHA-256 script hashes |
 | **Auth** | Firebase Auth with popup + redirect fallback; redirect-first on mobile |
 | **Firestore** | Client read-only; all writes via Admin SDK |
@@ -65,7 +65,17 @@ graph TD
 | Backend | Firebase Functions Gen 2 (Node.js 20) |
 | AI | Google Gemini (Flash model cascade) |
 | Auth | Google Identity Services (OAuth 2.0) |
-| Security | CSP + AES-256-CBC Encryption + Secret Manager |
+| Security | CSP + AES-256-GCM Encryption + Secret Manager |
+
+---
+
+## 📊 Production SLOs (Service Level Objectives)
+
+| Metric | Target | Description |
+|--------|--------|-------------|
+| **Success Rate (Availability)** | **99.9%** | API sync functions should return 200 OK or 4xx for expected application drops. |
+| **Latency (p95)** | **< 30s** | 95% of Gemini extraction and Notion upload chains should complete under 30 seconds. |
+| **Error Budget** | **0.1% / month** | Allowable 5xx failures per month trigger Slack/Email alerts via GCP Logging before causing outages. |
 
 ---
 
@@ -92,7 +102,7 @@ graph TD
 
 ### V5: Security Hardening (Current)
 - **Rate Limiting**: Firestore-backed 10 req/min for Sync, 20 req/min for auth endpoints.
-- **Payload Validation**: Strict 30MB JSON limit + base64 decoded byte size checks to prevent OOM.
+- **Payload Validation**: Strict 100MB JSON limit + base64 decoded byte size checks to prevent OOM.
 - **Key Rotation**: Dual-key AES-256-GCM encryption strategy for Notion Keys with zero-downtime migration.
 
 ### V6: Future Roadmap
@@ -159,6 +169,7 @@ Config:
 | [SECURITY_CSP_PLAN.md](SECURITY_CSP_PLAN.md) | CSP migration plan (✅ all phases complete) |
 | [PROJECT_CHANGELOG](PROJECT_CHANGELOG_AND_CURRENT_ARCHITECTURE.md) | Full change history & current architecture |
 | [BREACH_RESPONSE_PLAN.md](BREACH_RESPONSE_PLAN.md) | Data breach response process |
+| [OAuth Verification Pack](docs/oauth-verification/README.md) | Scope justifications, reviewer demo script, and test account template |
 
 ---
 
@@ -179,9 +190,9 @@ Config:
     ```
 4. **Run Tests**:
     ```bash
-    npm test                 # All 198 tests (backend + frontend)
-    npm run test:backend     # 157 backend tests with coverage
-    npm run test:frontend    # 41 frontend tests (jsdom)
+    npm test                 # All 202 tests (backend + frontend)
+    npm run test:backend     # 160 backend tests with coverage
+    npm run test:frontend    # 42 frontend tests (jsdom)
     ```
 5. **Run Firestore Rules Tests** (requires Java 21+):
     ```bash

@@ -2,7 +2,7 @@
 // Extracted from inline <script type="module"> for CSP compliance
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
 
 // FIREBASE CONFIG
 const firebaseConfig = {
@@ -19,6 +19,20 @@ const auth = getAuth(app);
 
 if (window.location.hostname === "localhost" && window.location.search.includes("emulator=true")) {
     connectAuthEmulator(auth, "http://127.0.0.1:9099");
+    
+    // Non-production test auth path for E2E Playwright tests
+    window.e2eLogin = async (email, password) => {
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+        } catch (e) {
+            // Auto-provision the test user in the emulator if they don't exist
+            if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
+                await createUserWithEmailAndPassword(auth, email, password);
+            } else {
+                throw e;
+            }
+        }
+    };
 }
 
 // STATE
@@ -76,14 +90,15 @@ const buildGoogleProvider = () => {
     const provider = new GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/calendar.events');
     provider.addScope('https://www.googleapis.com/auth/tasks');
-    provider.addScope('https://www.googleapis.com/auth/drive.file');
+    provider.addScope('https://www.googleapis.com/auth/drive.file'); // Required for creating/editing the Expense Spreadsheet during Evening Sync
     return provider;
 };
 
 // Mobile detection: Use redirect instead of popup on phones/tablets
 const isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
 
-const ensureGoogleAccessToken = async () => {
+const ensureGoogleAccessToken = async (forceRefresh = false) => {
+    if (forceRefresh) googleAccessToken = null;
     if (googleAccessToken) return googleAccessToken;
     if (!auth.currentUser) throw new Error("Please sign in again.");
 
@@ -213,10 +228,71 @@ function updateGamificationUI(data) {
     document.getElementById('reports-streak-freezes').textContent = `❄️ ${streakFreezes}`;
 }
 
+// Restore BYOK UI state
+const statelessConfigStr = localStorage.getItem('byok_stateless_config');
+if (statelessConfigStr) {
+    try {
+        const config = JSON.parse(statelessConfigStr);
+        const apiKeyInput = document.getElementById('byok-api-key');
+        const providerSelect = document.getElementById('byok-provider');
+        const statelessRadio = document.querySelector('input[name="byok-mode"][value="stateless"]');
+        if (apiKeyInput && statelessRadio && providerSelect) {
+            apiKeyInput.value = config.apiKey;
+            if (config.provider === 'openai' && config.customUrl) {
+                providerSelect.value = 'custom:custom';
+                document.getElementById('byok-custom-fields').classList.remove('hidden');
+                document.getElementById('byok-custom-url').value = config.customUrl;
+                document.getElementById('byok-custom-model').value = config.modelName;
+            } else {
+                providerSelect.value = `${config.provider}:${config.modelName}`;
+            }
+            statelessRadio.checked = true;
+        }
+    } catch(e){}
+} else {
+    const statelessKey = localStorage.getItem('byok_stateless_key');
+    if (statelessKey) {
+        const apiKeyInput = document.getElementById('byok-api-key');
+        if (apiKeyInput) apiKeyInput.value = statelessKey;
+        document.querySelector('input[name="byok-mode"][value="stateless"]').checked = true;
+    }
+}
+
+// Provider dropdown toggle
+document.getElementById('byok-provider')?.addEventListener('change', (e) => {
+    const customFields = document.getElementById('byok-custom-fields');
+    if (e.target.value === 'custom:custom') {
+        customFields.classList.remove('hidden');
+    } else {
+        customFields.classList.add('hidden');
+    }
+});
+
 document.getElementById('save-setup-btn').addEventListener('click', async () => {
     const key = document.getElementById('setup-key').value;
     const dbId = document.getElementById('setup-db').value;
-    if (!key || !dbId) return alert("Please fill both fields");
+    
+    // BYOK Config
+    const byokMode = document.querySelector('input[name="byok-mode"]:checked').value;
+    const byokKey = document.getElementById('byok-api-key').value.trim();
+    const providerVal = document.getElementById('byok-provider').value;
+    
+    let provider, modelName, customUrl;
+    if (providerVal === 'custom:custom') {
+        provider = 'openai'; // OpenAI compatible
+        customUrl = document.getElementById('byok-custom-url').value.trim();
+        modelName = document.getElementById('byok-custom-model').value.trim();
+        if (byokKey && (!customUrl || !modelName)) {
+            alert("Please provide the Custom Base URL and Model Name");
+            return;
+        }
+    } else {
+        [provider, modelName] = providerVal.split(':');
+    }
+
+    if (!key || !dbId) {
+        if (!confirm("Notion fields are empty. You won't be able to use Journal mode. Continue anyway?")) return;
+    }
 
     const saveBtn = document.getElementById('save-setup-btn');
     const originalText = saveBtn.innerText;
@@ -226,23 +302,40 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
     try {
         const token = await ensureGoogleAccessToken();
 
-        // Send raw key to backend to be encrypted and saved securely
-        const res = await fetch('/setupNotion', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                token,
-                notionKey: key,
-                notionDbId: dbId
-            })
-        });
+        // Save Notion Keys
+        if (key && dbId) {
+            const res = await fetch('/setupNotion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, notionKey: key, notionDbId: dbId })
+            });
+            if (!res.ok) throw new Error("Failed to secure Notion keys.");
+        }
 
-        if (!res.ok) throw new Error("Failed to secure keys.");
+        // Save BYOK Keys
+        if (byokKey) {
+            const byokConfig = { apiKey: byokKey, provider, modelName, customUrl };
+            if (byokMode === 'stateless') {
+                localStorage.setItem('byok_stateless_config', JSON.stringify(byokConfig));
+                localStorage.removeItem('byok_stateless_key'); // Clean up old
+            } else if (byokMode === 'kms') {
+                localStorage.removeItem('byok_stateless_config');
+                localStorage.removeItem('byok_stateless_key');
+                const byokRes = await fetch('/setupBYOK', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, apiKey: byokKey, provider, modelName, baseUrl: customUrl })
+                });
+                if (!byokRes.ok) throw new Error("Failed to securely envelope BYOK keys.");
+            }
+        } else {
+            localStorage.removeItem('byok_stateless_config');
+            localStorage.removeItem('byok_stateless_key');
+        }
 
-        // Optimistic switch
         switchView('view-dashboard');
     } catch (err) {
-        console.error("Failed to save Notion settings:", err);
+        console.error("Failed to save settings:", err);
         alert("Could not save settings securely. Please try again.");
     } finally {
         saveBtn.innerText = originalText;
@@ -489,47 +582,88 @@ const triggerSync = async (syncType) => {
     });
 
     try {
-        // Ensure a fresh/in-memory token when needed (no browser storage persistence)
-        const token = await ensureGoogleAccessToken();
-
-        // Primary route uses Hosting rewrite. Fallback hits function directly.
-        const { PRIMARY_API_URL, FALLBACK_API_URL } = getApiUrls(window.location.hostname);
-
-        const payload = {
-            token: token,
-            images: filesAsBase64,
-            syncType
-        };
-
-        // Note: We no longer send Notion keys in the payload for security.
-        // The backend automatically retrieves them securely from Firestore.
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes Frontend Timeout
-
+        const clientTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
         let res;
         let data;
-        try {
-            res = await fetch(PRIMARY_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: controller.signal
-            });
-            data = await parseJsonResponse(res);
-        } catch (primaryErr) {
-            console.warn("Primary API route failed, retrying direct function URL.", primaryErr);
-            res = await fetch(FALLBACK_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: controller.signal
-            });
-            data = await parseJsonResponse(res);
+        let attempt = 0;
+        let currentToken = await ensureGoogleAccessToken();
+
+        while (attempt < 2) {
+            const payload = {
+                token: currentToken,
+                images: filesAsBase64,
+                syncType,
+                timeZone: clientTimeZone
+            };
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes Frontend Timeout
+
+            // Inject BYOK Stateless Token if it exists
+            const fetchHeaders = { 'Content-Type': 'application/json' };
+            const storedConfigStr = localStorage.getItem('byok_stateless_config');
+            if (storedConfigStr) {
+                try {
+                    const config = JSON.parse(storedConfigStr);
+                    fetchHeaders['X-BYOK-Token'] = config.apiKey;
+                    fetchHeaders['X-BYOK-Provider'] = config.provider;
+                    fetchHeaders['X-BYOK-Model'] = config.modelName;
+                    if (config.customUrl) fetchHeaders['X-BYOK-BaseURL'] = config.customUrl;
+                } catch(e) {}
+            } else {
+                const storedToken = localStorage.getItem('byok_stateless_key');
+                if (storedToken) {
+                    fetchHeaders['X-BYOK-Token'] = storedToken;
+                }
+            }
+
+            try {
+                res = await fetch(PRIMARY_API_URL, {
+                    method: 'POST',
+                    headers: fetchHeaders,
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+                data = await parseJsonResponse(res);
+            } catch (primaryErr) {
+                console.warn("Primary API route failed, retrying direct function URL.", primaryErr);
+                res = await fetch(FALLBACK_API_URL, {
+                    method: 'POST',
+                    headers: fetchHeaders,
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+                data = await parseJsonResponse(res);
+            }
+
+            clearTimeout(timeoutId);
+
+            if (res.status === 401 && attempt === 0) {
+                console.warn("401 Unauthorized. Expired Google token detected, forcing refresh.");
+                attempt++;
+                try {
+                    currentToken = await ensureGoogleAccessToken(true);
+                    continue;
+                } catch (retryErr) {
+                    console.error("Token refresh failed:", retryErr);
+                    break;
+                }
+            }
+
+            break; // Exit loop on success or non-401 error
         }
 
-        clearTimeout(timeoutId);
         timers.forEach(t => clearTimeout(t)); // Stop simulated progress
+
+        document.getElementById('file-upload').value = ''; // Reset input
+        filesAsBase64 = [];
+        document.getElementById('upload-ui').innerHTML = `
+            <span class="text-4xl block mb-2 opacity-80">📸</span>
+            <span class="text-sm font-medium text-theme-muted mb-1">Tap to Upload or Drag & Drop (Max 5)</span>
+            <span class="text-xs text-theme-muted opacity-75">e.g., Take a photo of your handwritten planner</span>
+            <div class="absolute inset-0 opacity-5 bg-[url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center mix-blend-overlay rounded-xl z-0 pointer-events-none"></div>
+        `;
+        updateDashButtons(false);
 
         if (res.ok) {
             statusArea.classList.remove('text-red-600', 'bg-red-50', 'text-blue-600', 'bg-blue-50');

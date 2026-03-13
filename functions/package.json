@@ -8,13 +8,15 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "test": "jest --verbose --testPathIgnorePatterns=firestore.rules.test.js",
-    "test:rules": "firebase emulators:exec --only firestore \"jest __tests__/firestore.rules.test.js --verbose\""
+    "test:rules": "firebase emulators:exec --only firestore \"jest __tests__/firestore.rules.test.js --verbose\"",
+    "lint": "eslint ."
   },
   "engines": {
     "node": "20"
   },
   "main": "index.js",
   "dependencies": {
+    "@google-cloud/kms": "^5.4.0",
     "@google/generative-ai": "^0.24.1",
     "@notionhq/client": "^5.6.0",
     "firebase-functions": "^7.1.1",
@@ -23,6 +25,8 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-node": "^11.1.0",
     "firebase-admin": "^13.7.0",
     "firebase-functions-test": "^3.4.1",
     "jest": "^30.2.0"
