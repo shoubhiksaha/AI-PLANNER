@@ -5,7 +5,7 @@ class UniversalAIAdapter {
      * Initializes the universal AI adapter for handling multiple LLM architectures.
      * @param {Object} config 
      * @param {string} config.apiKey
-     * @param {string} config.provider - openai, anthropic, google, azure
+     * @param {string} config.provider - openai, anthropic, google, azure, cohere, huggingface, groq, deepseek, ollama, local
      * @param {string} config.modelName - e.g. gpt-4o, claude-3-5-sonnet-20240620
      * @param {string} [config.baseUrl]
      * @param {string} [config.apiVersion]
@@ -19,14 +19,22 @@ class UniversalAIAdapter {
         this.baseUrl = config.baseUrl;
         this.apiVersion = config.apiVersion;
 
+        // Auto-configure base URLs per provider
         if (!this.baseUrl) {
-            if (this.provider === 'openai') {
-                this.baseUrl = 'https://api.openai.com/v1/chat/completions';
-            } else if (this.provider === 'anthropic') {
-                this.baseUrl = 'https://api.anthropic.com/v1/messages';
-            } else if (this.provider === 'google') {
-                this.baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${this.modelName}:generateContent`;
-            }
+            const urlMap = {
+                openai: 'https://api.openai.com/v1/chat/completions',
+                anthropic: 'https://api.anthropic.com/v1/messages',
+                google: `https://generativelanguage.googleapis.com/v1beta/models/${this.modelName}:generateContent`,
+                cohere: 'https://api.cohere.ai/v2/chat',
+                huggingface: `https://api-inference.huggingface.co/models/${this.modelName}`,
+                groq: 'https://api.groq.com/openai/v1/chat/completions',
+                deepseek: 'https://api.deepseek.com/v1/chat/completions',
+                mistral: 'https://api.mistral.ai/v1/chat/completions',
+                perplexity: 'https://api.perplexity.ai/chat/completions',
+                together: 'https://api.together.xyz/v1/chat/completions',
+                openrouter: 'https://openrouter.ai/api/v1/chat/completions',
+            };
+            this.baseUrl = urlMap[this.provider];
         }
     }
 
@@ -41,14 +49,25 @@ class UniversalAIAdapter {
     async chat(systemPrompt, userPrompt, images = [], requestId = "system") {
         logger.info(`Routing via API Adapter for provider: ${this.provider}`, { requestId, model: this.modelName });
         
-        if (this.provider === 'openai' || this.provider === 'azure') {
+        // OpenAI-compatible providers (same /v1/chat/completions format)
+        const openaiCompatible = ['openai', 'groq', 'deepseek', 'mistral', 'perplexity', 'together', 'openrouter', 'ollama', 'local'];
+        
+        if (openaiCompatible.includes(this.provider)) {
+            return this._chatOpenAICompatible(systemPrompt, userPrompt, images, requestId);
+        } else if (this.provider === 'azure') {
             return this._chatOpenAICompatible(systemPrompt, userPrompt, images, requestId);
         } else if (this.provider === 'google') {
             return this._chatGoogle(systemPrompt, userPrompt, images, requestId);
         } else if (this.provider === 'anthropic') {
             return this._chatAnthropic(systemPrompt, userPrompt, images, requestId);
+        } else if (this.provider === 'cohere') {
+            return this._chatCohere(systemPrompt, userPrompt, images, requestId);
+        } else if (this.provider === 'huggingface') {
+            return this._chatHuggingFace(systemPrompt, userPrompt, images, requestId);
         } else {
-            throw new Error(`Provider '${this.provider}' is not supported.`);
+            // Fallback: try OpenAI-compatible format for any unknown "custom" provider
+            logger.warn(`Unknown provider '${this.provider}', attempting OpenAI-compatible format.`, { requestId });
+            return this._chatOpenAICompatible(systemPrompt, userPrompt, images, requestId);
         }
     }
 
@@ -62,6 +81,11 @@ class UniversalAIAdapter {
             headers["api-key"] = this.apiKey;
         } else {
             headers["Authorization"] = `Bearer ${this.apiKey}`;
+        }
+        // OpenRouter requires additional headers
+        if (this.provider === 'openrouter') {
+            headers["HTTP-Referer"] = "https://ai-planner-project-467800.web.app";
+            headers["X-Title"] = "AI Planner";
         }
 
         const userContent = [{ type: "text", text: userPrompt }];
@@ -78,15 +102,21 @@ class UniversalAIAdapter {
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userContent }
             ],
-            response_format: { type: "json_object" }, // Ensures JSON structure natively
+            response_format: { type: "json_object" },
             temperature: 0.1
         };
+
+        // Ollama/local doesn't support response_format
+        if (this.provider === 'ollama' || this.provider === 'local') {
+            delete payload.response_format;
+            payload.stream = false;
+        }
 
         const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             const errBody = await response.text();
-            logger.error(`OpenAI/Azure API Error: ${response.status}`, { error: errBody, requestId });
-            throw new Error(`OpenAI API Error: ${response.status}`);
+            logger.error(`${this.provider} API Error: ${response.status}`, { error: errBody, requestId });
+            throw new Error(`${this.provider} API Error: ${response.status}`);
         }
         
         const data = await response.json();
@@ -167,11 +197,88 @@ class UniversalAIAdapter {
         const data = await response.json();
         let rawText = data.content[0].text;
         
-        // Claude usually wraps json in markdown tags
+        // Claude sometimes wraps JSON in markdown code fences
         if (rawText.startsWith('```json')) {
             rawText = rawText.replace(/```json\n?/, '').replace(/```$/, '').trim();
         }
         return rawText;
+    }
+
+    async _chatCohere(systemPrompt, userPrompt, images, requestId) {
+        const headers = {
+            "Authorization": `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json"
+        };
+
+        // Cohere v2 Chat API format
+        const payload = {
+            model: this.modelName,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt }
+            ],
+            temperature: 0.1
+        };
+
+        // Note: Cohere doesn't natively support base64 vision images
+        if (images.length > 0) {
+            logger.warn("Cohere does not support vision/image inputs. Images will be ignored.", { requestId });
+        }
+
+        const response = await fetch(this.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
+        if (!response.ok) {
+            const errBody = await response.text();
+            logger.error(`Cohere API Error: ${response.status}`, { error: errBody, requestId });
+            throw new Error(`Cohere API Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        // Cohere v2 returns message.content[0].text
+        if (data.message && data.message.content) {
+            return data.message.content[0].text;
+        }
+        // Fallback for v1 format
+        return data.text || JSON.stringify(data);
+    }
+
+    async _chatHuggingFace(systemPrompt, userPrompt, images, requestId) {
+        const headers = {
+            "Authorization": `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json"
+        };
+
+        // HuggingFace Inference API expects 'inputs' key
+        const fullPrompt = systemPrompt 
+            ? `${systemPrompt}\n\nUser: ${userPrompt}\n\nAssistant:` 
+            : userPrompt;
+
+        const payload = {
+            inputs: fullPrompt,
+            parameters: {
+                max_new_tokens: 2048,
+                return_full_text: false,
+                temperature: 0.1
+            }
+        };
+
+        // Note: HuggingFace standard inference doesn't support vision
+        if (images.length > 0) {
+            logger.warn("HuggingFace Inference API does not support vision/image inputs. Images will be ignored.", { requestId });
+        }
+
+        const response = await fetch(this.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
+        if (!response.ok) {
+            const errBody = await response.text();
+            logger.error(`HuggingFace API Error: ${response.status}`, { error: errBody, requestId });
+            throw new Error(`HuggingFace API Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        // HuggingFace returns an array of objects with 'generated_text'
+        if (Array.isArray(data) && data.length > 0) {
+            return data[0].generated_text || JSON.stringify(data);
+        }
+        return typeof data === 'string' ? data : JSON.stringify(data);
     }
 }
 
