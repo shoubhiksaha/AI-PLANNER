@@ -938,7 +938,7 @@ document.getElementById('change-notion-btn')?.addEventListener('click', () => {
 });
 
 // Reports Heatmap Loader
-const loadHeatmap = async (email) => {
+async function loadHeatmap(email) {
     import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, where, getDocs }) => {
         const db = getFirestore(app);
         const heatmapGrid = document.getElementById('heatmap-grid');
@@ -1009,7 +1009,7 @@ const handlePaymentClick = (e, tierName) => {
 document.getElementById('buy-booster-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
 document.getElementById('upgrade-standard-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
 document.getElementById('upgrade-pro-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Pro Tier (₹49/mo)'));
-const loadSyncHistory = async (email) => {
+async function loadSyncHistory(email) {
     import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, orderBy, limit, getDocs }) => {
         const db = getFirestore(app);
         const historyList = document.getElementById('history-list');
