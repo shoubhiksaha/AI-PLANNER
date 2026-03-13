@@ -194,7 +194,7 @@ async function checkUserSetup(user) {
             }
         });
 
-        if (snap.exists() && snap.data().notionKey) {
+        if (snap.exists() && (snap.data().notionKey || snap.data().geminiKey || snap.data().byokConfig || snap.data().setupComplete)) {
             // Update display name from Firestore if stored
             if (snap.data().displayName) {
                 document.getElementById('user-display-name').textContent = `Hi, ${snap.data().displayName}`;
@@ -253,7 +253,7 @@ function updateGamificationUI(data) {
 }
 
 // Restore BYOK UI state
-const statelessConfigStr = localStorage.getItem('byok_stateless_config');
+const statelessConfigStr = sessionStorage.getItem('byok_stateless_config');
 if (statelessConfigStr) {
     try {
         const config = JSON.parse(statelessConfigStr);
@@ -274,7 +274,7 @@ if (statelessConfigStr) {
         }
     } catch(e){}
 } else {
-    const statelessKey = localStorage.getItem('byok_stateless_key');
+    const statelessKey = sessionStorage.getItem('byok_stateless_key');
     if (statelessKey) {
         const apiKeyInput = document.getElementById('byok-api-key');
         if (apiKeyInput) apiKeyInput.value = statelessKey;
@@ -359,6 +359,10 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
     try {
         const token = await ensureGoogleAccessToken();
 
+        const { getFirestore, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js');
+        const db = getFirestore(app);
+        await setDoc(doc(db, 'users', currentUser.email), { setupComplete: true }, { merge: true });
+
         // Save Notion Keys
         if (key && dbId) {
             const res = await fetch('/setupNotion', {
@@ -373,9 +377,13 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
         if (byokKey) {
             const byokConfig = { apiKey: byokKey, provider, modelName, customUrl };
             if (byokMode === 'stateless') {
-                localStorage.setItem('byok_stateless_config', JSON.stringify(byokConfig));
-                localStorage.removeItem('byok_stateless_key'); // Clean up old
+                sessionStorage.setItem('byok_stateless_config', JSON.stringify(byokConfig));
+                sessionStorage.removeItem('byok_stateless_key');
+                localStorage.removeItem('byok_stateless_config'); // cleanup dangling
+                localStorage.removeItem('byok_stateless_key'); // cleanup dangling
             } else if (byokMode === 'kms') {
+                sessionStorage.removeItem('byok_stateless_config');
+                sessionStorage.removeItem('byok_stateless_key');
                 localStorage.removeItem('byok_stateless_config');
                 localStorage.removeItem('byok_stateless_key');
                 const byokRes = await fetch('/setupBYOK', {
@@ -386,6 +394,8 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
                 if (!byokRes.ok) throw new Error("Failed to securely envelope BYOK keys.");
             }
         } else {
+            sessionStorage.removeItem('byok_stateless_config');
+            sessionStorage.removeItem('byok_stateless_key');
             localStorage.removeItem('byok_stateless_config');
             localStorage.removeItem('byok_stateless_key');
         }
@@ -658,7 +668,7 @@ const triggerSync = async (syncType) => {
 
             // Inject BYOK Stateless Token if it exists
             const fetchHeaders = { 'Content-Type': 'application/json' };
-            const storedConfigStr = localStorage.getItem('byok_stateless_config');
+            const storedConfigStr = sessionStorage.getItem('byok_stateless_config');
             if (storedConfigStr) {
                 try {
                     const config = JSON.parse(storedConfigStr);
@@ -668,7 +678,7 @@ const triggerSync = async (syncType) => {
                     if (config.customUrl) fetchHeaders['X-BYOK-BaseURL'] = config.customUrl;
                 } catch(e) {}
             } else {
-                const storedToken = localStorage.getItem('byok_stateless_key');
+                const storedToken = sessionStorage.getItem('byok_stateless_key');
                 if (storedToken) {
                     fetchHeaders['X-BYOK-Token'] = storedToken;
                 }
@@ -1003,9 +1013,11 @@ const handlePaymentClick = (e, tierName) => {
     }, 1500);
 };
 
-document.getElementById('buy-booster-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
-document.getElementById('upgrade-standard-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
-document.getElementById('upgrade-pro-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Pro Tier (₹49/mo)'));
+document.getElementById('buy-booster-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
+document.getElementById('buy-booster-btn-modal')?.addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
+document.getElementById('upgrade-standard-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
+document.getElementById('upgrade-standard-pricing-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
+document.getElementById('upgrade-pro-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Pro Tier (₹49/mo)'));
 const loadSyncHistory = async (email) => {
     import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, orderBy, limit, getDocs }) => {
         const db = getFirestore(app);
