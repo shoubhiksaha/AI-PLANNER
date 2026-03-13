@@ -344,7 +344,10 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
         [provider, modelName] = providerVal.split(':');
     }
 
-    if (!key || !dbId) {
+    // Only warn about empty Notion fields if the Notion setup section is visible
+    // (i.e. user hasn't already connected Notion)
+    const notionFieldsVisible = !document.getElementById('notion-setup-fields')?.classList.contains('hidden');
+    if (notionFieldsVisible && (!key || !dbId)) {
         if (!confirm("Notion fields are empty. You won't be able to use Journal mode. Continue anyway?")) return;
     }
 
@@ -788,7 +791,16 @@ document.getElementById('back-to-dash-from-setup')?.addEventListener('click', ()
 
 // --- HAMBURGER DRAWER ---
 const drawerContainer = document.getElementById('drawer-container');
-const openDrawer = () => { drawerContainer.classList.remove('hidden'); requestAnimationFrame(() => drawerContainer.classList.add('drawer-open')); };
+const openDrawer = () => {
+    drawerContainer.classList.remove('hidden');
+    // Double rAF ensures the browser paints the hidden->visible state before
+    // adding the class that triggers the CSS transition
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            drawerContainer.classList.add('drawer-open');
+        });
+    });
+};
 const closeDrawer = () => { drawerContainer.classList.remove('drawer-open'); setTimeout(() => drawerContainer.classList.add('hidden'), 300); };
 
 document.getElementById('hamburger-btn').addEventListener('click', openDrawer);
