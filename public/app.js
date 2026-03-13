@@ -650,6 +650,7 @@ const triggerSync = async (syncType) => {
 
     try {
         const clientTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+        const { PRIMARY_API_URL, FALLBACK_API_URL } = getApiUrls(window.location.hostname, 'syncPlanner');
         let res;
         let data;
         let attempt = 0;
