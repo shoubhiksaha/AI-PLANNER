@@ -194,7 +194,7 @@ async function checkUserSetup(user) {
             }
         });
 
-        if (snap.exists() && snap.data().notionKey) {
+        if (snap.exists() && (snap.data().notionKey || snap.data().geminiKey || snap.data().byokConfig || snap.data().setupComplete)) {
             // Update display name from Firestore if stored
             if (snap.data().displayName) {
                 document.getElementById('user-display-name').textContent = `Hi, ${snap.data().displayName}`;
@@ -253,7 +253,7 @@ function updateGamificationUI(data) {
 }
 
 // Restore BYOK UI state
-const statelessConfigStr = localStorage.getItem('byok_stateless_config');
+const statelessConfigStr = sessionStorage.getItem('byok_stateless_config');
 if (statelessConfigStr) {
     try {
         const config = JSON.parse(statelessConfigStr);
@@ -274,7 +274,7 @@ if (statelessConfigStr) {
         }
     } catch(e){}
 } else {
-    const statelessKey = localStorage.getItem('byok_stateless_key');
+    const statelessKey = sessionStorage.getItem('byok_stateless_key');
     if (statelessKey) {
         const apiKeyInput = document.getElementById('byok-api-key');
         if (apiKeyInput) apiKeyInput.value = statelessKey;
@@ -359,6 +359,10 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
     try {
         const token = await ensureGoogleAccessToken();
 
+        const { getFirestore, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js');
+        const db = getFirestore(app);
+        await setDoc(doc(db, 'users', currentUser.email), { setupComplete: true }, { merge: true });
+
         // Save Notion Keys
         if (key && dbId) {
             const res = await fetch('/setupNotion', {
@@ -373,9 +377,13 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
         if (byokKey) {
             const byokConfig = { apiKey: byokKey, provider, modelName, customUrl };
             if (byokMode === 'stateless') {
-                localStorage.setItem('byok_stateless_config', JSON.stringify(byokConfig));
-                localStorage.removeItem('byok_stateless_key'); // Clean up old
+                sessionStorage.setItem('byok_stateless_config', JSON.stringify(byokConfig));
+                sessionStorage.removeItem('byok_stateless_key');
+                localStorage.removeItem('byok_stateless_config'); // cleanup dangling
+                localStorage.removeItem('byok_stateless_key'); // cleanup dangling
             } else if (byokMode === 'kms') {
+                sessionStorage.removeItem('byok_stateless_config');
+                sessionStorage.removeItem('byok_stateless_key');
                 localStorage.removeItem('byok_stateless_config');
                 localStorage.removeItem('byok_stateless_key');
                 const byokRes = await fetch('/setupBYOK', {
@@ -386,6 +394,8 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
                 if (!byokRes.ok) throw new Error("Failed to securely envelope BYOK keys.");
             }
         } else {
+            sessionStorage.removeItem('byok_stateless_config');
+            sessionStorage.removeItem('byok_stateless_key');
             localStorage.removeItem('byok_stateless_config');
             localStorage.removeItem('byok_stateless_key');
         }
@@ -490,7 +500,7 @@ const handleFiles = async (files) => {
 
     if (remainingSlots <= 0) {
         document.getElementById('paywall-message').textContent = tier === 'free' 
-            ? "Free tier is limited to 1 page per document. Upgrade to Standard or Pro to batch upload multiple pages!"
+            ? "Batch uploading is available only on paid tiers. Upgrade to Standard or Pro to upload multiple pages!"
             : "Standard tier limit reached. Upgrade to Pro for 5-page batch uploads!";
         document.getElementById('paywall-modal').classList.remove('hidden');
         document.getElementById('paywall-modal').classList.add('flex');
@@ -500,7 +510,7 @@ const handleFiles = async (files) => {
     const filesToProcess = Array.from(files).slice(0, remainingSlots);
     if (files.length > remainingSlots) {
         document.getElementById('paywall-message').textContent = tier === 'free' 
-            ? `Free tier is limited to 1 page per document. Only the first image was added. Upgrade to batch upload!`
+            ? `Batch uploading is available only on paid tiers. Only the first image was added. Upgrade to unlock!`
             : `Your tier limit is ${limit} pages. Only ${remainingSlots} images were added. Upgrade for more!`;
         document.getElementById('paywall-modal').classList.remove('hidden');
         document.getElementById('paywall-modal').classList.add('flex');
@@ -640,6 +650,7 @@ const triggerSync = async (syncType) => {
 
     try {
         const clientTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+        const { PRIMARY_API_URL, FALLBACK_API_URL } = getApiUrls(window.location.hostname, 'syncPlanner');
         let res;
         let data;
         let attempt = 0;
@@ -658,7 +669,7 @@ const triggerSync = async (syncType) => {
 
             // Inject BYOK Stateless Token if it exists
             const fetchHeaders = { 'Content-Type': 'application/json' };
-            const storedConfigStr = localStorage.getItem('byok_stateless_config');
+            const storedConfigStr = sessionStorage.getItem('byok_stateless_config');
             if (storedConfigStr) {
                 try {
                     const config = JSON.parse(storedConfigStr);
@@ -668,7 +679,7 @@ const triggerSync = async (syncType) => {
                     if (config.customUrl) fetchHeaders['X-BYOK-BaseURL'] = config.customUrl;
                 } catch(e) {}
             } else {
-                const storedToken = localStorage.getItem('byok_stateless_key');
+                const storedToken = sessionStorage.getItem('byok_stateless_key');
                 if (storedToken) {
                     fetchHeaders['X-BYOK-Token'] = storedToken;
                 }
@@ -714,11 +725,13 @@ const triggerSync = async (syncType) => {
 
         document.getElementById('file-upload').value = ''; // Reset input
         filesAsBase64 = [];
-        document.getElementById('upload-ui').innerHTML = `
-            <span class="text-4xl block mb-2 opacity-80">📸</span>
-            <span class="text-sm font-medium text-theme-muted mb-1">Tap to Upload or Drag & Drop (Max 5)</span>
-            <span class="text-xs text-theme-muted opacity-75">e.g., Take a photo of your handwritten planner</span>
-            <div class="absolute inset-0 opacity-5 bg-[url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center mix-blend-overlay rounded-xl z-0 pointer-events-none"></div>
+        dropZone.innerHTML = `
+            <div id="upload-ui" class="text-center group-hover:scale-105 transition-transform pointer-events-none w-full h-full flex flex-col items-center justify-center relative">
+                <span class="text-4xl block mb-2 opacity-80">📸</span>
+                <span class="text-sm font-medium text-theme-muted mb-1">Tap to Upload or Drag & Drop (Max 5)</span>
+                <span class="text-xs text-theme-muted opacity-75">e.g., Take a photo of your handwritten planner</span>
+                <div class="absolute inset-0 opacity-5 bg-[url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center mix-blend-overlay rounded-xl z-0 pointer-events-none"></div>
+            </div>
         `;
         updateDashButtons(false);
 
@@ -749,9 +762,6 @@ const triggerSync = async (syncType) => {
 };
 
 // --- GDPR: Export & Delete ---
-document.getElementById('btn-export').addEventListener('click', exportMyData);
-document.getElementById('btn-delete-account').addEventListener('click', deleteMyAccount);
-
 async function exportMyData() {
     try {
         if (!auth.currentUser) { alert('Please sign in first.'); return; }
@@ -830,10 +840,10 @@ document.querySelectorAll('[data-drawer]').forEach(btn => {
                 switchView('view-setup');
                 break;
             case 'export':
-                exportUserData();
+                exportMyData();
                 break;
             case 'delete':
-                deleteAccount();
+                deleteMyAccount();
                 break;
             case 'logout':
                 auth.signOut();
@@ -1006,9 +1016,11 @@ const handlePaymentClick = (e, tierName) => {
     }, 1500);
 };
 
-document.getElementById('buy-booster-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
-document.getElementById('upgrade-standard-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
-document.getElementById('upgrade-pro-btn').addEventListener('click', (e) => handlePaymentClick(e, 'Pro Tier (₹49/mo)'));
+document.getElementById('buy-booster-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
+document.getElementById('buy-booster-btn-modal')?.addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
+document.getElementById('upgrade-standard-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
+document.getElementById('upgrade-standard-pricing-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
+document.getElementById('upgrade-pro-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Pro Tier (₹49/mo)'));
 const loadSyncHistory = async (email) => {
     import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, orderBy, limit, getDocs }) => {
         const db = getFirestore(app);

@@ -170,3 +170,64 @@ body {
     font-weight: 600;
     color: #10b981;
 }
+
+/* === DARK MODE: FORM ELEMENTS === */
+.dark-mode input[type="text"],
+.dark-mode input[type="password"],
+.dark-mode input[type="url"],
+.dark-mode input[type="email"],
+.dark-mode input[type="number"],
+.dark-mode select,
+.dark-mode textarea {
+    background-color: #1e293b;
+    color: #e2e8f0;
+    border-color: #475569;
+}
+
+.dark-mode input::placeholder,
+.dark-mode textarea::placeholder {
+    color: #64748b;
+}
+
+.dark-mode details {
+    background-color: #1e293b;
+    border-color: #334155;
+}
+
+.dark-mode details summary {
+    color: #e2e8f0;
+}
+
+.dark-mode label {
+    color: #94a3b8;
+}
+
+.oled-mode input[type="text"],
+.oled-mode input[type="password"],
+.oled-mode input[type="url"],
+.oled-mode input[type="email"],
+.oled-mode input[type="number"],
+.oled-mode select,
+.oled-mode textarea {
+    background-color: #111111;
+    color: #ffffff;
+    border-color: #333333;
+}
+
+.oled-mode input::placeholder,
+.oled-mode textarea::placeholder {
+    color: #666666;
+}
+
+.oled-mode details {
+    background-color: #111111;
+    border-color: #333333;
+}
+
+.oled-mode details summary {
+    color: #ffffff;
+}
+
+.oled-mode label {
+    color: #a3a3a3;
+}

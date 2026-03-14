@@ -113,9 +113,9 @@
                 <p class="text-sm text-theme-muted mt-2">What should we call you?</p>
             </div>
             <div class="w-full max-w-xs">
-                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Your Name</label>
+                <label class="block text-xs font-bold text-theme-muted uppercase mb-1">Your Name</label>
                 <input type="text" id="user-display-name-input"
-                    class="w-full rounded-xl border border-gray-300 p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center text-lg font-medium"
+                    class="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center text-lg font-medium text-theme-text"
                     placeholder="e.g., Shoubhik" autocomplete="name">
             </div>
             <button id="save-name-btn"
@@ -576,8 +576,8 @@
                         </label>
                     </div>
                     <div id="standard-annual-tag" class="hidden text-[10px] text-emerald-600 font-bold text-center">🎁 Includes 2 Months FREE</div>
-                    <button class="upgrade-cta w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all opacity-50 cursor-not-allowed" disabled>
-                        Coming Soon
+                    <button id="upgrade-standard-pricing-btn" class="upgrade-cta w-full py-2.5 bg-blue-600 text-white font-bold rounded-xl text-sm opacity-60 pointer-events-none select-none">
+                        🔒 Coming Soon
                     </button>
                 </div>
 
@@ -611,8 +611,8 @@
                         </label>
                     </div>
                     <div id="pro-annual-tag" class="hidden text-[10px] text-emerald-600 font-bold text-center">🎁 Includes 2 Months FREE</div>
-                    <button class="upgrade-cta w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-all opacity-50 cursor-not-allowed" disabled>
-                        Coming Soon
+                    <button id="upgrade-pro-btn" class="upgrade-cta w-full py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-sm opacity-60 pointer-events-none select-none">
+                        🔒 Coming Soon
                     </button>
                 </div>
             </div>
@@ -627,7 +627,7 @@
                             <p class="text-[10px] text-amber-700">One-time payment. Credits never expire.</p>
                         </div>
                     </div>
-                    <button class="upgrade-cta bg-amber-500 text-white font-bold px-4 py-2 rounded-xl text-sm opacity-50 cursor-not-allowed" disabled>₹19</button>
+                    <button id="buy-booster-btn-modal" class="upgrade-cta bg-amber-500 text-white font-bold px-4 py-2 rounded-xl text-sm opacity-60 pointer-events-none select-none">🔒 Coming Soon</button>
                 </div>
             </div>
 
@@ -645,9 +645,9 @@
             
             <div class="text-center relative z-10">
                 <div class="text-4xl mb-3">⛽</div>
-                <h3 class="font-black text-2xl text-theme-text mb-2 tracking-tight">You're out of Sync Credits!</h3>
+                <h3 class="font-black text-2xl text-theme-text mb-2 tracking-tight">Upgrade to Unlock</h3>
                 <p id="paywall-message" class="text-theme-muted text-[13px] font-medium mb-6 leading-relaxed px-2">
-                    Upgrade to keep syncing your planner automatically, or grab a quick booster pack.
+                    This feature is available only on paid tiers. Upgrade or grab a quick booster pack.
                 </p>
             </div>
 
@@ -656,8 +656,8 @@
                 <div class="border-2 border-blue-200 bg-blue-50/50 rounded-2xl p-4">
                     <p class="font-bold text-blue-900 text-sm">Unlock Standard — ₹29/month</p>
                     <p class="text-[11px] text-blue-700 mt-1">100 credits/mo + Batch Uploading</p>
-                    <button id="upgrade-standard-btn" class="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition-all opacity-50 cursor-not-allowed" disabled>
-                        Coming Soon
+                    <button id="upgrade-standard-btn" class="w-full mt-3 bg-blue-600 text-white font-bold py-3 rounded-xl text-sm opacity-60 pointer-events-none select-none">
+                        🔒 Coming Soon
                     </button>
                 </div>
                 
