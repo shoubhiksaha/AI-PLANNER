@@ -1,8 +1,14 @@
-const { generateAndWrapDEK, unwrapAndDecrypt } = require('../services/kms');
-const { KeyManagementServiceClient } = require('@google-cloud/kms');
+// Shared mock references — set before require()
+const mockEncrypt = jest.fn();
+const mockDecrypt = jest.fn();
 
-// Mock external dependencies
-jest.mock('@google-cloud/kms');
+jest.mock('@google-cloud/kms', () => ({
+    KeyManagementServiceClient: jest.fn().mockImplementation(() => ({
+        encrypt: mockEncrypt,
+        decrypt: mockDecrypt
+    }))
+}));
+
 jest.mock('firebase-functions/params', () => ({
     defineString: (name) => {
         if (name === 'KMS_KEY_NAME') {
@@ -11,6 +17,8 @@ jest.mock('firebase-functions/params', () => ({
         return { value: () => '' };
     }
 }));
+
+const { generateAndWrapDEK, unwrapAndDecrypt } = require('../services/kms');
 
 describe('KMS Service Tests', () => {
     const originalEnv = process.env;
@@ -31,11 +39,10 @@ describe('KMS Service Tests', () => {
     });
 
     test('generateAndWrapDEK returns valid envelope payload', async () => {
-        const mockEncrypt = jest.fn().mockResolvedValue([{ ciphertext: Buffer.from('mocked-wrapped-dek') }]);
-        KeyManagementServiceClient.prototype.encrypt = mockEncrypt;
+        mockEncrypt.mockResolvedValue([{ ciphertext: Buffer.from('mocked-wrapped-dek') }]);
 
         const payload = await generateAndWrapDEK('plain-secret');
-        
+
         expect(mockEncrypt).toHaveBeenCalledTimes(1);
         expect(payload).toHaveProperty('encryptedKey');
         expect(payload).toHaveProperty('wrappedDek');
@@ -50,11 +57,10 @@ describe('KMS Service Tests', () => {
     });
 
     test('unwrapAndDecrypt successfully decrypts the payload', async () => {
-        // We need a stable DEK and payload to test decryption
         const crypto = require('crypto');
         const dek = crypto.randomBytes(32);
-        
-        // Encrypt test secret
+
+        // Encrypt a test secret with the DEK
         const secret = 'super-secret-api-key';
         const iv = crypto.randomBytes(12);
         const cipher = crypto.createCipheriv('aes-256-gcm', dek, iv);
@@ -62,9 +68,8 @@ describe('KMS Service Tests', () => {
         encryptedKey += cipher.final('base64');
         const authTag = cipher.getAuthTag().toString('base64');
 
-        // Mock KMS returning our generated DEK
-        const mockDecrypt = jest.fn().mockResolvedValue([{ plaintext: dek }]);
-        KeyManagementServiceClient.prototype.decrypt = mockDecrypt;
+        // Mock KMS returning our known DEK
+        mockDecrypt.mockResolvedValue([{ plaintext: dek }]);
 
         const result = await unwrapAndDecrypt(
             encryptedKey,
