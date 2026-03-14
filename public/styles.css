@@ -231,3 +231,18 @@ body {
 .oled-mode label {
     color: #a3a3a3;
 }
+
+/* === NOTION ONBOARDING HEADER === */
+@keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+.animate-gradient-shift {
+    background-size: 200% 200%;
+    animation: gradient-shift 6s ease infinite;
+}
+
+.notion-onboard-header {
+    border: 1px solid rgba(99, 102, 241, 0.15);
+}

@@ -205,12 +205,17 @@ async function checkUserSetup(user) {
             if (planBadge) {
                 planBadge.textContent = tier === 'free' ? 'Free Plan' : tier === 'standard' ? 'Standard' : 'Pro';
             }
-            // Show Notion connected status in settings
-            const notionStatus = document.getElementById('notion-status-badge');
-            if (notionStatus) { notionStatus.classList.remove('hidden'); notionStatus.classList.add('flex'); }
-            const notionFields = document.getElementById('notion-setup-fields');
-            if (notionFields) notionFields.classList.add('hidden');
-            // User has setup Notion -> Go to Dashboard
+            // Update Notion status on the onboarding page (for revisits from drawer)
+            const hasNotion = !!snap.data().notionKey;
+            const notionOnboardStatus = document.getElementById('notion-onboard-status');
+            if (notionOnboardStatus && hasNotion) {
+                notionOnboardStatus.classList.remove('hidden');
+                notionOnboardStatus.classList.add('flex');
+            }
+            // Update Advanced Settings Notion status card
+            const advBadge = document.getElementById('adv-notion-badge');
+            if (advBadge) advBadge.textContent = hasNotion ? '✅ Connected' : 'Not connected';
+            // User has setup -> Go to Dashboard
             switchView('view-dashboard');
             // Fetch sync history in the background
             loadSyncHistory(user.email);
@@ -225,8 +230,8 @@ async function checkUserSetup(user) {
             const googleName = user.displayName || '';
             document.getElementById('user-display-name-input').value = googleName;
         } else {
-            // No setup -> Go to Setup Screen
-            switchView('view-setup');
+            // Has profile but no keys -> Notion Setup (not BYOK)
+            switchView('view-notion-setup');
         }
     } catch (err) {
         console.error("Profile Load Error:", err);
@@ -314,10 +319,76 @@ document.getElementById('byok-provider').addEventListener('change', (e) => {
 
 
 
+// --- NOTION ONBOARDING SAVE HANDLER ---
+document.getElementById('save-notion-btn').addEventListener('click', async () => {
+    const key = document.getElementById('notion-key-input').value.trim();
+    const dbId = document.getElementById('notion-db-input').value.trim();
+
+    if (!key || !dbId) {
+        alert("Please enter both your Notion Integration Key and Database ID.");
+        return;
+    }
+
+    const saveBtn = document.getElementById('save-notion-btn');
+    const originalText = saveBtn.innerText;
+    saveBtn.innerText = "Securing...";
+    saveBtn.disabled = true;
+
+    try {
+        const token = await ensureGoogleAccessToken();
+
+        const res = await fetch('/setupNotion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, notionKey: key, notionDbId: dbId })
+        });
+        if (!res.ok) throw new Error("Failed to secure Notion keys.");
+
+        const { getFirestore, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js');
+        const db = getFirestore(app);
+        await setDoc(doc(db, 'users', currentUser.email), { setupComplete: true }, { merge: true });
+
+        switchView('view-dashboard');
+        if (currentUser) loadSyncHistory(currentUser.email);
+    } catch (err) {
+        console.error("Failed to save Notion keys:", err);
+        alert("Could not save Notion keys securely. Please try again.");
+    } finally {
+        saveBtn.innerText = originalText;
+        saveBtn.disabled = false;
+    }
+});
+
+document.getElementById('skip-notion-btn').addEventListener('click', async () => {
+    try {
+        const { getFirestore, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js');
+        const db = getFirestore(app);
+        await setDoc(doc(db, 'users', currentUser.email), { setupComplete: true }, { merge: true });
+    } catch (e) { /* best effort */ }
+    switchView('view-dashboard');
+    if (currentUser) loadSyncHistory(currentUser.email);
+});
+
+// Change notion keys on revisit
+document.getElementById('change-notion-onboard-btn')?.addEventListener('click', () => {
+    document.getElementById('notion-onboard-status').classList.add('hidden');
+    document.getElementById('notion-onboard-status').classList.remove('flex');
+    document.getElementById('notion-key-input').value = '';
+    document.getElementById('notion-db-input').value = '';
+});
+
+// Advanced Settings → Notion configure button
+document.getElementById('adv-notion-configure')?.addEventListener('click', () => {
+    switchView('view-notion-setup');
+});
+
+// Back to Dashboard from Advanced Settings
+document.getElementById('back-to-dash-from-adv')?.addEventListener('click', () => {
+    switchView('view-dashboard');
+});
+
+// --- BYOK SAVE HANDLER (Advanced Settings only) ---
 document.getElementById('save-setup-btn').addEventListener('click', async () => {
-    const key = document.getElementById('setup-key').value;
-    const dbId = document.getElementById('setup-db').value;
-    
     // BYOK Config
     const byokMode = document.querySelector('input[name="byok-mode"]:checked').value;
     const byokKey = document.getElementById('byok-api-key').value.trim();
@@ -344,13 +415,6 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
         [provider, modelName] = providerVal.split(':');
     }
 
-    // Only warn about empty Notion fields if the Notion setup section is visible
-    // (i.e. user hasn't already connected Notion)
-    const notionFieldsVisible = !document.getElementById('notion-setup-fields')?.classList.contains('hidden');
-    if (notionFieldsVisible && (!key || !dbId)) {
-        if (!confirm("Notion fields are empty. You won't be able to use Journal mode. Continue anyway?")) return;
-    }
-
     const saveBtn = document.getElementById('save-setup-btn');
     const originalText = saveBtn.innerText;
     saveBtn.innerText = "Securing...";
@@ -358,20 +422,6 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
 
     try {
         const token = await ensureGoogleAccessToken();
-
-        const { getFirestore, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js');
-        const db = getFirestore(app);
-        await setDoc(doc(db, 'users', currentUser.email), { setupComplete: true }, { merge: true });
-
-        // Save Notion Keys
-        if (key && dbId) {
-            const res = await fetch('/setupNotion', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token, notionKey: key, notionDbId: dbId })
-            });
-            if (!res.ok) throw new Error("Failed to secure Notion keys.");
-        }
 
         // Save BYOK Keys
         if (byokKey) {
@@ -402,21 +452,17 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
 
         switchView('view-dashboard');
     } catch (err) {
-        console.error("Failed to save settings:", err);
-        alert("Could not save settings securely. Please try again.");
+        console.error("Failed to save BYOK settings:", err);
+        alert("Could not save BYOK settings securely. Please try again.");
     } finally {
         saveBtn.innerText = originalText;
         saveBtn.disabled = false;
     }
 });
 
-document.getElementById('skip-setup-btn').addEventListener('click', () => {
-    switchView('view-dashboard');
-});
-
 // Guide Modal
 const modal = document.getElementById('guide-modal');
-document.getElementById('open-guide').addEventListener('click', () => {
+document.getElementById('open-guide-onboard')?.addEventListener('click', () => {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 });
@@ -835,6 +881,9 @@ document.querySelectorAll('[data-drawer]').forEach(btn => {
                 switchView('view-history');
                 if (currentUser) loadSyncHistory(currentUser.email);
                 break;
+            case 'notion':
+                switchView('view-notion-setup');
+                break;
             case 'settings':
                 document.getElementById('back-to-dash-from-setup')?.classList.remove('hidden');
                 switchView('view-setup');
@@ -932,18 +981,10 @@ document.getElementById('save-name-btn')?.addEventListener('click', async () => 
         const db = getFirestore(app);
         await setDoc(doc(db, 'users', currentUser.email), { displayName: name }, { merge: true });
         document.getElementById('user-display-name').textContent = `Hi, ${name}`;
-        switchView('view-setup');
+        switchView('view-notion-setup');
     } catch(e) {
         console.error('Failed to save name:', e);
-        switchView('view-setup');
-    }
-});
-
-// --- NOTION CHANGE BUTTON ---
-document.getElementById('change-notion-btn')?.addEventListener('click', () => {
-    if (confirm('Do you want to change your Notion connection? This will require re-entering your keys.')) {
-        document.getElementById('notion-status-badge').classList.add('hidden');
-        document.getElementById('notion-setup-fields').classList.remove('hidden');
+        switchView('view-notion-setup');
     }
 });
 
