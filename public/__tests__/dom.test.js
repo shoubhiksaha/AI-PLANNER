@@ -27,9 +27,17 @@ describe('Critical DOM Elements', () => {
             'upgrade-standard-btn',
             'upgrade-pro-btn',
             'paywall-modal',
-            'notion-setup-fields',
             'history-list',
-            'heatmap-grid'
+            'heatmap-grid',
+            // Notion onboarding
+            'view-notion-setup',
+            'notion-key-input',
+            'notion-db-input',
+            'save-notion-btn',
+            'skip-notion-btn',
+            // Advanced Settings
+            'save-setup-btn',
+            'adv-notion-status',
         ];
 
         requiredIds.forEach(id => {
@@ -42,9 +50,18 @@ describe('Critical DOM Elements', () => {
         const drawerItems = document.querySelectorAll('[data-drawer]');
         expect(drawerItems.length).toBeGreaterThan(0);
         
-        const validActions = ['upgrade', 'reports', 'history', 'settings', 'export', 'delete', 'logout'];
+        const validActions = ['upgrade', 'reports', 'notion', 'history', 'settings', 'export', 'delete', 'logout'];
         drawerItems.forEach(item => {
             expect(validActions).toContain(item.getAttribute('data-drawer'));
         });
+    });
+
+    test('Notion onboarding page does NOT contain BYOK elements', () => {
+        const notionView = document.getElementById('view-notion-setup');
+        expect(notionView).not.toBeNull();
+        // Ensure BYOK elements are NOT inside the Notion onboarding view
+        expect(notionView.querySelector('#byok-api-key')).toBeNull();
+        expect(notionView.querySelector('#byok-provider')).toBeNull();
+        expect(notionView.querySelector('[name="byok-mode"]')).toBeNull();
     });
 });
