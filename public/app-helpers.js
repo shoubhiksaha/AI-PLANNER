@@ -65,7 +65,7 @@
     };
 
     exports.switchView = (viewId) => {
-        ['view-login', 'view-name-prompt', 'view-setup', 'view-dashboard', 'view-history', 'view-reports'].forEach(id => {
+        ['view-login', 'view-name-prompt', 'view-setup', 'view-notion-setup', 'view-dashboard', 'view-history', 'view-reports'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.classList.add('view-hidden');
         });
