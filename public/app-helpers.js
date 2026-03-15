@@ -65,9 +65,10 @@
     };
 
     exports.switchView = (viewId) => {
-        ['view-login', 'view-name-prompt', 'view-setup', 'view-notion-setup', 'view-dashboard', 'view-history', 'view-reports'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.classList.add('view-hidden');
+        // Hide all app "view-*" sections dynamically so new screens do not
+        // require helper code updates to participate in navigation state.
+        document.querySelectorAll('[id^="view-"]').forEach(el => {
+            el.classList.add('view-hidden');
         });
         const target = document.getElementById(viewId);
         if (target) target.classList.remove('view-hidden');
