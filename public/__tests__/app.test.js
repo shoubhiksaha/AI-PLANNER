@@ -132,6 +132,10 @@ describe('switchView', () => {
         expect(document.getElementById('view-dashboard').classList.contains('view-hidden')).toBe(false);
         expect(document.getElementById('view-login').classList.contains('view-hidden')).toBe(true);
         expect(document.getElementById('view-setup').classList.contains('view-hidden')).toBe(true);
+        expect(document.getElementById('view-login').style.display).toBe('none');
+        expect(document.getElementById('view-login').hidden).toBe(true);
+        expect(document.getElementById('view-dashboard').style.display).toBe('');
+        expect(document.getElementById('view-dashboard').hidden).toBe(false);
     });
 
     test('shows setup view and hides others', () => {

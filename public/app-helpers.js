@@ -69,8 +69,17 @@
         // require helper code updates to participate in navigation state.
         document.querySelectorAll('[id^="view-"]').forEach(el => {
             el.classList.add('view-hidden');
+            // Fallback if stale CSS is cached and view-hidden rule isn't applied.
+            el.style.display = 'none';
+            el.hidden = true;
+            el.setAttribute('aria-hidden', 'true');
         });
         const target = document.getElementById(viewId);
-        if (target) target.classList.remove('view-hidden');
+        if (target) {
+            target.classList.remove('view-hidden');
+            target.style.removeProperty('display');
+            target.hidden = false;
+            target.setAttribute('aria-hidden', 'false');
+        }
     };
 })(typeof module !== 'undefined' && module.exports ? module.exports : (window.AppHelpers = {}));

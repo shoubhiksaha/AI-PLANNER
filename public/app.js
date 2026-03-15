@@ -359,7 +359,23 @@ document.getElementById('save-notion-btn').addEventListener('click', async () =>
     }
 });
 
-document.getElementById('skip-notion-btn').addEventListener('click', async () => {
+document.getElementById('skip-notion-btn').addEventListener('click', async (event) => {
+    event.preventDefault();
+    // Defensive fallback: enforce a single visible view even if stale CSS/helper is cached.
+    document.querySelectorAll('[id^="view-"]').forEach((el) => {
+        el.classList.add('view-hidden');
+        el.style.display = 'none';
+        el.hidden = true;
+        el.setAttribute('aria-hidden', 'true');
+    });
+    const dashboardView = document.getElementById('view-dashboard');
+    if (dashboardView) {
+        dashboardView.classList.remove('view-hidden');
+        dashboardView.style.removeProperty('display');
+        dashboardView.hidden = false;
+        dashboardView.setAttribute('aria-hidden', 'false');
+    }
+
     try {
         const { getFirestore, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js');
         const db = getFirestore(app);

@@ -77,9 +77,9 @@ describe('Service Worker Constants', () => {
         expect(ASSETS_TO_CACHE).toContain('/planner.html');
     });
 
-    test('ASSETS_TO_CACHE includes external font URL', () => {
-        const fontUrl = ASSETS_TO_CACHE.find(url => url.includes('fonts.googleapis.com'));
-        expect(fontUrl).toBeDefined();
+    test('ASSETS_TO_CACHE does not include external cross-origin URLs', () => {
+        const external = ASSETS_TO_CACHE.find(url => /^https?:\/\//.test(url));
+        expect(external).toBeUndefined();
     });
 });
 
