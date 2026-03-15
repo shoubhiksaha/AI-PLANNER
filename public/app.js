@@ -359,7 +359,16 @@ document.getElementById('save-notion-btn').addEventListener('click', async () =>
     }
 });
 
-document.getElementById('skip-notion-btn').addEventListener('click', async () => {
+document.getElementById('skip-notion-btn').addEventListener('click', async (event) => {
+    event.preventDefault();
+    // Defensive fallback to avoid stacked screens when stale helper code is cached.
+    document.querySelectorAll('[id^="view-"]').forEach(el => {
+        el.classList.add('view-hidden');
+        el.style.display = 'none';
+    });
+    document.getElementById('view-dashboard')?.classList.remove('view-hidden');
+    document.getElementById('view-dashboard')?.style.removeProperty('display');
+
     try {
         const { getFirestore, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js');
         const db = getFirestore(app);

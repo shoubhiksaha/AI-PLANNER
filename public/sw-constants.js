@@ -10,7 +10,7 @@
 (function (exports) {
     'use strict';
 
-    exports.CACHE_NAME = 'ai-planner-v14';
+    exports.CACHE_NAME = 'ai-planner-v15';
 
     exports.ASSETS_TO_CACHE = [
         '/',
@@ -22,7 +22,6 @@
         '/privacy.html',
         '/gear.html',
         '/planner.html',
-        'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap',
         '/icon-192.png',
         '/icon-512.png'
     ];
