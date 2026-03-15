@@ -78,8 +78,8 @@ describe('Service Worker Constants', () => {
     });
 
     test('ASSETS_TO_CACHE does not include external cross-origin URLs', () => {
-        const externalUrl = ASSETS_TO_CACHE.find(url => /^https?:\/\//.test(url));
-        expect(externalUrl).toBeUndefined();
+        const external = ASSETS_TO_CACHE.find(url => /^https?:\/\//.test(url));
+        expect(external).toBeUndefined();
     });
 });
 

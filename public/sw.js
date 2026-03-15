@@ -14,7 +14,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
     const path = url.pathname;
-    // Use network-first for core logic scripts and app shell to reduce stale-client UI bugs
+    // Use network-first for core scripts + app shell to reduce stale-client UI bugs
     const isAppScript = path.endsWith('/app.js') || path.endsWith('/app-helpers.js');
     const isAppShell = path === '/' || path.endsWith('/index.html');
 
