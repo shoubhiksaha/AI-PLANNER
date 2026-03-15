@@ -79,6 +79,20 @@ graph TD
 
 ---
 
+## ✅ Engineering Quality Gates
+
+Use these gates before any production merge:
+
+- `npm run check:conflicts` - blocks unresolved merge markers
+- `npm run test:frontend` - UI/helper/service worker regression tests
+- `npm run test:backend` - functions unit/integration tests
+- `npm run test:rules` - Firestore rules emulator tests
+- `npm run test:e2e:smoke` - Playwright smoke path
+
+Production deploy on `main` is CI-gated by the workflow in `.github/workflows/main.yml`.
+
+---
+
 ## 📈 Project Evolution
 
 ### V1: The MVP
@@ -170,6 +184,8 @@ Config:
 | [PROJECT_CHANGELOG](PROJECT_CHANGELOG_AND_CURRENT_ARCHITECTURE.md) | Full change history & current architecture |
 | [BREACH_RESPONSE_PLAN.md](BREACH_RESPONSE_PLAN.md) | Data breach response process |
 | [OAuth Verification Pack](docs/oauth-verification/README.md) | Scope justifications, reviewer demo script, and test account template |
+| [Release Checklist](docs/release_checklist.md) | Required pre-merge, deploy, and rollback process |
+| [Branch Protection Setup](docs/branch_protection.md) | GitHub settings required for safe merges |
 
 ---
 
@@ -190,9 +206,11 @@ Config:
     ```
 4. **Run Tests**:
     ```bash
-    npm test                 # All 202 tests (backend + frontend)
-    npm run test:backend     # 160 backend tests with coverage
-    npm run test:frontend    # 42 frontend tests (jsdom)
+    npm run check:conflicts  # Merge-conflict guard
+    npm run test:backend     # Backend tests with coverage
+    npm run test:frontend    # Frontend tests (jsdom)
+    npm run test:e2e:smoke   # Playwright smoke (CI mode)
+    npm test                 # Full test flow
     ```
 5. **Run Firestore Rules Tests** (requires Java 21+):
     ```bash

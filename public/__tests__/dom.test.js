@@ -29,6 +29,7 @@ describe('Critical DOM Elements', () => {
             'paywall-modal',
             'history-list',
             'heatmap-grid',
+            'build-version',
             // Notion onboarding
             'view-notion-setup',
             'notion-key-input',

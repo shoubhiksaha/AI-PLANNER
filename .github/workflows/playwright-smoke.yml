@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Guard unresolved merge conflicts
+        run: bash ./scripts/check-conflict-markers.sh
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -23,18 +25,20 @@ jobs:
           npm ci || npm install
           npx playwright install --with-deps chromium
 
-      - name: Serve Frontend Locally
-        working-directory: ./public
-        run: |
-          python3 -m http.server 3000 &
-          sleep 3
-
       - name: Run Playwright Smoke Test
-        working-directory: ./e2e
-        run: npx playwright test tests/sync.spec.js --project=chromium
         env:
           BASE_URL: http://localhost:3000
           CI: true
+        run: |
+          cd public
+          python3 -m http.server 3000 >/tmp/ai-planner-e2e-http.log 2>&1 &
+          SERVER_PID=$!
+          sleep 3
+          cd ../e2e
+          npx playwright test tests/sync.spec.js --project=chromium
+          EXIT_CODE=$?
+          kill $SERVER_PID >/dev/null 2>&1 || true
+          exit $EXIT_CODE
 
       - uses: actions/upload-artifact@v4
         if: always()
