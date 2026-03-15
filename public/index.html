@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="tailwind.css">
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script>if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').then(r => console.log('SW registered')).catch(e => console.log('SW failed', e)); }); }</script>
+    <script>if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(async (r) => { await r.update(); console.log('SW registered'); }).catch(e => console.log('SW failed', e)); }); }</script>
     <style>
         /* Hamburger Drawer */
         .drawer-overlay { transition: opacity 0.3s ease; }
@@ -167,11 +167,11 @@
                 <button id="change-notion-onboard-btn" class="text-xs text-blue-500 hover:underline ml-auto">Change Keys</button>
             </div>
 
-            <button id="save-notion-btn"
+            <button id="save-notion-btn" type="button"
                 class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all transform hover:scale-[1.01] active:scale-[0.99]">
                 Connect Notion →
             </button>
-            <button id="skip-notion-btn" class="w-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm py-2 transition-colors">
+            <button id="skip-notion-btn" type="button" class="w-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm py-2 transition-colors">
                 Skip for now → Go to Dashboard
             </button>
         </div>
@@ -726,8 +726,8 @@
         </div>
     </div>
 
-    <script src="app-helpers.js?v=4"></script>
-    <script type="module" src="app.js?v=4"></script>
+    <script src="app-helpers.js?v=5"></script>
+    <script type="module" src="app.js?v=5"></script>
 </body>
 
 </html>

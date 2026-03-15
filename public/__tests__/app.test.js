@@ -134,6 +134,13 @@ describe('switchView', () => {
         expect(document.getElementById('view-setup').classList.contains('view-hidden')).toBe(true);
     });
 
+    test('applies inline display fallback so hidden views cannot remain stacked', () => {
+        switchView('view-dashboard');
+        expect(document.getElementById('view-login').style.display).toBe('none');
+        expect(document.getElementById('view-setup').style.display).toBe('none');
+        expect(document.getElementById('view-dashboard').style.display).toBe('');
+    });
+
     test('shows setup view and hides others', () => {
         switchView('view-setup');
         expect(document.getElementById('view-setup').classList.contains('view-hidden')).toBe(false);
