@@ -1,34 +1,56 @@
 # AI Planner - Production Release Checklist
 
-Before merging into `main` and initiating a live production push, strictly follow this checklist to ensure stability, security, and observability confidence.
+Use this before every merge/deploy to keep releases stable and reviewer-ready.
 
-## 1. Test Matrices
-- [ ] **Frontend Suite:** Run `npm run test:frontend` locally. Ensure all React hooks, helpers, and Jest modules execute successfully.
-- [ ] **Backend Suite:** Run `cd functions && npm test` locally. Ensure the extensive matrix (including mocked Gemini integration flows) executes gracefully.
-- [ ] **E2E Smoke Tests:** Ensure the `playwright-smoke.yml` action passed cleanly. **NEVER** bypass this github gate. You can test locally via `BASE_URL=http://localhost:3000 npm run test:e2e:local` if needed.
-- [ ] **Payload Sanitization:** Verify that new inputs properly default inside `index.js` (e.g. `body.timeZone` via `Intl.supportedValuesOf`).
+## 1) Pre-Merge Gate (Required)
 
-## 2. Security Checks
-- [ ] **Dependencies:** Run `npm audit` across both the root directory and `functions/` to scan for major vulnerabilities. Note: Vite and frontend tooling deprecations can be generally bypassed, but backend Cloud Function packages must resolve clearly.
-- [ ] **Data Scopes:** Verify that the `public/app.js` OAuth requests accurately match the declarations in `public/privacy.html`. Verify no unused scopes remain.
-- [ ] **Cross-Site Protection:** Verify no new CDN scripts are injected bypassing the strict Content Security Policy defined in `firebase.json` headers.
+- [ ] Run repo integrity check: `npm run check:conflicts`
+- [ ] Run frontend tests: `npm run test:frontend`
+- [ ] Run backend tests: `npm run test:backend`
+- [ ] Run Firestore rules tests: `npm run test:rules`
+- [ ] Run Playwright smoke locally (optional but recommended): `npm run test:e2e:smoke`
+- [ ] Confirm PR branch is up to date with `main` and has zero unresolved conflicts
 
-## 3. Deployment Runbook
-1. Merge the PR directly into `main`. The `firebase-hosting-merge.yml` will automatically deploy the frontend.
-2. For backend modifications, explicitly run `cd functions && firebase deploy --only functions` from local CLI.
-3. Once deployed, verify `https://<PROJECT_URL>/` loads correctly in an incognito window without cache staleness.
-4. Execute `npm run test:all` against the live production endpoint. Check the `walkthrough.md` for historical CLI references.
+## 2) GitHub Branch Protection (Required)
 
-## 4. Rollback Procedures
-If post-deployment analytics trigger P1 5xx alarms or Playwright checks fail on the production instance:
+Enable branch protection on `main` with:
 
-**Frontend Reversion**
-1. Access the Firebase Console > Hosting.
-2. Identify the active domain targeting production.
-3. Click "View History" and pinpoint the immediately preceding stable release tag. 
-4. Select "Rollback" to instantly revert the static bundles.
+1. Require pull request reviews before merging
+2. Require status checks to pass before merging
+3. Include these required checks:
+   - `Frontend Tests`
+   - `Backend Tests & Coverage`
+   - `Firestore Rules Tests`
+   - `E2E Smoke (Playwright)`
+   - `Lint Enforcer / lint`
+4. Restrict direct pushes to `main`
 
-**Backend Reversion**
-1. In Cloud Console, revert the `functions/index.js` payload file locally via `git checkout origin/main~1`.
-2. Push the reverted state natively to Firebase via `firebase deploy --only functions`. 
-3. Verify the P1 5xx charts drop cleanly against the Request ID logs. 
+## 3) Deployment Gate
+
+1. Merge PR into `main`
+2. Wait for `CI/CD Pipeline` to pass all jobs
+3. Verify deploy job completed:
+   - Workflow: `.github/workflows/main.yml`
+   - Job: `Deploy to Firebase`
+4. Record deployed commit SHA in release notes/changelog
+
+## 4) Post-Deploy Validation (Incognito)
+
+1. Open production URL in a fresh incognito tab
+2. Verify top-left build badge shows expected `build v...`
+3. Validate critical user path:
+   - Login
+   - Notion Setup -> `Skip for now`
+   - Dashboard appears with no stacked Notion view
+4. Run one Morning/Night sync smoke with test-safe data
+5. Confirm no new 5xx spikes or latency alerts in GCP Monitoring
+
+## 5) Rollback Plan
+
+If release is bad:
+
+1. Rollback Hosting from Firebase Console -> Hosting -> Release History
+2. Revert backend commit and redeploy functions:
+   - `git revert <bad_sha>`
+   - `firebase deploy --only functions --project ai-planner-project-467800`
+3. Re-run smoke flow and confirm alerts return to baseline

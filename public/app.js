@@ -86,6 +86,23 @@ const switchView = (viewId) => {
     switchViewHelper(viewId);
 };
 
+// Display a deterministic frontend build marker (derived from app.js?v=...)
+// so support/debugging can immediately verify which bundle is live.
+const setBuildVersionBadge = () => {
+    const buildBadge = document.getElementById('build-version');
+    if (!buildBadge) return;
+
+    const appScript = Array.from(document.querySelectorAll('script[src]'))
+        .find(el => /app\.js(\?|$)/.test(el.getAttribute('src') || ''));
+    if (!appScript) return;
+
+    const srcUrl = new URL(appScript.src, window.location.origin);
+    const version = srcUrl.searchParams.get('v') || 'dev';
+    buildBadge.textContent = `build v${version}`;
+};
+
+setBuildVersionBadge();
+
 const buildGoogleProvider = () => {
     const provider = new GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/calendar.events');
