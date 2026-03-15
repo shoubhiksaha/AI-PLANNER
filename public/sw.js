@@ -3,6 +3,7 @@ importScripts('./sw-constants.js');
 const { CACHE_NAME, ASSETS_TO_CACHE } = self.SW_CONSTANTS;
 
 self.addEventListener('install', (event) => {
+    self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
             return cache.addAll(ASSETS_TO_CACHE);
@@ -13,21 +14,21 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
     const path = url.pathname;
-    // Apply stale-while-revalidate exclusively to core logic scripts
+    // Use network-first for core logic scripts to reduce stale-client UI bugs
     const isAppScript = path.endsWith('/app.js') || path.endsWith('/app-helpers.js');
 
     if (isAppScript) {
         event.respondWith(
             caches.open(CACHE_NAME).then((cache) => {
-                return cache.match(event.request).then((cachedResponse) => {
-                    const fetchPromise = fetch(event.request).then((networkResponse) => {
-                        // Background update the cache with the new script
+                return fetch(event.request)
+                    .then((networkResponse) => {
+                        // Keep a local fallback copy for offline mode
                         cache.put(event.request, networkResponse.clone());
                         return networkResponse;
-                    });
-                    // Serve cached instantly, or wait for network if un-cached
-                    return cachedResponse || fetchPromise;
-                });
+                    })
+                    .catch(() => cache.match(event.request).then((cachedResponse) => {
+                        return cachedResponse || fetch(event.request);
+                    }));
             })
         );
     } else {
