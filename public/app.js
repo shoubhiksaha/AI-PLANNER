@@ -118,9 +118,6 @@ const buildLoginProvider = () => {
     return provider;
 };
 
-// Mobile detection: Use redirect instead of popup on phones/tablets
-const isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
-
 const SCOPE_REDIRECT_GUARD_KEY = 'ai_planner_scope_redirect_started_at';
 const SCOPE_REDIRECT_GUARD_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -146,20 +143,15 @@ const clearScopeRedirectMark = () => {
     try { sessionStorage.removeItem(SCOPE_REDIRECT_GUARD_KEY); } catch (_) { /* no-op */ }
 };
 
+const canFallbackToRedirect = (errorCode) => (
+    errorCode === 'auth/popup-blocked' ||
+    errorCode === 'auth/operation-not-supported-in-this-environment'
+);
+
 const ensureGoogleAccessToken = async (forceRefresh = false) => {
     if (forceRefresh) googleAccessToken = null;
     if (googleAccessToken) return googleAccessToken;
     if (!auth.currentUser) throw new Error("Please sign in again.");
-
-    if (isMobile) {
-        if (consumeRecentScopeRedirectMark()) {
-            throw new Error("Google permission flow did not return a token. Please retry once in Chrome with cookies enabled.");
-        }
-        // Mobile: always use redirect (popups are unreliable on phones)
-        markScopeRedirectStarted();
-        await signInWithRedirect(auth, buildGoogleProvider());
-        return; // Page will reload after redirect
-    }
 
     try {
         const result = await signInWithPopup(auth, buildGoogleProvider());
@@ -168,7 +160,10 @@ const ensureGoogleAccessToken = async (forceRefresh = false) => {
         googleAccessToken = credential.accessToken;
         return googleAccessToken;
     } catch (e) {
-        if (e.code === 'auth/popup-blocked') {
+        if (canFallbackToRedirect(e.code)) {
+            if (consumeRecentScopeRedirectMark()) {
+                throw new Error("Google permission flow did not return a token. Please retry once in Chrome with cookies enabled.");
+            }
             markScopeRedirectStarted();
             await signInWithRedirect(auth, buildGoogleProvider());
             return;
@@ -191,18 +186,12 @@ getRedirectResult(auth).then((result) => {
 
 const loginBtn = document.getElementById('login-btn');
 loginBtn.addEventListener('click', async () => {
-    if (isMobile) {
-        // Mobile: skip popup entirely, use full-screen redirect
-        await signInWithRedirect(auth, buildLoginProvider());
-        return;
-    }
-
     try {
         const result = await signInWithPopup(auth, buildLoginProvider());
         const credential = GoogleAuthProvider.credentialFromResult(result);
         googleAccessToken = credential.accessToken;
     } catch (e) {
-        if (e.code === 'auth/popup-blocked') {
+        if (canFallbackToRedirect(e.code)) {
             await signInWithRedirect(auth, buildLoginProvider());
             return;
         }
