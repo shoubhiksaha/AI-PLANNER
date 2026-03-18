@@ -111,8 +111,40 @@ const buildGoogleProvider = () => {
     return provider;
 };
 
+const buildLoginProvider = () => {
+    // Keep initial sign-in minimal; request sensitive Google scopes only when needed.
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    return provider;
+};
+
 // Mobile detection: Use redirect instead of popup on phones/tablets
 const isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
+
+const SCOPE_REDIRECT_GUARD_KEY = 'ai_planner_scope_redirect_started_at';
+const SCOPE_REDIRECT_GUARD_MS = 5 * 60 * 1000; // 5 minutes
+
+const markScopeRedirectStarted = () => {
+    try {
+        sessionStorage.setItem(SCOPE_REDIRECT_GUARD_KEY, String(Date.now()));
+    } catch (_) { /* no-op */ }
+};
+
+const consumeRecentScopeRedirectMark = () => {
+    try {
+        const startedAt = Number(sessionStorage.getItem(SCOPE_REDIRECT_GUARD_KEY) || 0);
+        if (!startedAt) return false;
+        sessionStorage.removeItem(SCOPE_REDIRECT_GUARD_KEY);
+        const age = Date.now() - startedAt;
+        return age >= 0 && age < SCOPE_REDIRECT_GUARD_MS;
+    } catch (_) {
+        return false;
+    }
+};
+
+const clearScopeRedirectMark = () => {
+    try { sessionStorage.removeItem(SCOPE_REDIRECT_GUARD_KEY); } catch (_) { /* no-op */ }
+};
 
 const ensureGoogleAccessToken = async (forceRefresh = false) => {
     if (forceRefresh) googleAccessToken = null;
@@ -120,7 +152,11 @@ const ensureGoogleAccessToken = async (forceRefresh = false) => {
     if (!auth.currentUser) throw new Error("Please sign in again.");
 
     if (isMobile) {
+        if (consumeRecentScopeRedirectMark()) {
+            throw new Error("Google permission flow did not return a token. Please retry once in Chrome with cookies enabled.");
+        }
         // Mobile: always use redirect (popups are unreliable on phones)
+        markScopeRedirectStarted();
         await signInWithRedirect(auth, buildGoogleProvider());
         return; // Page will reload after redirect
     }
@@ -133,6 +169,7 @@ const ensureGoogleAccessToken = async (forceRefresh = false) => {
         return googleAccessToken;
     } catch (e) {
         if (e.code === 'auth/popup-blocked') {
+            markScopeRedirectStarted();
             await signInWithRedirect(auth, buildGoogleProvider());
             return;
         }
@@ -147,6 +184,7 @@ getRedirectResult(auth).then((result) => {
         const credential = GoogleAuthProvider.credentialFromResult(result);
         if (credential?.accessToken) {
             googleAccessToken = credential.accessToken;
+            clearScopeRedirectMark();
         }
     }
 }).catch((err) => console.warn("Redirect result error:", err));
@@ -155,17 +193,17 @@ const loginBtn = document.getElementById('login-btn');
 loginBtn.addEventListener('click', async () => {
     if (isMobile) {
         // Mobile: skip popup entirely, use full-screen redirect
-        await signInWithRedirect(auth, buildGoogleProvider());
+        await signInWithRedirect(auth, buildLoginProvider());
         return;
     }
 
     try {
-        const result = await signInWithPopup(auth, buildGoogleProvider());
+        const result = await signInWithPopup(auth, buildLoginProvider());
         const credential = GoogleAuthProvider.credentialFromResult(result);
         googleAccessToken = credential.accessToken;
     } catch (e) {
         if (e.code === 'auth/popup-blocked') {
-            await signInWithRedirect(auth, buildGoogleProvider());
+            await signInWithRedirect(auth, buildLoginProvider());
             return;
         }
         alert("Login failed: " + e.message);
