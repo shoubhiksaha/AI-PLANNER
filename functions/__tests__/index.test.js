@@ -448,6 +448,52 @@ describe('index.js Integration Tests', () => {
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ text: "Morning Sync Complete! Created 1 events, 0 reminders, and 1 tasks." }));
         });
 
+        test('morning sync does not crash when planner date is invalid', async () => {
+            req.body.syncType = 'morning';
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('generativelanguage')) {
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            candidates: [{
+                                content: {
+                                    parts: [{
+                                        text: JSON.stringify({
+                                            date: "not-a-real-date",
+                                            schedule: [{ time: "9 AM", task: "Meeting", block: true, reminder: false }],
+                                            todos: [{ task: "Task without parseable date", done: false }]
+                                        })
+                                    }]
+                                }
+                            }]
+                        })
+                    };
+                }
+                return { ok: true, json: async () => ({}) };
+            });
+
+            await myFunctions.syncPlanner(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(mockCalendarInsert).not.toHaveBeenCalled(); // parseDateTime returns null for invalid date
+            expect(mockTasksInsert).toHaveBeenCalledWith(expect.objectContaining({
+                requestBody: expect.not.objectContaining({ due: expect.any(String) })
+            }));
+        });
+
+        test('morning sync continues when Google Tasks insert fails', async () => {
+            req.body.syncType = 'morning';
+            mockTasksInsert.mockRejectedValue(new Error('Tasks API unavailable'));
+
+            await myFunctions.syncPlanner(req, res);
+
+            expect(mockCalendarInsert).toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
+                text: "Morning Sync Complete! Created 1 events, 0 reminders, and 0 tasks."
+            }));
+        });
+
         test('processes evening sync successfully', async () => {
             req.body.syncType = 'evening';
             global.__geminiMockText = JSON.stringify({ date: "2025-01-01", todos: [{ task: "Buy milk", done: true }], expenses: [{ item: "Food", amount: 10 }], health: { exercise: "Run", water: 5, sleep: 7, energy: 4 }, brainDump: "Good day" });
