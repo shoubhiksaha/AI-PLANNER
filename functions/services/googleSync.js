@@ -44,7 +44,10 @@ async function syncCalendarEvents(calendar, plannerData, timeZone = 'Asia/Kolkat
 
 async function syncGoogleTasks(tasks, plannerData) {
     let count = 0;
-    const dueDate = new Date(plannerData.date);
+    let dueDate = new Date(plannerData.date);
+    if (isNaN(dueDate.getTime())) {
+        dueDate = new Date(); // Fallback to today if date is invalid or missing
+    }
     dueDate.setHours(23, 59, 59, 999);
 
     for (const item of (plannerData.todos || [])) {
