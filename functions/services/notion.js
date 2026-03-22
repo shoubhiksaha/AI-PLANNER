@@ -48,7 +48,7 @@ function decryptStoredNotionKey(text) {
         return { value: text, needsMigration: true };
     } catch (e) {
         logger.error("Decryption failed for stored Notion key.", { error: e.message });
-        return { value: null, needsMigration: false };
+        return { value: null, needsMigration: false, error: "Decryption failed. Please re-connect Notion in your settings." };
     }
 }
 
