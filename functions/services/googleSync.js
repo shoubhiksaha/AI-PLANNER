@@ -51,13 +51,13 @@ async function syncCalendarEvents(calendar, plannerData, timeZone = 'Asia/Kolkat
 async function syncGoogleTasks(tasks, plannerData) {
     let count = 0;
     let dueIso = null;
-    const dueDate = new Date(plannerData.date);
-    if (!Number.isNaN(dueDate.getTime())) {
-        dueDate.setHours(23, 59, 59, 999);
-        dueIso = dueDate.toISOString();
-    } else {
-        logger.warn("Skipping task due date because planner date is invalid", { plannerDate: plannerData.date });
+    let dueDate = new Date(plannerData.date);
+    if (isNaN(dueDate.getTime())) {
+        logger.warn("Planner date is invalid, falling back to today for Google Tasks due date", { plannerDate: plannerData.date });
+        dueDate = new Date(); // Fallback to today if date is invalid or missing
     }
+    dueDate.setHours(23, 59, 59, 999);
+    dueIso = dueDate.toISOString();
 
     for (const item of (plannerData.todos || [])) {
         if (item.task) {
