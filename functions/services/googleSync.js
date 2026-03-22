@@ -23,18 +23,24 @@ async function syncCalendarEvents(calendar, plannerData, timeZone = 'Asia/Kolkat
             const eTime = toLocalISO(endTime);
             logger.info(`Creating Event: "${item.task}" Start: ${sTime} End: ${eTime}`);
 
-            await calendar.events.insert({
-                calendarId: 'primary',
-                resource: {
-                    summary: item.task,
-                    start: { dateTime: sTime, timeZone: timeZone },
-                    end: { dateTime: eTime, timeZone: timeZone },
-                    reminders: {
-                        useDefault: false,
-                        overrides: item.reminder ? [{ method: 'popup', minutes: 10 }] : [],
+            try {
+                await calendar.events.insert({
+                    calendarId: 'primary',
+                    resource: {
+                        summary: item.task,
+                        start: { dateTime: sTime, timeZone: timeZone },
+                        end: { dateTime: eTime, timeZone: timeZone },
+                        reminders: {
+                            useDefault: false,
+                            overrides: item.reminder ? [{ method: 'popup', minutes: 10 }] : [],
+                        },
                     },
-                },
-            });
+                });
+            } catch (err) {
+                logger.error("Calendar event insert failed:", { error: err?.message || String(err), task: item.task });
+                continue;
+            }
+
             if (item.block) counts.events++;
             if (item.reminder) counts.reminders++;
         }
@@ -44,23 +50,33 @@ async function syncCalendarEvents(calendar, plannerData, timeZone = 'Asia/Kolkat
 
 async function syncGoogleTasks(tasks, plannerData) {
     let count = 0;
-    let dueDate = new Date(plannerData.date);
-    if (isNaN(dueDate.getTime())) {
-        dueDate = new Date(); // Fallback to today if date is invalid or missing
+    let dueIso = null;
+    const dueDate = new Date(plannerData.date);
+    if (!isNaN(dueDate.getTime())) {
+        dueDate.setHours(23, 59, 59, 999);
+        dueIso = dueDate.toISOString();
+    } else {
+        logger.warn("Planner date is invalid; omitting Google Tasks due date", { plannerDate: plannerData.date });
     }
-    dueDate.setHours(23, 59, 59, 999);
 
     for (const item of (plannerData.todos || [])) {
         if (item.task) {
-            await tasks.tasks.insert({
-                tasklist: '@default',
-                requestBody: {
+            try {
+                const requestBody = {
                     title: item.task,
                     status: item.done ? 'completed' : 'needsAction',
-                    due: dueDate.toISOString()
-                }
-            });
-            count++;
+                };
+                if (dueIso) requestBody.due = dueIso;
+
+                await tasks.tasks.insert({
+                    tasklist: '@default',
+                    requestBody
+                });
+                count++;
+            } catch (err) {
+                logger.error("Google Tasks insert failed:", { error: err?.message || String(err), task: item.task });
+                continue;
+            }
         }
     }
     return count;

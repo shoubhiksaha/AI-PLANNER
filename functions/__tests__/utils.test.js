@@ -464,7 +464,7 @@ describe('Constants', () => {
         expect(ALLOWED_ORIGINS.has('https://ai-planner-project-467800.firebaseapp.com')).toBe(true);
         expect(ALLOWED_ORIGINS.has('http://localhost:5000')).toBe(true);
         expect(ALLOWED_ORIGINS.has('http://127.0.0.1:5000')).toBe(true);
-        expect(ALLOWED_ORIGINS.size).toBe(4);
+        expect(ALLOWED_ORIGINS.size).toBe(5);
     });
 });
 
