@@ -13,7 +13,8 @@ const ALLOWED_ORIGINS = new Set([
     'https://ai-planner-project-467800.web.app',
     'https://ai-planner-project-467800.firebaseapp.com',
     'http://localhost:5000',
-    'http://127.0.0.1:5000'
+    'http://127.0.0.1:5000',
+    'https://planner.analogdigital.tech'
 ]);
 const ALGORITHM = 'aes-256-gcm';
 const LEGACY_ALGORITHM = 'aes-256-cbc';
