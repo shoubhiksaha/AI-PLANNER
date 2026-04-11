@@ -1,9 +1,20 @@
 const { test, expect } = require('@playwright/test');
 
 test.describe('Dashboard UI Smoke Checks', () => {
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page, baseURL }) => {
         // Mock Firebase Auth and load index.html directly
-        await page.goto('http://127.0.0.1:5000/index.html');
+        const targetUrl = baseURL || 'http://localhost:3000';
+        await page.goto(`${targetUrl}/index.html`);
+        // Wait for app helpers & basic dom to load
+        await page.waitForFunction(() => typeof window.AppHelpers !== 'undefined');
+        // Bootstrap a real visible dashboard state for subsequent tests
+        await page.evaluate(() => {
+            window.AppHelpers.switchView('view-dashboard');
+        });
+        // Wait for potential animations to clear
+        await page.waitForTimeout(300);
+        // Explicitly check visibility
+        await expect(page.locator('#view-dashboard')).toBeVisible();
     });
 
     test('Hamburger Menu opens navigation drawer', async ({ page }) => {
@@ -36,5 +47,59 @@ test.describe('Dashboard UI Smoke Checks', () => {
         // Check that Standard Plan button is present in the modal
         await expect(page.locator('#upgrade-standard-pricing-btn')).toBeVisible();
         await expect(page.locator('#upgrade-pro-btn')).toBeVisible();
+    });
+
+    test('Notion Setup save triggers backend and shows success', async ({ page }) => {
+        await page.route('**/setupNotion', async route => {
+            await route.fulfill({ json: { success: true, text: "Notion setup saved securely." }, status: 200, contentType: 'application/json' });
+        });
+
+        // Trigger Notion setup flow (make view visible)
+        await page.evaluate(() => {
+            window.AppHelpers.switchView('view-notion-setup');
+        });
+        await page.waitForTimeout(300);
+        await expect(page.locator('#view-notion-setup')).toBeVisible();
+
+        await page.fill('#notion-key-input', 'secret_fake_key_123');
+        await page.fill('#notion-db-input', 'fake_db_123');
+        await page.click('#save-notion-btn');
+
+        await expect(page.locator('#notion-onboard-status')).toContainText('Notion Connected', { timeout: 3000 });
+    });
+
+    test('BYOK KMS Save interacts with backend', async ({ page }) => {
+        await page.route('**/setupBYOK', async route => {
+            await route.fulfill({ json: { success: true, text: "BYOK settings saved securely." }, status: 200, contentType: 'application/json' });
+        });
+
+        await page.evaluate(() => {
+            window.AppHelpers.switchView('view-setup');
+            document.querySelector('input[name="byok-mode"][value="kms"]').checked = true;
+        });
+        await page.waitForTimeout(300);
+        await expect(page.locator('#view-setup')).toBeVisible();
+
+        await page.fill('#byok-api-key', 'sk-test-key-1234');
+        await page.click('#save-setup-btn');
+
+        // Since BYOK setup shows an alert natively or changes the button text, we'll wait for the network mock to be hit
+        await page.waitForResponse('**/setupBYOK');
+    });
+
+    test('logClientError is called on unhandled errors', async ({ page }) => {
+        let errorLogged = false;
+        await page.route('**/logClientError', async route => {
+            errorLogged = true;
+            await route.fulfill({ status: 200, json: { success: true } });
+        });
+
+        await page.evaluate(() => {
+            // Trigger a manual global error
+            window.dispatchEvent(new ErrorEvent('error', { error: new Error('Fake UI Error'), message: 'Fake UI Error' }));
+        });
+
+        await page.waitForTimeout(500);
+        expect(errorLogged).toBe(true);
     });
 });

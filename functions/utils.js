@@ -157,7 +157,7 @@ function handleOptions(req, res) {
         return true;
     }
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-byok-token, x-byok-provider, x-byok-model, x-byok-baseurl');
     res.status(204).send('');
     return true;
 }

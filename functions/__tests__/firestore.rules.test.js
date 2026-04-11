@@ -66,4 +66,34 @@ describe('Firestore Security Rules', () => {
         const docRef = db.collection('users').doc('testuser@example.com');
         await assertFails(docRef.set({ name: 'Hacked' }));
     });
+
+    test('Authenticated user can read their own syncHistory', async () => {
+        const db = getAuthDb('testuser@example.com');
+        const docRef = db.collection('users').doc('testuser@example.com').collection('syncHistory').doc('some-log');
+        await assertSucceeds(docRef.get());
+    });
+
+    test('Authenticated user CANNOT read another user\'s syncHistory', async () => {
+        const db = getAuthDb('hacker@example.com');
+        const docRef = db.collection('users').doc('testuser@example.com').collection('syncHistory').doc('some-log');
+        await assertFails(docRef.get());
+    });
+
+    test('Unauthenticated user CANNOT read syncHistory', async () => {
+        const db = getUnauthDb();
+        const docRef = db.collection('users').doc('testuser@example.com').collection('syncHistory').doc('some-log');
+        await assertFails(docRef.get());
+    });
+
+    test('Authenticated user CANNOT write syncHistory', async () => {
+        const db = getAuthDb('testuser@example.com');
+        const docRef = db.collection('users').doc('testuser@example.com').collection('syncHistory').doc('some-log');
+        await assertFails(docRef.set({ status: 'fake-success' }));
+    });
+
+    test('Unknown collections are denied', async () => {
+        const db = getAuthDb('testuser@example.com');
+        const docRef = db.collection('users').doc('testuser@example.com').collection('unknownCollection').doc('doc');
+        await assertFails(docRef.get());
+    });
 });

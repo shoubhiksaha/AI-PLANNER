@@ -120,6 +120,9 @@ class UniversalAIAdapter {
         }
         
         const data = await response.json();
+        if (!data.choices || !data.choices[0] || !data.choices[0].message || typeof data.choices[0].message.content !== 'string') {
+            throw new Error('No extraction returned');
+        }
         return data.choices[0].message.content;
     }
 
@@ -156,6 +159,9 @@ class UniversalAIAdapter {
         }
         
         const data = await response.json();
+        if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0] || typeof data.candidates[0].content.parts[0].text !== 'string') {
+            throw new Error('No extraction returned');
+        }
         return data.candidates[0].content.parts[0].text;
     }
 
@@ -195,6 +201,9 @@ class UniversalAIAdapter {
         }
         
         const data = await response.json();
+        if (!data.content || !data.content[0] || typeof data.content[0].text !== 'string') {
+            throw new Error('No extraction returned');
+        }
         let rawText = data.content[0].text;
         
         // Claude sometimes wraps JSON in markdown code fences

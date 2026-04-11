@@ -400,7 +400,8 @@ describe('handleOptions', () => {
         expect(handleOptions(req, res)).toBe(true);
         expect(getStatus()).toBe(204);
         expect(headers['Access-Control-Allow-Methods']).toBe('POST, OPTIONS');
-        expect(headers['Access-Control-Allow-Headers']).toBe('Content-Type, Authorization');
+        expect(headers['Access-Control-Allow-Headers']).toContain('x-byok-token');
+        expect(headers['Access-Control-Allow-Headers']).toContain('Authorization');
     });
 
     test('rejects OPTIONS from disallowed origin with 403', () => {
