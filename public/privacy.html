@@ -17,7 +17,7 @@
 <body class="bg-slate-50 text-slate-700 p-8 max-w-3xl mx-auto">
     <header class="mb-10 text-center">
         <h1 class="text-4xl font-bold mb-2 text-emerald-700">Privacy Policy</h1>
-        <p class="text-slate-500">Last Updated: March 3, 2026</p>
+        <p class="text-slate-500">Last Updated: March 24, 2026</p>
     </header>
 
     <section class="mb-8">
@@ -65,11 +65,10 @@
 
         <div class="space-y-4">
             <div>
-                <h4 class="font-bold">Third-Party AI Models (e.g., Google Gemini)</h4>
-                <p class="text-sm">We process your data using enterprise-grade AI providers. We currently use Google
-                    Gemini, but may switch to other providers (like OpenAI or Anthropic) to improve performance.
-                    <strong>We only select providers whose API terms explicitly prohibit using your data to train their
-                        models.</strong>
+                <h4 class="font-bold">Third-Party AI Models (e.g., Google Gemini, OpenAI, Anthropic)</h4>
+                <p class="text-sm">We process your data using enterprise-grade AI providers. We currently default to Google
+                    Gemini. If you choose to configure a custom AI provider via our Bring Your Own Key (BYOK) settings, your data is sent to that specific provider governed by their terms.
+                    <strong>We strongly recommend and utilize providers whose API terms explicitly prohibit using your data to train their models.</strong>
                 </p>
             </div>
             <div>
@@ -89,8 +88,8 @@
         <p class="mb-2">We implement multiple layers of security:</p>
         <ul class="list-disc pl-6 space-y-2">
             <li><strong>Encryption in Transit</strong>: All data transmitted over HTTPS.</li>
-            <li><strong>Encryption at Rest</strong>: Your Notion API keys are encrypted with AES-256-GCM before storage.
-                The encryption key is managed via Google Cloud Secret Manager and never exposed in code.</li>
+            <li><strong>Encryption at Rest</strong>: Your account integrations (like Notion API keys) and Cloud-saved BYOK keys are encrypted with AES-256-GCM before storage.
+                The encryption key is managed via Google Cloud Secret Manager / Cloud KMS and never exposed in plaintext.</li>
             <li><strong>Content Security Policy</strong>: Strict CSP headers prevent cross-site scripting (XSS) attacks.
             </li>
             <li><strong>Firestore Access Control</strong>: Your account data is read-only from the client. All writes go
@@ -108,8 +107,7 @@
         </div>
         <ul class="list-disc pl-6 space-y-2">
             <li><strong>Email Address</strong>: Stored in Firestore to identify your account.</li>
-            <li><strong>Notion Integration Keys</strong>: Encrypted with AES-256-GCM and stored in Firestore. We cannot
-                read these without the Secret Manager encryption key.</li>
+            <li><strong>Integration & BYOK Keys</strong>: Notion keys and BYOK API keys saved in "Cloud KMS" mode are encrypted with AES-256-GCM and securely stored in Firestore. We cannot fundamentally read these without the Secret Manager key. If you use BYOK "Session-Only" mode, the key remains securely in your device's temporal memory and is deleted instantly after the sync; it is never written to our database.</li>
             <li><strong>No images, journal text, calendar data, or planner content is ever stored.</strong></li>
         </ul>
     </section>

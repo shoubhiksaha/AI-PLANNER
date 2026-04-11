@@ -30,12 +30,19 @@ This document summarizes the full evolution of the AI Planner project from initi
 - **Added** mobile detection: redirect-first auth for phones/tablets.
 - **Updated** service worker cache to v2 with new external files.
 
-### 6. Production Security Hardening & OAuth Fixes (Current)
+### 6. Production Security Hardening & OAuth Fixes
 - **Rate Limiting**: Added Firestore-backed sliding window rate limits (10 req/min Sync, 20/min Auth).
 - **Size Validation**: Strict 30MB JSON payload limits and precision byte-size decoding verification limits for images.
 - **Key Rotation**: Deployed `NOTION_ENCRYPTION_KEY_V2` with dual-key AES-256-GCM decryption for seamless zero-downtime key rotation and migrations.
 - **OAuth Fixes**: Fine-tuned Firebase `firebase.json` CSP to explicitly allow `apis.google.com` scripts and `unsafe-inline` styles, successfully resolving Google Identity popup cross-origin frame blocks.
 - **Test Infrastructure**: Expanded test suite to 198 (157 backend + 41 frontend) ensuring >95% backend statement and >85% branch coverage.
+
+### 7. Domain Migration & UI Polish (Current)
+- **CORS Resolution**: Updated backend origin allowlist to fully support the new custom domain (`planner.analogdigital.tech`).
+- **Data Sync Reliability**: Fixed an issue in `syncGoogleTasks` where invalid planner dates caused Google Tasks insertion/test suite failures.
+- **Notion Integration UX**: Added graceful logic and explicit user-friendly error messages for encrypted Notion key decryption failures.
+- **UI & Accessibility**: Replaced static Tailwind utility classes with intelligent dynamic theme variables (`bg-theme-bg`) to guarantee input legibility across Light, Dark, and OLED reading modes.
+- **Onboarding Copy**: Improved login screen messaging to properly highlight core features (Google Calendar & Notion syncing).
 
 ---
 

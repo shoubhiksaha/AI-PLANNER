@@ -113,7 +113,7 @@ async function initializeGamificationProfile(userRef, userData) {
     return userData;
 }
 
-function checkFeaturesAndCredits(userData, numImages, mode) {
+function checkFeaturesAndCredits(userData, numImages, mode, hasBYOK = false) {
     const tier = userData.tier || 'free';
     if (tier === 'free') {
         if (numImages > 1) return { allowed: false, error: "Free tier is limited to 1 page per sync. Upgrade to Standard/Pro for multi-page batch processing 🚀", code: 403 };
@@ -124,11 +124,11 @@ function checkFeaturesAndCredits(userData, numImages, mode) {
         if (numImages > 5) return { allowed: false, error: "Pro tier is limited to 5 pages per sync.", code: 403 };
     }
 
-    const hasBYOK = !!userData.geminiKey || !!(userData.byokConfig && userData.byokConfig.apiKey); 
+    const _hasBYOK = hasBYOK || !!userData.geminiKey || !!(userData.byokConfig && userData.byokConfig.apiKey) || !!userData.byokKmsData;
     let tierCredits = userData.tierCredits || 0;
     let boosterCredits = userData.boosterCredits || 0;
 
-    if (!hasBYOK) {
+    if (!_hasBYOK) {
         if (tierCredits + boosterCredits < numImages) {
             return { allowed: false, error: `Insufficient credits. Need ${numImages}, but have ${tierCredits + boosterCredits}. Please buy Booster Credits or Upgrade!`, code: 402 };
         }
@@ -538,6 +538,18 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         const userDoc = await userRef.get();
         let rawUserData = userDoc.exists ? userDoc.data() : {};
         
+        // --- BYOK TRAFFIC COP ---
+        let byokConfig = null;
+        let hasBYOK = false;
+        const statelessKey = req.headers['x-byok-token'];
+        const statelessProvider = req.headers['x-byok-provider'];
+        const statelessModel = req.headers['x-byok-model'];
+        const statelessBaseUrl = req.headers['x-byok-baseurl'];
+
+        if (statelessKey) {
+            hasBYOK = true;
+        }
+
         // --- GAMIFICATION: Transactional Feature Guarding & Credit Check ---
         let userData;
         try {
@@ -545,6 +557,10 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 const docSnap = await t.get(userRef);
                 let rawData = docSnap.exists ? docSnap.data() : {};
                 
+                if (rawData.byokKmsData || rawData.geminiKey || (rawData.byokConfig && rawData.byokConfig.apiKey)) {
+                    hasBYOK = true;
+                }
+
                 // Emulate initializeGamificationProfile
                 const defaults = {
                     tier: 'free', tierCredits: 15, boosterCredits: 0,
@@ -561,13 +577,12 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                     }
                 }
 
-                const check = checkFeaturesAndCredits(rawData, parsedImages.length, mode);
+                const check = checkFeaturesAndCredits(rawData, parsedImages.length, mode, hasBYOK);
                 if (!check.allowed) {
                     throw new Error(JSON.stringify({ code: check.code, error: check.error }));
                 }
 
                 // Deduct credits to prevent concurrent overspending
-                const hasBYOK = !!rawData.geminiKey || !!(rawData.byokConfig && rawData.byokConfig.apiKey); 
                 if (!hasBYOK) {
                     let tierCredits = rawData.tierCredits;
                     let boosterCredits = rawData.boosterCredits;
@@ -602,13 +617,6 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             }
         }
 
-        // --- BYOK TRAFFIC COP ---
-        let byokConfig = null;
-        const statelessKey = req.headers['x-byok-token'];
-        const statelessProvider = req.headers['x-byok-provider'];
-        const statelessModel = req.headers['x-byok-model'];
-        const statelessBaseUrl = req.headers['x-byok-baseurl'];
-
         if (statelessKey) {
             byokConfig = {
                 apiKey: statelessKey,
@@ -634,6 +642,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 if (userData.byokKmsData.baseUrl) byokConfig.baseUrl = userData.byokKmsData.baseUrl;
             } catch (err) {
                 logger.error("KMS Decryption error", { error: err.message, requestId, authEmail: email });
+                throw new Error(JSON.stringify({ code: 500, error: "Failed to decrypt BYOK configuration." }));
             }
         }
 

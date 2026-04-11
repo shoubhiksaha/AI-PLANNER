@@ -114,12 +114,18 @@ Production deploy on `main` is CI-gated by the workflow in `.github/workflows/ma
 - **Code Separation**: Monolithic HTML split into `app.js`, `styles.css`, `tailwind.css`.
 - **Firestore Lockdown**: Client read-only; all writes via Admin SDK.
 
-### V5: Security Hardening (Current)
+### V5: Security Hardening
 - **Rate Limiting**: Firestore-backed 10 req/min for Sync, 20 req/min for auth endpoints.
 - **Payload Validation**: Strict 100MB JSON limit + base64 decoded byte size checks to prevent OOM.
 - **Key Rotation**: Dual-key AES-256-GCM encryption strategy for Notion Keys with zero-downtime migration.
 
-### V6: Future Roadmap
+### V6: Domain Migration & UI Polish (Current)
+- **CORS Resolution**: Updated backend origin allowlist to fully support `planner.analogdigital.tech`.
+- **Data Sync Reliability**: Fixed an issue in `syncGoogleTasks` where invalid planner dates caused Google Tasks insertion/test suite failures.
+- **Notion Integration UX**: Added explicit user-friendly error messages for Notion key decryption failures.
+- **UI & Accessibility**: Replaced static Tailwind utility classes with dynamic theme variables to guarantee input legibility across all reading modes.
+
+### V7: Future Roadmap
 - **BYOK**: Bring Your Own Key support.
 - **Multi-Provider**: Support for OpenAI, Anthropic, DeepSeek.
 - **CSP Reporting**: Add violation monitoring endpoint.

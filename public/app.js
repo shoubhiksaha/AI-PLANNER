@@ -112,8 +112,12 @@ const buildGoogleProvider = () => {
 };
 
 const buildLoginProvider = () => {
-    // Keep initial sign-in minimal; request sensitive Google scopes only when needed.
+    // Request full scopes at login to prevent 'insufficient authentication scopes'
+    // errors during sync due to the token being cached from a minimal login.
     const provider = new GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/calendar.events');
+    provider.addScope('https://www.googleapis.com/auth/tasks');
+    provider.addScope('https://www.googleapis.com/auth/drive.file');
     provider.setCustomParameters({ prompt: 'select_account' });
     return provider;
 };

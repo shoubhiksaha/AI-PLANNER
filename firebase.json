@@ -78,6 +78,10 @@
         "function": "deleteUserAccount"
       },
       {
+        "source": "/setupBYOK",
+        "function": "setupBYOK"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

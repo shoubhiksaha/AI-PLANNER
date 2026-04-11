@@ -20,9 +20,11 @@
     "test:backend": "cd functions && npm test",
     "test:frontend": "jest --verbose --config public/jest.config.js",
     "test:e2e": "cd e2e && npx playwright test tests/sync.spec.js --project=chromium",
-    "test:e2e:smoke": "bash -lc 'cd public; python3 -m http.server 3000 >/tmp/ai-planner-smoke.log 2>&1 & SERVER_PID=$!; sleep 3; cd ../e2e; CI=true BASE_URL=http://localhost:3000 npx playwright test tests/sync.spec.js --project=chromium; EXIT_CODE=$?; kill $SERVER_PID >/dev/null 2>&1 || true; exit $EXIT_CODE'",
-    "quality:ci": "npm run check:conflicts && npm run test:frontend && npm run test:backend",
-    "test:all": "npm run test:backend && npm run test:frontend && npm run test:e2e",
+    "test:e2e:smoke": "cd e2e && CI=true npx playwright test tests/sync.spec.js --project=chromium",
+    "test:e2e:ui": "cd e2e && npx playwright test tests/ui.spec.js --project=chromium",
+    "test:e2e:full": "firebase emulators:exec 'cd e2e && npx playwright test --project=chromium'",
+    "quality:ci": "npm run check:conflicts && npm run test:frontend && npm run test:backend && npm run test:e2e:smoke",
+    "test:all": "npm run test:backend && npm run test:frontend && npm run test:e2e:smoke",
     "test:rules": "cd functions && npm run test:rules"
   },
   "repository": {

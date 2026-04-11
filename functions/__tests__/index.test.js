@@ -116,6 +116,13 @@ jest.mock('@notionhq/client', () => ({
 
 global.fetch = jest.fn();
 
+const mockGenerateAndWrapDEK = jest.fn();
+const mockUnwrapAndDecrypt = jest.fn();
+jest.mock('../services/kms', () => ({
+    generateAndWrapDEK: mockGenerateAndWrapDEK,
+    unwrapAndDecrypt: mockUnwrapAndDecrypt
+}));
+
 // Import the functions after mocking
 const myFunctions = require('../index');
 const { google, _mockGetUserInfo, _mockTasksList, _mockSheetsCreate } = require('googleapis');
@@ -205,6 +212,57 @@ describe('index.js Integration Tests', () => {
             _mockGetUserInfo.mockResolvedValue({ data: { email: 'test@example.com' } });
             mockRateLimitGet.mockResolvedValue({ exists: true, data: () => ({ count: 100, windowStart: Date.now() }) });
             await myFunctions.setupNotion(req, res);
+            expect(res.status).toHaveBeenCalledWith(429);
+            expect(res.set).toHaveBeenCalledWith('Retry-After', expect.any(String));
+        });
+    });
+
+    describe('setupBYOK', () => {
+        test('rejects GET requests with 405', async () => {
+            req.method = 'GET';
+            await myFunctions.setupBYOK(req, res);
+            expect(res.status).toHaveBeenCalledWith(405);
+        });
+
+        test('rejects missing or invalid body with 400', async () => {
+            req.body = null;
+            await myFunctions.setupBYOK(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid setup payload" }));
+        });
+
+        test('stores KMS wrapped BYOK configuration on success', async () => {
+            req.body = {
+                apiKey: 'sk-abcdefg1234567',
+                provider: 'openai',
+                modelName: 'gpt-4o',
+                token: 'valid-token-string-at-least-twenty-chars'
+            };
+            _mockGetUserInfo.mockResolvedValue({ data: { email: 'test@example.com' } });
+
+            mockGenerateAndWrapDEK.mockResolvedValue({
+                wrappedDek: 'wrappedD3k',
+                encryptedKey: 'encryptedK3y',
+                iv: 'iv123',
+                authTag: 'auth123'
+            });
+
+            await myFunctions.setupBYOK(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(mockSet).toHaveBeenCalledWith({
+                byokKmsData: expect.objectContaining({
+                    wrappedDek: 'wrappedD3k',
+                    provider: 'openai'
+                })
+            }, { merge: true });
+        });
+
+        test('returns 429 when rate limit exceeded', async () => {
+            req.body = { token: 'valid-token-string-at-least-twenty-chars', apiKey: 'test' };
+            _mockGetUserInfo.mockResolvedValue({ data: { email: 'test@example.com' } });
+            mockRateLimitGet.mockResolvedValue({ exists: true, data: () => ({ count: 100, windowStart: Date.now() }) });
+            await myFunctions.setupBYOK(req, res);
             expect(res.status).toHaveBeenCalledWith(429);
             expect(res.set).toHaveBeenCalledWith('Retry-After', expect.any(String));
         });
@@ -390,6 +448,72 @@ describe('index.js Integration Tests', () => {
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(429);
             expect(res.set).toHaveBeenCalledWith('Retry-After', expect.any(String));
+        });
+
+        test('bypasses credit deduction for stateless BYOK user', async () => {
+            req.body.syncType = 'morning';
+            req.headers['x-byok-token'] = 'sk-mock-123';
+            // Re-mock to assert transaction doesn't throw on 0 credits
+            mockGet.mockResolvedValue({
+                exists: true,
+                data: () => ({ tierCredits: 0, boosterCredits: 0, tier: 'free' })
+            });
+
+            // Mock response corresponding to OpenAI / UniversalAIAdapter structure
+            global.fetch.mockImplementation(async (url) => {
+                if (url.includes('notion.com')) {
+                    return { ok: true, json: async () => ({ id: 'mock', upload_url: 'mock' }), text: async () => '{"id":"mock"}' };
+                }
+                return {
+                    ok: true,
+                    json: async () => ({
+                        choices: [{
+                            message: {
+                                content: JSON.stringify({
+                                    date: "2025-01-01",
+                                    schedule: [{ time: "9 AM", task: "Meeting", block: true, reminder: false }],
+                                    todos: [{ task: "Buy milk", done: false }]
+                                })
+                            }
+                        }]
+                    })
+                };
+            });
+
+            await myFunctions.syncPlanner(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            // Inspect the set arguments from the transaction block updateObj
+            // tierCredits shouldn't be negative and shouldn't be deducted
+            const setCalls = mockSet.mock.calls;
+            const txCall = setCalls.find(c => c[0] && c[0].tierCredits !== undefined);
+            if (txCall) {
+                // If it was written back, it should not have deducted
+                expect(txCall[0].tierCredits).toBe(0);
+            }
+        });
+
+        test('returns 500 when KMS envelope decryption fails (fail closed)', async () => {
+            req.body.syncType = 'morning';
+            mockGet.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    tierCredits: 10,
+                    byokKmsData: {
+                        encryptedKey: 'mock', wrappedDek: 'mock', iv: 'mock', authTag: 'mock', provider: 'openai'
+                    }
+                })
+            });
+
+            // Make the mock decryption throw
+            mockUnwrapAndDecrypt.mockRejectedValueOnce(new Error('KMS failure'));
+
+            await myFunctions.syncPlanner(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Internal Server Error" }));
+            // Assert that no fallback Gemini/default API was called
+            expect(global.fetch).not.toHaveBeenCalled();
         });
 
         test('rejects request with invalid token', async () => {
