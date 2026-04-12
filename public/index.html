@@ -31,6 +31,9 @@
         .pricing-toggle-active { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
         /* Custom sub-category radios */
         .custom-sub-radio:checked + label { border-color: #6366f1; background: #eef2ff; }
+        /* Drawer Hover FX */
+        .drawer-item:hover { background-color: rgba(0,0,0,0.05); }
+        .dark-mode .drawer-item:hover, .oled-mode .drawer-item:hover { background-color: rgba(255,255,255,0.1); }
     </style>
 </head>
 
@@ -467,32 +470,32 @@
                 <button id="close-drawer" class="text-xl hover:opacity-70 transition-opacity">✕</button>
             </div>
             <nav class="space-y-1">
-                <button data-drawer="upgrade" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/50 transition-colors text-left text-sm font-medium text-theme-text">
+                <button data-drawer="upgrade" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left text-sm font-medium text-theme-text">
                     <span>👑</span> Upgrade
                 </button>
-                <button data-drawer="reports" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/50 transition-colors text-left text-sm font-medium text-theme-text">
+                <button data-drawer="reports" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left text-sm font-medium text-theme-text">
                     <span>📊</span> Reports
                 </button>
-                <button data-drawer="notion" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/50 transition-colors text-left text-sm font-medium text-theme-text">
+                <button data-drawer="notion" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left text-sm font-medium text-theme-text">
                     <span>📝</span> Notion Settings
                 </button>
-                <button data-drawer="history" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/50 transition-colors text-left text-sm font-medium text-theme-text">
+                <button data-drawer="history" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left text-sm font-medium text-theme-text">
                     <span>🕐</span> History
                 </button>
-                <button data-drawer="settings" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/50 transition-colors text-left text-sm font-medium text-theme-text">
+                <button data-drawer="settings" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left text-sm font-medium text-theme-text">
                     <span>⚙️</span> Advanced Settings
                 </button>
                 <hr class="border-theme-border my-2">
-                <a href="privacy.html" target="_blank" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/50 transition-colors text-left text-sm text-theme-muted">
+                <a href="privacy.html" target="_blank" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left text-sm text-theme-muted">
                     <span>🛡️</span> Privacy
                 </a>
-                <a href="planner.html" target="_blank" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/50 transition-colors text-left text-sm text-theme-muted">
+                <a href="planner.html" target="_blank" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left text-sm text-theme-muted">
                     <span>📄</span> Planner PDF
                 </a>
-                <a href="gear.html" target="_blank" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/50 transition-colors text-left text-sm text-theme-muted">
+                <a href="gear.html" target="_blank" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left text-sm text-theme-muted">
                     <span>🛍️</span> Gear List
                 </a>
-                <button data-drawer="export" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/50 transition-colors text-left text-sm text-theme-muted">
+                <button data-drawer="export" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left text-sm text-theme-muted">
                     <span>📦</span> Export Data
                 </button>
                 <hr class="border-theme-border my-2">
@@ -503,7 +506,7 @@
                     <span>⌚</span> Health <span class="text-[10px] bg-slate-100 px-1 py-0.5 rounded font-bold uppercase">Soon</span>
                 </div>
                 <hr class="border-theme-border my-2">
-                <button data-drawer="logout" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/50 transition-colors text-left text-sm text-red-400">
+                <button data-drawer="logout" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left text-sm text-red-400">
                     <span>↪️</span> Sign Out
                 </button>
             </nav>
