@@ -184,14 +184,10 @@ Config:
 ## 📚 Documentation
 
 | Document | Purpose |
-|----------|---------|
-| [DESIGN_AND_DECISIONS.md](DESIGN_AND_DECISIONS.md) | Architecture & design philosophy |
-| [SECURITY_CSP_PLAN.md](SECURITY_CSP_PLAN.md) | CSP migration plan (✅ all phases complete) |
-| [PROJECT_CHANGELOG](PROJECT_CHANGELOG_AND_CURRENT_ARCHITECTURE.md) | Full change history & current architecture |
-| [BREACH_RESPONSE_PLAN.md](BREACH_RESPONSE_PLAN.md) | Data breach response process |
-| [OAuth Verification Pack](docs/oauth-verification/README.md) | Scope justifications, reviewer demo script, and test account template |
-| [Release Checklist](docs/release_checklist.md) | Required pre-merge, deploy, and rollback process |
-| [Branch Protection Setup](docs/branch_protection.md) | GitHub settings required for safe merges |
+|----------|---------|  
+| [WIKI.md](WIKI.md) | **Single source of truth** — architecture, full changelog, security, testing, roadmap, compliance, interview & resume guide, learning plan |
+| [docs/oauth-verification/](docs/oauth-verification/) | Google OAuth submission artefacts — scope justifications, submission checklist, reviewer demo script |
+| [public/privacy.html](public/privacy.html) | Public-facing Privacy Policy |
 
 ---
 
