@@ -75,6 +75,8 @@ test.describe('Dashboard UI Smoke Checks', () => {
 
         await page.evaluate(() => {
             window.AppHelpers.switchView('view-setup');
+            const detailsEl = document.querySelector('#view-setup details');
+            if (detailsEl) detailsEl.open = true;
             document.querySelector('input[name="byok-mode"][value="kms"]').checked = true;
         });
         await page.waitForTimeout(300);
@@ -88,9 +90,9 @@ test.describe('Dashboard UI Smoke Checks', () => {
     });
 
     test('logClientError is called on unhandled errors', async ({ page }) => {
-        let errorLogged = false;
+        const reqPromise = page.waitForRequest(req => req.url().includes('logClientError'));
+        
         await page.route('**/logClientError', async route => {
-            errorLogged = true;
             await route.fulfill({ status: 200, json: { success: true } });
         });
 
@@ -99,7 +101,6 @@ test.describe('Dashboard UI Smoke Checks', () => {
             window.dispatchEvent(new ErrorEvent('error', { error: new Error('Fake UI Error'), message: 'Fake UI Error' }));
         });
 
-        await page.waitForTimeout(500);
-        expect(errorLogged).toBe(true);
+        await reqPromise;
     });
 });

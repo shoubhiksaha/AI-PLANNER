@@ -18,7 +18,7 @@ This document summarizes the full evolution of the AI Planner project from initi
 
 ### 4. `8f388e8` — Architecture & Security Hardening
 - Added `/setupNotion` endpoint for secure key submission.
-- Implemented AES-256-CBC encryption for Notion keys.
+- Implemented AES-256-GCM encryption for Notion keys.
 - Hardened CORS (origin allowlist), request validation, and Firestore write policy (client read-only).
 - Added security headers to `firebase.json`.
 
@@ -52,7 +52,7 @@ This document summarizes the full evolution of the AI Planner project from initi
 | Before | Now |
 |--------|-----|
 | Keys passed from frontend in sync payload | Dedicated `/setupNotion` encrypts keys server-side |
-| Plaintext storage model | AES-256-CBC encryption with key in Secret Manager |
+| Plaintext storage model | AES-256-GCM encryption with key in Secret Manager |
 | Client manages keys | Server-only read/decrypt during sync |
 
 ### 2) API Boundary

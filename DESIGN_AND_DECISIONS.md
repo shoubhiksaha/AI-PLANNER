@@ -96,11 +96,11 @@ Using `allSettled` instead of `all` allows partial success (e.g., if Notion fail
 
 ## 6. Security Architecture
 
-### Notion Key Encryption (AES-256-CBC)
+### Notion Key Encryption (AES-256-GCM)
 - User's Notion API key is encrypted server-side before storage in Firestore.
-- Encryption key lives in Google Cloud Secret Manager (`NOTION_ENCRYPTION_KEY`).
+- Encryption key lives in Google Cloud Secret Manager (`NOTION_ENCRYPTION_KEY`), with a `NOTION_ENCRYPTION_KEY_V2` for zero-downtime key rotation.
 - Keys are decrypted in-memory only during sync, never stored in plaintext.
-- Frontend sends raw key to `/setupNotion` over HTTPS; backend encrypts immediately.
+- Frontend sends raw key to `/setupNotion` over HTTPS; backend encrypts immediately using AES-256-GCM with a 96-bit IV and 128-bit auth tag. Legacy CBC-encrypted keys are automatically migrated on first sync.
 
 ### Content Security Policy (CSP)
 All inline CSS and JS extracted to external files. Strict CSP header enforced via `firebase.json`:

@@ -95,7 +95,8 @@ async function initializeGamificationProfile(userRef, userData) {
         streakFreezes: 0,
         dailySyncCount: 0,
         lastSyncDate: null,
-        subscriptionRenewalDate: null
+        subscriptionRenewalDate: null,
+        lastAwardedStreak: 0
     };
 
     const updateObj = {};
@@ -149,9 +150,11 @@ async function applyGamificationMilestones(userRef) {
             let dailySyncCount = userData.dailySyncCount || 0;
             let lastSyncDateStr = userData.lastSyncDate;
             let boosterCredits = userData.boosterCredits || 0;
+            let lastAwardedStreak = userData.lastAwardedStreak || 0;
 
             const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
             let diffDays = 0;
+            let usedFreeze = false;
 
             if (!lastSyncDateStr) {
                 diffDays = 1;
@@ -173,7 +176,8 @@ async function applyGamificationMilestones(userRef) {
                     let daysMissed = diffDays - 1;
                     if (streakFreezes >= daysMissed) {
                         streakFreezes -= daysMissed;
-                        currentStreak += 1; 
+                        currentStreak += 1;
+                        usedFreeze = true;
                     } else {
                         currentStreak = 1;
                     }
@@ -184,49 +188,27 @@ async function applyGamificationMilestones(userRef) {
             if (currentStreak > highestStreak) highestStreak = currentStreak;
 
             let milestoneMsg = null;
-            if (diffDays > 0 && currentStreak > 0 && currentStreak % 5 === 0) {
-                const fiveDaysAgo = new Date();
-                fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
-                
-                const historySnap = await userRef.collection('syncHistory')
-                    .where('timestamp', '>=', fiveDaysAgo)
-                    .get();
-                
-                const dailyCountsMap = {};
-                dailyCountsMap[todayStr] = dailySyncCount;
-                
-                historySnap.forEach(doc => {
-                    const data = doc.data();
-                    if (data.timestamp && data.status === 'success') {
-                        const dateStr = data.timestamp.toDate().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-                        if (dateStr !== todayStr) { 
-                            dailyCountsMap[dateStr] = (dailyCountsMap[dateStr] || 0) + 1;
-                        }
-                    }
-                });
-
-                const counts = [];
-                const todayParts = todayStr.split('-').map(Number);
-                for (let i = 0; i < 5; i++) {
-                    const d = new Date(todayParts[0], todayParts[1]-1, todayParts[2]);
-                    d.setDate(d.getDate() - i);
-                    const dStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-                    counts.push(dailyCountsMap[dStr] || 0);
-                }
-                
-                const minDaily = Math.min(...counts);
-
-                if (minDaily >= 3) {
-                    milestoneMsg = `🎉 Amazing! ${currentStreak}-Day Streak (Min 3/day). Awarded Badge + 2 Freezes + 10 Booster Credits!`;
-                    streakFreezes += 2;
-                    boosterCredits += 10;
-                } else if (minDaily >= 2) {
-                    milestoneMsg = `🔥 Great Job! ${currentStreak}-Day Streak (Min 2/day). Awarded Badge + 1 Freeze!`;
+            if (diffDays > 0 && currentStreak > 0) {
+                if (currentStreak >= 90 && lastAwardedStreak < 90) {
+                    milestoneMsg = `🎉 Incredible! 90-Day Streak. Awarded +50 Booster Credits & 3 Freezes!`;
+                    streakFreezes += 3;
+                    boosterCredits += 50;
+                    lastAwardedStreak = 90;
+                } else if (currentStreak >= 30 && lastAwardedStreak < 30) {
+                    milestoneMsg = `🔥 Amazing! 30-Day Streak. Awarded +20 Booster Credits & 1 Freeze!`;
                     streakFreezes += 1;
-                } else if (minDaily >= 1) {
-                    milestoneMsg = `🌟 Good Job! ${currentStreak}-Day Streak! Awarded Digital Badge!`;
-                } else {
+                    boosterCredits += 20;
+                    lastAwardedStreak = 30;
+                } else if (currentStreak >= 7 && lastAwardedStreak < 7) {
+                    milestoneMsg = `🌟 Great work! 7-Day Streak. Awarded +5 Booster Credits!`;
+                    boosterCredits += 5;
+                    lastAwardedStreak = 7;
+                } else if (usedFreeze) {
                      milestoneMsg = `❄️ ${currentStreak}-Day Streak sustained using a Freeze!`;
+                }
+
+                if (currentStreak === 1 && diffDays > 1) {
+                    lastAwardedStreak = 0;
                 }
             }
 
@@ -236,7 +218,8 @@ async function applyGamificationMilestones(userRef) {
                 highestStreak,
                 streakFreezes,
                 dailySyncCount,
-                lastSyncDate: todayStr
+                lastSyncDate: todayStr,
+                lastAwardedStreak
             };
 
             t.set(userRef, updates, { merge: true });
@@ -388,10 +371,33 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
         if (snap.exists) {
             const raw = snap.data();
             exportData.data = {
+                tier: raw.tier || 'free',
+                tierCredits: raw.tierCredits || 0,
+                boosterCredits: raw.boosterCredits || 0,
+                currentStreak: raw.currentStreak || 0,
+                highestStreak: raw.highestStreak || 0,
+                streakFreezes: raw.streakFreezes || 0,
+                dailySyncCount: raw.dailySyncCount || 0,
+                lastSyncDate: raw.lastSyncDate || null,
+                subscriptionRenewalDate: raw.subscriptionRenewalDate || null,
+                lastAwardedStreak: raw.lastAwardedStreak || 0,
                 notionConfigured: !!raw.notionKey,
                 notionDbId: raw.notionDbId || null
                 // Note: Encrypted key intentionally excluded for security
             };
+
+            const historySnap = await userRef.collection('syncHistory')
+                .orderBy('timestamp', 'desc').limit(50).get();
+            exportData.data.syncHistory = historySnap.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    syncId: doc.id,
+                    timestamp: data.timestamp ? data.timestamp.toDate().toISOString() : null,
+                    status: data.status,
+                    mode: data.mode,
+                    itemCount: data.itemCount || 0
+                };
+            });
         }
 
         logger.info(`Data export for ${userEmail}`);
@@ -435,7 +441,23 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
 
         const db = admin.firestore();
         const userRef = db.collection('users').doc(userEmail);
-        await userRef.delete();
+
+        const historySnap = await userRef.collection('syncHistory').get();
+        const batch = db.batch();
+        historySnap.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        const rateLimitSnap = await db.collection('rateLimits')
+            .where(admin.firestore.FieldPath.documentId(), '>=', `${userEmail}_`)
+            .where(admin.firestore.FieldPath.documentId(), '<', `${userEmail}_\uf8ff`)
+            .get();
+        rateLimitSnap.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        batch.delete(userRef);
+        await batch.commit();
 
         logger.info(`Account deleted for ${userEmail}`);
         return res.status(200).send({ success: true, text: "Your account data has been permanently deleted." });
@@ -562,10 +584,11 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 }
 
                 // Emulate initializeGamificationProfile
+                const currentMonthStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7);
                 const defaults = {
                     tier: 'free', tierCredits: 15, boosterCredits: 0,
                     currentStreak: 0, highestStreak: 0, streakFreezes: 0,
-                    dailySyncCount: 0, lastSyncDate: null, subscriptionRenewalDate: null
+                    dailySyncCount: 0, lastSyncDate: null, subscriptionRenewalDate: null, lastAwardedStreak: 0
                 };
                 let needsUpdate = false;
                 const updateObj = {};
@@ -575,6 +598,18 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                         rawData[key] = val;
                         needsUpdate = true;
                     }
+                }
+
+                // Monthly Renewal Logic
+                const storedMonth = rawData.subscriptionRenewalDate || null;
+                if (storedMonth !== currentMonthStr) {
+                    const tier = rawData.tier || 'free';
+                    let newCredits = tier === 'pro' ? 250 : (tier === 'standard' ? 100 : 15);
+                    rawData.tierCredits = newCredits;
+                    rawData.subscriptionRenewalDate = currentMonthStr;
+                    updateObj.tierCredits = newCredits;
+                    updateObj.subscriptionRenewalDate = currentMonthStr;
+                    needsUpdate = true;
                 }
 
                 const check = checkFeaturesAndCredits(rawData, parsedImages.length, mode, hasBYOK);
@@ -957,3 +992,7 @@ exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req
 
 
 // Gemini prompts have been extracted to services/gemini.js
+
+if (process.env.NODE_ENV === 'test') {
+    exports.applyGamificationMilestones = applyGamificationMilestones;
+}
