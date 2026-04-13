@@ -592,75 +592,88 @@
             <!-- Plan Cards -->
             <div class="px-6 pt-5 pb-4 grid grid-cols-2 gap-3">
                 <!-- Standard Card -->
-                <div class="bg-theme-bg border border-theme-border rounded-xl p-4 space-y-3">
+                <div class="price-card-standard rounded-2xl p-4 space-y-3 relative flex flex-col justify-between">
                     <div>
-                        <h3 class="font-bold text-theme-text">Standard</h3>
-                        <span class="text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-md">Coming Soon</span>
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-title text-base tracking-tight">Standard</h3>
+                            <span class="text-[9px] uppercase tracking-wider font-bold bg-amber-500/20 text-amber-500 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(245,158,11,0.2)]">Coming Soon</span>
+                        </div>
+                        <p class="text-[10px] text-muted mt-0.5 font-medium">For the organized planner.</p>
                     </div>
-                    <p class="text-[10px] text-theme-muted">For the organized planner.</p>
-                    <div id="standard-price" class="text-2xl font-black text-theme-text opacity-40">₹29<span class="text-sm font-medium text-theme-muted"> /mo</span></div>
-                    <ul class="text-xs text-theme-muted space-y-2 opacity-80">
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> 100 Sync Credits</li>
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> Multi-page uploads</li>
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> Standard AI (Gemini)</li>
+                    
+                    <div id="standard-price" class="text-3xl font-black text-title tracking-tighter">₹29<span class="text-xs font-semibold text-muted tracking-normal"> /mo</span></div>
+                    
+                    <ul class="text-[11px] text-title space-y-2.5 flex-grow">
+                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[9px] font-black shadow-sm">✓</span> 100 Sync Credits</li>
+                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[9px] font-black shadow-sm">✓</span> Multi-page uploads</li>
+                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[9px] font-black shadow-sm">✓</span> Standard AI (Gemini)</li>
                     </ul>
+
                     <!-- Upfront Options (hidden by default) -->
-                    <div id="standard-upfront-opts" class="hidden space-y-2 bg-theme-card border border-theme-border p-2 rounded-lg">
+                    <div id="standard-upfront-opts" class="hidden space-y-2 mt-2 p-2.5 rounded-lg bg-black/5 border border-current opacity-60">
                         <label class="flex items-center justify-between cursor-pointer">
                             <div class="flex items-center gap-2">
-                                <input type="radio" name="standard-duration" value="annual" class="accent-blue-500" checked>
-                                <div><span class="text-xs font-bold text-theme-text">12-Month</span><br><span class="text-[10px] text-theme-muted">Best value</span></div>
+                                <input type="radio" name="standard-duration" value="annual" class="accent-current" checked>
+                                <div><span class="text-xs font-bold text-title">12-Month</span><br><span class="text-[9px] text-muted leading-none">Best value</span></div>
                             </div>
-                            <span class="text-xs font-bold text-theme-text">₹290</span>
+                            <span class="text-xs font-bold text-title">₹290</span>
                         </label>
                         <label class="flex items-center justify-between cursor-pointer">
                             <div class="flex items-center gap-2">
-                                <input type="radio" name="standard-duration" value="sprint" class="accent-blue-500">
-                                <div><span class="text-xs font-bold text-theme-text">90-Day Sprint</span><br><span class="text-[10px] text-theme-muted">No auto-debit</span></div>
+                                <input type="radio" name="standard-duration" value="sprint" class="accent-current">
+                                <div><span class="text-xs font-bold text-title">90-Day Sprint</span><br><span class="text-[9px] text-muted leading-none">No auto-debit</span></div>
                             </div>
-                            <span class="text-xs font-bold text-theme-text">₹79</span>
+                            <span class="text-xs font-bold text-title">₹79</span>
                         </label>
                     </div>
-                    <div id="standard-annual-tag" class="hidden text-[10px] text-emerald-500 font-bold text-center">🎁 Includes 2 Months FREE</div>
-                    <button id="upgrade-standard-pricing-btn" class="upgrade-cta w-full py-2.5 bg-theme-card text-theme-muted font-bold rounded-xl text-sm cursor-not-allowed select-none border border-theme-border transition-colors hover:text-theme-text">
+                    <div id="standard-annual-tag" class="hidden text-[9px] text-emerald-500 font-bold text-center mt-1" style="display: none;">🎁 Includes 2 Months FREE</div>
+
+                    <button id="upgrade-standard-pricing-btn" class="w-full py-2.5 font-bold rounded-xl text-xs cursor-not-allowed select-none shadow-sm mt-2 focus:outline-none">
                         🔒 Coming Soon
                     </button>
                 </div>
 
                 <!-- Pro Card -->
-                <div class="bg-theme-bg border-2 border-blue-500/40 rounded-xl p-4 space-y-3 relative shadow-[0_0_15px_rgba(59,130,246,0.1)]">
-                    <span class="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[9px] font-bold px-3 py-0.5 rounded-full uppercase tracking-wider shadow-lg">Most Popular</span>
+                <div class="price-card-pro rounded-2xl p-4 space-y-3 relative flex flex-col justify-between shadow-[0_0_20px_rgba(59,130,246,0.15)] transform hover:-translate-y-0.5 transition-transform">
+                    <span class="absolute -top-3 left-1/2 -translate-x-1/2 bg-[var(--price-pro-text)] text-[var(--price-pro-bg)] text-[9px] font-bold px-3 py-0.5 rounded-full uppercase tracking-widest shadow-lg whitespace-nowrap">Most Popular</span>
+                    
                     <div>
-                        <h3 class="font-bold text-theme-text">Pro</h3>
-                        <span class="text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-md">Coming Soon</span>
+                         <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-title text-base tracking-tight">Pro</h3>
+                            <span class="text-[9px] uppercase tracking-wider font-bold bg-amber-500/20 text-amber-500 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(245,158,11,0.2)]">Coming Soon</span>
+                        </div>
+                        <p class="text-[10px] text-muted mt-0.5 font-medium">For the productivity power user.</p>
                     </div>
-                    <p class="text-[10px] text-theme-muted">For the productivity power user.</p>
-                    <div id="pro-price" class="text-2xl font-black text-theme-text opacity-40">₹49<span class="text-sm font-medium text-theme-muted"> /mo</span></div>
-                    <ul class="text-xs text-theme-muted space-y-2 opacity-80">
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> 250 Sync Credits</li>
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> Custom prompts</li>
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> Premium LLM routing</li>
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> 5-page batch uploads</li>
+                    
+                    <div id="pro-price" class="text-3xl font-black text-title tracking-tighter">₹49<span class="text-xs font-semibold text-muted tracking-normal"> /mo</span></div>
+                    
+                    <ul class="text-[11px] text-title space-y-2.5 flex-grow">
+                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-[var(--price-pro-muted)] opacity-80 text-[var(--price-pro-bg)] flex items-center justify-center text-[9px] font-black shadow-sm">✓</span> 250 Sync Credits</li>
+                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-[var(--price-pro-muted)] opacity-80 text-[var(--price-pro-bg)] flex items-center justify-center text-[9px] font-black shadow-sm">✓</span> Custom prompts</li>
+                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-[var(--price-pro-muted)] opacity-80 text-[var(--price-pro-bg)] flex items-center justify-center text-[9px] font-black shadow-sm">✓</span> Premium LLM routing</li>
+                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-[var(--price-pro-muted)] opacity-80 text-[var(--price-pro-bg)] flex items-center justify-center text-[9px] font-black shadow-sm">✓</span> 5-page batch uploads</li>
                     </ul>
+
                     <!-- Upfront Options -->
-                    <div id="pro-upfront-opts" class="hidden space-y-2 bg-theme-card border border-theme-border p-2 rounded-lg">
+                    <div id="pro-upfront-opts" class="hidden space-y-2 mt-2 p-2.5 rounded-lg bg-black/10 border border-current opacity-60">
                         <label class="flex items-center justify-between cursor-pointer">
                             <div class="flex items-center gap-2">
-                                <input type="radio" name="pro-duration" value="annual" class="accent-indigo-500" checked>
-                                <div><span class="text-xs font-bold text-theme-text">12-Month Mastery</span><br><span class="text-[10px] text-theme-muted">Billed once</span></div>
+                                <input type="radio" name="pro-duration" value="annual" class="accent-current" checked>
+                                <div><span class="text-xs font-bold text-title">12-Month</span><br><span class="text-[9px] text-muted leading-none">Billed once</span></div>
                             </div>
-                            <span class="text-xs font-bold text-theme-text">₹490</span>
+                            <span class="text-xs font-bold text-title">₹490</span>
                         </label>
                         <label class="flex items-center justify-between cursor-pointer">
                             <div class="flex items-center gap-2">
-                                <input type="radio" name="pro-duration" value="sprint" class="accent-indigo-500">
-                                <div><span class="text-xs font-bold text-theme-text">90-Day Sprint</span><br><span class="text-[10px] text-theme-muted">No auto-debit</span></div>
+                                <input type="radio" name="pro-duration" value="sprint" class="accent-current">
+                                <div><span class="text-xs font-bold text-title">90-Day Sprint</span><br><span class="text-[9px] text-muted leading-none">No auto-debit</span></div>
                             </div>
-                            <span class="text-xs font-bold text-theme-text">₹129</span>
+                            <span class="text-xs font-bold text-title">₹129</span>
                         </label>
                     </div>
-                    <div id="pro-annual-tag" class="hidden text-[10px] text-emerald-500 font-bold text-center">🎁 Includes 2 Months FREE</div>
-                    <button id="upgrade-pro-btn" class="upgrade-cta w-full py-2.5 bg-theme-card text-theme-muted font-bold rounded-xl text-sm cursor-not-allowed select-none border border-theme-border transition-colors hover:text-theme-text">
+                    <div id="pro-annual-tag" class="hidden text-[9px] text-emerald-500 font-bold text-center mt-1" style="display: none;">🎁 Includes 2 Months FREE</div>
+
+                    <button id="upgrade-pro-btn" class="w-full py-2.5 font-bold rounded-xl text-xs cursor-not-allowed select-none shadow-md mt-2 focus:outline-none">
                         🔒 Coming Soon
                     </button>
                 </div>
@@ -668,15 +681,16 @@
 
             <!-- Booster Pack -->
             <div class="px-6 pb-4">
-                <div class="flex items-center justify-between bg-theme-bg border border-theme-border rounded-xl p-4 gap-3 shadow-sm">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">⚡</span>
+                <div class="price-card-boost flex items-center justify-between rounded-2xl p-4 gap-4 shadow-sm relative overflow-hidden">
+                    <div class="absolute -right-4 -top-4 opacity-[0.03] text-7xl select-none pointer-events-none">⚡</div>
+                    <div class="flex items-center gap-3 z-10">
+                        <span class="text-2xl filter drop-shadow-sm">⚡</span>
                         <div>
-                            <p class="text-sm font-bold text-theme-text">50 Credit Booster</p>
-                            <p class="text-[10px] text-theme-muted">One-time top-up. Credits never expire.</p>
+                            <p class="text-[13px] font-bold text-title tracking-tight leading-tight">50 Credit Booster</p>
+                            <p class="text-[10px] text-muted font-medium mt-0.5 leading-tight">One-time top-up. Credits never expire.</p>
                         </div>
                     </div>
-                    <button id="buy-booster-btn-modal" class="upgrade-cta bg-theme-card text-theme-muted font-bold px-4 py-2 rounded-xl text-xs cursor-not-allowed select-none border border-theme-border whitespace-nowrap transition-colors hover:text-theme-text">🔒 Soon</button>
+                    <button id="buy-booster-btn-modal" class="px-5 py-2 font-bold rounded-xl text-xs cursor-not-allowed select-none whitespace-nowrap shadow-sm z-10 focus:outline-none">🔒 Soon</button>
                 </div>
             </div>
 

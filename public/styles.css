@@ -11,6 +11,24 @@
     --text-muted: #64748b;
     --border-color: #e2e8f0;
     --glass-bg: rgba(255, 255, 255, 0.25);
+    
+    --price-st-bg: #f8fafc;
+    --price-st-border: #e2e8f0;
+    --price-st-text: #334155;
+    --price-st-muted: #64748b;
+    --price-st-btn-bg: #e2e8f0;
+    
+    --price-pro-bg: #eff6ff;
+    --price-pro-border: #bfdbfe;
+    --price-pro-text: #1e3a8a;
+    --price-pro-muted: #3b82f6;
+    --price-pro-btn-bg: #dbeafe;
+    
+    --price-boost-bg: #fffbeb;
+    --price-boost-border: #fde68a;
+    --price-boost-text: #92400e;
+    --price-boost-muted: #d97706;
+    --price-boost-btn-bg: #fef3c7;
 }
 
 .dark-mode {
@@ -20,6 +38,24 @@
     --text-muted: #94a3b8;
     --border-color: #334155;
     --glass-bg: rgba(30, 41, 59, 0.25);
+    
+    --price-st-bg: #1e293b;
+    --price-st-border: #334155;
+    --price-st-text: #f8fafc;
+    --price-st-muted: #94a3b8;
+    --price-st-btn-bg: #334155;
+
+    --price-pro-bg: rgba(30, 58, 138, 0.2);
+    --price-pro-border: #1e3a8a;
+    --price-pro-text: #dbeafe;
+    --price-pro-muted: #60a5fa;
+    --price-pro-btn-bg: rgba(30, 58, 138, 0.4);
+
+    --price-boost-bg: rgba(66, 32, 6, 0.4);
+    --price-boost-border: #78350f;
+    --price-boost-text: #fef3c7;
+    --price-boost-muted: #f59e0b;
+    --price-boost-btn-bg: rgba(120, 53, 15, 0.5);
 }
 
 .oled-mode {
@@ -29,7 +65,42 @@
     --text-muted: #a3a3a3;
     --border-color: #333333;
     --glass-bg: #000000;
+    
+    --price-st-bg: #000000;
+    --price-st-border: #222222;
+    --price-st-text: #ffffff;
+    --price-st-muted: #888888;
+    --price-st-btn-bg: #111111;
+
+    --price-pro-bg: #000000;
+    --price-pro-border: #1e3a8a;
+    --price-pro-text: #ffffff;
+    --price-pro-muted: #3b82f6;
+    --price-pro-btn-bg: #050a1f;
+
+    --price-boost-bg: #000000;
+    --price-boost-border: #b45309;
+    --price-boost-text: #ffffff;
+    --price-boost-muted: #f59e0b;
+    --price-boost-btn-bg: #1a0b02;
 }
+
+/* === PRICING CARD CLASSES === */
+.price-card-standard { background: var(--price-st-bg); border: 2px solid var(--price-st-border); color: var(--price-st-text); transition: all 0.3s ease; }
+.price-card-standard .text-title { color: var(--price-st-text); }
+.price-card-standard .text-muted { color: var(--price-st-muted); }
+.price-card-standard button { background: var(--price-st-btn-bg); color: var(--price-st-text); border: 1px solid var(--price-st-border); transition: all 0.3s ease; }
+
+.price-card-pro { background: var(--price-pro-bg); border: 2px solid var(--price-pro-border); color: var(--price-pro-text); transition: all 0.3s ease; }
+.price-card-pro .text-title { color: var(--price-pro-text); }
+.price-card-pro .text-muted { color: var(--price-pro-muted); }
+.price-card-pro button { background: var(--price-pro-btn-bg); color: var(--price-pro-text); border: 1px solid var(--price-pro-border); transition: all 0.3s ease; }
+
+.price-card-boost { background: var(--price-boost-bg); border: 2px solid var(--price-boost-border); color: var(--price-boost-text); transition: all 0.3s ease; }
+.price-card-boost .text-title { color: var(--price-boost-text); }
+.price-card-boost .text-muted { color: var(--price-boost-muted); }
+.price-card-boost button { background: var(--price-boost-btn-bg); color: var(--price-boost-text); border: 1px solid var(--price-boost-border); transition: all 0.3s ease; }
+
 
 /* === BASE STYLES === */
 body {
