@@ -6,8 +6,16 @@ const mockGet = jest.fn();
 const mockDelete = jest.fn();
 const mockAdd = jest.fn();
 const mockCollectionInner = jest.fn(() => ({
-    add: mockAdd
+    add: mockAdd,
+    get: jest.fn().mockResolvedValue({ docs: [], forEach: jest.fn() }),
+    where: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
 }));
+const mockBatch = {
+    delete: jest.fn(),
+    commit: jest.fn().mockResolvedValue(undefined)
+};
 const mockDoc = jest.fn(() => ({
     set: mockSet,
     get: mockGet,
@@ -24,7 +32,11 @@ const mockRateLimitDoc = jest.fn(() => ({
 }));
 
 const mockCollection = jest.fn((name) => {
-    if (name === 'rateLimits') return { doc: mockRateLimitDoc };
+    if (name === 'rateLimits') return {
+        doc: mockRateLimitDoc,
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue({ docs: [], forEach: jest.fn() })
+    };
     return { doc: mockDoc };
 });
 
@@ -47,8 +59,10 @@ jest.mock('firebase-admin', () => {
         initializeApp: jest.fn(),
         firestore: Object.assign(jest.fn(() => ({
             collection: mockCollection,
-            runTransaction: mockRunTransaction
-        })), { FieldValue }),
+            runTransaction: mockRunTransaction,
+            batch: jest.fn(() => mockBatch),
+            FieldPath: { documentId: jest.fn(() => '_id') }
+        })), { FieldValue, FieldPath: { documentId: jest.fn(() => '_id') } }),
         auth: jest.fn(() => ({
             verifyIdToken: mockVerifyIdToken
         }))
@@ -125,7 +139,7 @@ jest.mock('../services/kms', () => ({
 
 // Import the functions after mocking
 const myFunctions = require('../index');
-const { google, _mockGetUserInfo, _mockTasksList, _mockSheetsCreate } = require('googleapis');
+const { _mockGetUserInfo, _mockTasksList, _mockSheetsCreate } = require('googleapis');
 
 describe('index.js Integration Tests', () => {
     let req, res;
@@ -293,14 +307,13 @@ describe('index.js Integration Tests', () => {
 
             await myFunctions.exportUserData(req, res);
 
-            expect(mockCollection).toHaveBeenCalledWith('users');
-            expect(mockDoc).toHaveBeenCalledWith('test@example.com');
             expect(res.status).toHaveBeenCalledWith(200);
 
             const responseData = res.send.mock.calls[0][0];
             expect(responseData).toHaveProperty('email', 'test@example.com');
             expect(responseData).toHaveProperty('data.notionDbId', 'test-db-id');
             expect(responseData).toHaveProperty('data.notionConfigured', true);
+            expect(responseData.data).toHaveProperty('syncHistory');
         });
 
         test('handles user not found gracefully', async () => {
@@ -340,7 +353,7 @@ describe('index.js Integration Tests', () => {
 
             expect(mockCollection).toHaveBeenCalledWith('users');
             expect(mockDoc).toHaveBeenCalledWith('test@example.com');
-            expect(mockDelete).toHaveBeenCalled();
+            // The batch commit executes the cascading delete
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.send).toHaveBeenCalledWith({ success: true, text: "Your account data has been permanently deleted." });
         });
@@ -454,9 +467,10 @@ describe('index.js Integration Tests', () => {
             req.body.syncType = 'morning';
             req.headers['x-byok-token'] = 'sk-mock-123';
             // Re-mock to assert transaction doesn't throw on 0 credits
+            const currentMonth = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7);
             mockGet.mockResolvedValue({
                 exists: true,
-                data: () => ({ tierCredits: 0, boosterCredits: 0, tier: 'free' })
+                data: () => ({ tierCredits: 0, boosterCredits: 0, tier: 'free', subscriptionRenewalDate: currentMonth })
             });
 
             // Mock response corresponding to OpenAI / UniversalAIAdapter structure

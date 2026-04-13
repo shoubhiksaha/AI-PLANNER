@@ -34,6 +34,11 @@
   "private": true,
   "jest": {
     "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^firebase-functions/logger$": "<rootDir>/__mocks__/firebase-functions-logger.js",
+      ".*/firebase-functions/lib/logger/index\\.js$": "<rootDir>/__mocks__/firebase-functions-logger.js",
+      ".*/firebase-functions/lib/esm/logger/index\\.mjs$": "<rootDir>/__mocks__/firebase-functions-logger.js"
+    },
     "collectCoverage": true,
     "coverageThreshold": {
       "global": {

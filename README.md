@@ -1,9 +1,9 @@
 # AI Planner — Zero Storage Architecture 🌿
 
-**A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini 2.0 Flash.**
+**A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini AI.**
 
 [![Watch Demo](https://img.shields.io/badge/Demo-Watch%20Video-red)](https://youtu.be/8NFqb9xvnIU?si=7pPnuoKzNEHtZS_m)
-[![Live App](https://img.shields.io/badge/Live-Try%20Beta-blue)](https://ai-planner-project-467800.web.app)
+[![Live App](https://img.shields.io/badge/Live-Try%20Beta-blue)](https://planner.analogdigital.tech)
 
 > [!NOTE]
 > **Testing Mode**: New users need to be whitelisted. Email [officialshoubhiksaha@gmail.com](mailto:officialshoubhiksaha@gmail.com) with subject "Beta Access".
@@ -13,8 +13,8 @@
 ![Security](https://img.shields.io/badge/Security-CSP%20Enforced-brightgreen)
 ![Tech](https://img.shields.io/badge/Stack-Firebase%20%7C%20Node.js%20%7C%20Gemini-blue)
 [![CI/CD](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/main.yml/badge.svg)](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/main.yml)
-![Tests](https://img.shields.io/badge/Tests-202%20Passing-brightgreen)
-![Coverage](https://img.shields.io/badge/Coverage-80%25%2B-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-All%20Passing-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-90%25%2B-brightgreen)
 
 ---
 
@@ -35,7 +35,7 @@ Unlike traditional apps that store user images in an S3 bucket or database, **AI
 
 | Layer | Implementation |
 |-------|---------------|
-| **Encryption** | AES-256-GCM for Notion keys (CBC legacy fallback); encryption key in Secret Manager |
+| **Encryption** | AES-256-GCM for Notion keys (legacy keys migrated automatically); encryption key in Secret Manager |
 | **CSP** | Strict Content Security Policy with SHA-256 script hashes |
 | **Auth** | Firebase Auth with popup + redirect fallback; redirect-first on mobile |
 | **Firestore** | Client read-only; all writes via Admin SDK |
@@ -184,14 +184,10 @@ Config:
 ## 📚 Documentation
 
 | Document | Purpose |
-|----------|---------|
-| [DESIGN_AND_DECISIONS.md](DESIGN_AND_DECISIONS.md) | Architecture & design philosophy |
-| [SECURITY_CSP_PLAN.md](SECURITY_CSP_PLAN.md) | CSP migration plan (✅ all phases complete) |
-| [PROJECT_CHANGELOG](PROJECT_CHANGELOG_AND_CURRENT_ARCHITECTURE.md) | Full change history & current architecture |
-| [BREACH_RESPONSE_PLAN.md](BREACH_RESPONSE_PLAN.md) | Data breach response process |
-| [OAuth Verification Pack](docs/oauth-verification/README.md) | Scope justifications, reviewer demo script, and test account template |
-| [Release Checklist](docs/release_checklist.md) | Required pre-merge, deploy, and rollback process |
-| [Branch Protection Setup](docs/branch_protection.md) | GitHub settings required for safe merges |
+|----------|---------|  
+| [WIKI.md](WIKI.md) | **Single source of truth** — architecture, full changelog, security, testing, roadmap, compliance, interview & resume guide, learning plan |
+| [docs/oauth-verification/](docs/oauth-verification/) | Google OAuth submission artefacts — scope justifications, submission checklist, reviewer demo script |
+| [public/privacy.html](public/privacy.html) | Public-facing Privacy Policy |
 
 ---
 
@@ -216,8 +212,12 @@ Config:
     npm run test:backend     # Backend tests with coverage
     npm run test:frontend    # Frontend tests (jsdom)
     npm run test:e2e:smoke   # Playwright smoke (CI mode)
-    npm test                 # Full test flow
+    npm test                 # Full test flow (requires Java + Auth Emulator)
     ```
+5. **Local Verification Prerequisites**:
+    - **Java 21+**: Required to run `firebase emulators:exec` for `test:rules`.
+    - **Auth Emulator**: `npm run test:e2e` spins up Playwright against a locally-running Auth emulator at `127.0.0.1:9099`.
+    - **Playwright browsers**: `npx playwright install chromium`
 5. **Run Firestore Rules Tests** (requires Java 21+):
     ```bash
     # Install Java 21 (Temurin) if not present
