@@ -139,7 +139,7 @@ jest.mock('../services/kms', () => ({
 
 // Import the functions after mocking
 const myFunctions = require('../index');
-const { google, _mockGetUserInfo, _mockTasksList, _mockSheetsCreate } = require('googleapis');
+const { _mockGetUserInfo, _mockTasksList, _mockSheetsCreate } = require('googleapis');
 
 describe('index.js Integration Tests', () => {
     let req, res;

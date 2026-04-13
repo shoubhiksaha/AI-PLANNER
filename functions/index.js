@@ -28,40 +28,24 @@ admin.initializeApp({
 });
 
 // --- CONFIGURATION ---
-const { defineString, defineSecret } = require('firebase-functions/params');
-const GEMINI_API_KEY = defineString('GEMINI_API_KEY');
+const { defineSecret } = require('firebase-functions/params');
 const NOTION_ENCRYPTION_KEY = defineSecret('NOTION_ENCRYPTION_KEY');
 const NOTION_ENCRYPTION_KEY_V2 = defineSecret('NOTION_ENCRYPTION_KEY_V2');
 
 // --- UTILITIES (shared with tests) ---
-const crypto = require('crypto');
 const {
-    deriveKey,
-    encrypt: _encryptWithKey,
-    decryptCurrentGcm: _decryptGcmWithKey,
-    decryptLegacyCbc: _decryptCbcWithKey,
     sanitizeSyncType,
-    parseImageDataUrl,
     parseImageDataArray,
     normalizeNotionDbId,
     isLikelyNotionKey,
     isJsonRequest,
     setStandardHeaders,
     applyCors,
-    ALLOWED_ORIGINS,
-    MAX_BASE64_LENGTH,
     ALLOWED_SYNC_TYPES,
-    MAX_IMAGE_BYTES,
     handleOptions,
-    validateTokenFormat,
-    parseDateTime,
     RATE_LIMIT_SYNC,
     RATE_LIMIT_DEFAULT,
-    RATE_LIMIT_WINDOW_MS,
 } = require('./utils');
-const ALGORITHM = 'aes-256-gcm';
-const LEGACY_ALGORITHM = 'aes-256-cbc';
-
 // Crypto logic and Rate Limits have been extracted to services/
 
 async function resolveUserEmailFromGoogleToken(token) {
@@ -81,37 +65,6 @@ async function resolveUserEmailFromGoogleToken(token) {
         throw new Error("TOKEN_USER_LOOKUP_FAILED");
     }
     return email.toLowerCase();
-}
-
-// Gamification Helper exports
-async function initializeGamificationProfile(userRef, userData) {
-    let needsUpdate = false;
-    const defaults = {
-        tier: 'free',
-        tierCredits: 15,
-        boosterCredits: 0,
-        currentStreak: 0,
-        highestStreak: 0,
-        streakFreezes: 0,
-        dailySyncCount: 0,
-        lastSyncDate: null,
-        subscriptionRenewalDate: null,
-        lastAwardedStreak: 0
-    };
-
-    const updateObj = {};
-    for (const [key, val] of Object.entries(defaults)) {
-        if (userData[key] === undefined) {
-            updateObj[key] = val;
-            userData[key] = val;
-            needsUpdate = true;
-        }
-    }
-
-    if (needsUpdate) {
-        await userRef.set(updateObj, { merge: true });
-    }
-    return userData;
 }
 
 function checkFeaturesAndCredits(userData, numImages, mode, hasBYOK = false) {
@@ -557,9 +510,8 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         // Load & Initialize User Config from Firestore
         const db = admin.firestore();
         const userRef = db.collection('users').doc(email);
-        const userDoc = await userRef.get();
-        let rawUserData = userDoc.exists ? userDoc.data() : {};
         
+
         // --- BYOK TRAFFIC COP ---
         let byokConfig = null;
         let hasBYOK = false;

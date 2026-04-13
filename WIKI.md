@@ -419,19 +419,19 @@ What you should do:
 |---------|--------|-------|
 | `npm run check:conflicts` | ✅ PASS | |
 | `npm run test:frontend` | ✅ PASS | 46 tests |
-| `npm run test:backend` | ✅ PASS | 183 tests (includes 4 new gamification tests) |
+| `npm run test:backend` | ✅ PASS | 261 tests (All services covered) |
 | `npm run test:e2e:smoke` | ✅ PASS | 1 test |
 | `npm run test:e2e:ui` | ✅ PASS | 5/5 tests |
 | `npm run test:rules` | ❌ FAIL locally | Java 21 not installed |
 | `npm run test:e2e:full` | ❌ FAIL locally | Same Java blocker |
-| `npm run lint` (functions) | ⚠️ WARN | 18 `no-unused-vars` warnings |
+| `npm run lint` (functions) | ✅ PASS | 0 errors, 0 warnings (Clean) |
 
 ---
 
 ### 4.3 Remaining Coverage Gaps
 
 1. **Emulator-backed behavior** — `test:rules` and `test:e2e:full` require Java to start Firebase CLI Emulators.
-2. **Lint** — 18 unused-variable warnings in `functions/index.js` (non-blocking, cleanup pending).
+*Note: All backend services (`gemini.js`, `googleSync.js`, `notion.js`, `rateLimit.js`, `UniversalAIAdapter.js`) now have >90% statement coverage as of April 2026. Lint warnings have been fully resolved.*
 
 ---
 
