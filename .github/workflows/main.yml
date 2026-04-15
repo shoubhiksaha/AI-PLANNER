@@ -186,7 +186,9 @@ jobs:
 
     - name: Create Functions .env from secrets
       working-directory: ./functions
-      run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+      run: |
+        echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+        echo "KMS_KEY_NAME=projects/ai-planner-project-467800/locations/global/keyRings/byok-ring/cryptoKeys/byok-key" >> .env
 
     - name: Deploy Hosting + Functions
       run: firebase deploy --project ai-planner-project-467800
