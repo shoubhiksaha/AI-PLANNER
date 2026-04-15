@@ -119,17 +119,31 @@ Production deploy on `main` is CI-gated by the workflow in `.github/workflows/ma
 - **Payload Validation**: Strict 100MB JSON limit + base64 decoded byte size checks to prevent OOM.
 - **Key Rotation**: Dual-key AES-256-GCM encryption strategy for Notion Keys with zero-downtime migration.
 
-### V6: Domain Migration & UI Polish (Current)
+### V6: Domain Migration & UI Polish
 - **CORS Resolution**: Updated backend origin allowlist to fully support `planner.analogdigital.tech`.
-- **Data Sync Reliability**: Fixed an issue in `syncGoogleTasks` where invalid planner dates caused Google Tasks insertion/test suite failures.
+- **Data Sync Reliability**: Fixed an issue in `syncGoogleTasks` where invalid dates crashed task insertion.
 - **Notion Integration UX**: Added explicit user-friendly error messages for Notion key decryption failures.
-- **UI & Accessibility**: Replaced static Tailwind utility classes with dynamic theme variables to guarantee input legibility across all reading modes.
 
-### V7: Future Roadmap
-- **BYOK**: Bring Your Own Key support.
-- **Multi-Provider**: Support for OpenAI, Anthropic, DeepSeek.
-- **CSP Reporting**: Add violation monitoring endpoint.
-- **CI/CD**: GitHub Actions for automated test + deploy.
+### V7: Engineering Stability & Architecture Consolidation
+- **Massive Test Expansion**: Rewrote and expanded backend tests (`UniversalAIAdapter`, `googleSync`, `rateLimit`) to achieve >95% statement coverage across core services (261 passing backend tests).
+- **Documentation Consolidation**: Merged 10+ fragmented project architecture, audit, and roadmap documents into a single-source-of-truth `WIKI.md`.
+- **Zero-Warning Codebase**: Completely resolved all ESLint warnings via strict dead-code elimination.
+- **GDPR & Gamification**: Implemented monthly credit renewal, gamification streak milestones, cascading account deletion, and GDPR-compliant data export limits.
+
+### V8: Google Verification Readiness
+- Fully aligned the project with Google OAuth application requirements.
+- Updated privacy policies to explicitly cite Google Calendar, Tasks, Drive, and Sheets scopes.
+- Added comprehensive reviewer instructions and tightened OAuth scope requesting to adhere strictly to least-privilege principles.
+
+### V9: Bring Your Own Key (BYOK) & Cloud KMS (Current)
+- **BYOK Pipeline**: Implemented full support for users bringing custom AI API Keys, allowing customized execution without depending solely on standard infrastructure limits.
+- **Cloud KMS Integration**: Deployed Google Cloud Key Management Service (KMS) to generate enveloped Data Encryption Keys (DEK) for vaulting BYOK credentials securely.
+- **CI/CD Hardening**: Updated the GitHub Actions pipeline to seamlessly inject the required `KMS_KEY_NAME` environment variables into the non-interactive Firebase deployment routine.
+
+### V10: Future Roadmap
+- **Agentic AI Pivot**: Transitioning from a static parser to a proactive agent (Clarification Loops, Smart Task Rollover).
+- **Multi-Provider Fallback**: Support for OpenAI, Anthropic, DeepSeek as fallback models.
+- **CSP Reporting**: Add CSP enforcement violation monitoring endpoint.
 
 ---
 
