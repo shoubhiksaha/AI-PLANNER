@@ -14,23 +14,56 @@
     <script>if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(async (r) => { await r.update(); console.log('SW registered'); }).catch(e => console.log('SW failed', e)); }); }</script>
     <style>
         /* Hamburger Drawer */
-        .drawer-overlay { transition: opacity 0.3s ease; }
-        .drawer-panel { transition: transform 0.3s ease; transform: translateX(-100%); }
-        .drawer-open .drawer-panel { transform: translateX(0); }
-        .drawer-open .drawer-overlay { opacity: 1; pointer-events: auto; }
+        .drawer-overlay {
+            transition: opacity 0.3s ease;
+        }
+
+        .drawer-panel {
+            transition: transform 0.3s ease;
+            transform: translateX(-100%);
+        }
+
+        .drawer-open .drawer-panel {
+            transform: translateX(0);
+        }
+
+        .drawer-open .drawer-overlay {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
         /* Tooltip */
         [data-tooltip]:hover::after {
             content: attr(data-tooltip);
-            position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%);
-            background: rgba(15,23,42,0.9); color: #fff; padding: 4px 10px;
-            border-radius: 6px; font-size: 11px; white-space: nowrap;
-            pointer-events: none; z-index: 100;
+            position: absolute;
+            bottom: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.9);
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 100;
         }
-        [data-tooltip] { position: relative; }
+
+        [data-tooltip] {
+            position: relative;
+        }
+
         /* Pricing Toggle */
-        .pricing-toggle-active { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+        .pricing-toggle-active {
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+        }
+
         /* Custom sub-category radios */
-        .custom-sub-radio:checked + label { border-color: #6366f1; background: #eef2ff; }
+        .custom-sub-radio:checked+label {
+            border-color: #6366f1;
+            background: #eef2ff;
+        }
     </style>
 </head>
 
@@ -84,21 +117,42 @@
             </button>
 
             <!-- SCOPE EXPLANATION -->
-            <div class="w-full text-left bg-black/5 dark:bg-white/5 border border-theme-border rounded-xl p-5 mb-8 text-[13px] text-theme-muted space-y-4">
-                <h3 class="font-bold text-theme-text text-base tracking-tight">About AI Planner: Bridging Your Analog and Digital Life</h3>
-                <p>Welcome to AI Planner, the ultimate productivity tool designed for those who love the tactile feel of a physical, handwritten notebook but need the organization and accessibility of a digital ecosystem.</p>
-                <p>AI Planner acts as a smart bridge between your paper journal and your digital life. By simply taking a photo of your handwritten planner, our AI instantly extracts your schedule, to-do lists, daily habits, and financial logs, seamlessly organizing them into your Google workspace.</p>
-                
+            <div
+                class="w-full text-left bg-black/5 dark:bg-white/5 border border-theme-border rounded-xl p-5 mb-8 text-[13px] text-theme-muted space-y-4">
+                <h3 class="font-bold text-theme-text text-base tracking-tight">About AI Planner: Bridging Your Analog
+                    and Digital Life</h3>
+                <p>Welcome to AI Planner, the ultimate productivity tool designed for those who love the tactile feel of
+                    a physical, handwritten notebook but need the organization and accessibility of a digital ecosystem.
+                </p>
+                <p>AI Planner acts as a smart bridge between your paper journal and your digital life. By simply taking
+                    a photo of your handwritten planner, our AI instantly extracts your schedule, to-do lists, daily
+                    habits, and financial logs, seamlessly organizing them into your Google workspace.</p>
+
                 <h4 class="font-bold text-theme-text pt-2">How AI Planner Works:</h4>
                 <ul class="space-y-3 text-[12px] leading-relaxed">
-                    <li><strong class="text-theme-text">📅 Smart Schedule Syncing (Google Calendar):</strong> Stop double-entering your day. Upload an image of your morning plan, and the app reads your handwritten schedule, identifies your free time, and automatically creates accurate events directly in your Google Calendar.</li>
-                    <li><strong class="text-theme-text">✅ Automated Task Management (Google Tasks):</strong> Your handwritten to-do lists are instantly digitized and synced to your Google Tasks. When you do your "Evening Sync," the app scans your updated planner to see which items you physically crossed out, and automatically marks them as completed in your digital task list.</li>
-                    <li><strong class="text-theme-text">📊 Expense & Health Tracking (Google Drive):</strong> Log your daily expenses, meals, or health metrics on paper just like you always have. AI Planner extracts this specific data from your page and securely logs it into a dedicated, app-generated spreadsheet in your Google Drive, giving you a perfect digital archive of your daily habits.</li>
+                    <li><strong class="text-theme-text">📅 Smart Schedule Syncing (Google Calendar):</strong> Stop
+                        double-entering your day. Upload an image of your morning plan, and the app reads your
+                        handwritten schedule, and automatically creates accurate events directly in your Google
+                        Calendar.</li>
+                    <li><strong class="text-theme-text">✅ Automated Task Management (Google Tasks):</strong> Your
+                        handwritten to-do lists are instantly digitized and synced to your Google Tasks. When you do
+                        your "Evening Sync," the app scans your updated planner to see which items you physically marked
+                        as done, and automatically marks them as completed in your digital task list.</li>
+                    <li><strong class="text-theme-text">📊 Expense & Health Tracking (Google Drive):</strong> Log your
+                        daily expenses, meals, or health metrics on paper planner just like you always have. AI Planner
+                        extracts this specific data from your page and securely logs it into a dedicated, app-generated
+                        spreadsheet in your Google Drive, giving you a perfect digital archive of your daily habits.
+                    </li>
                 </ul>
 
                 <h4 class="font-bold text-theme-text pt-3">Privacy and Data Transparency:</h4>
                 <p class="text-[11px] opacity-90 leading-relaxed bg-theme-bg p-3 rounded-lg border border-theme-border">
-                    To provide this seamless automation, AI Planner requires limited, strictly defined access to your Google Account. We request access to your <strong>Google Calendar and Tasks</strong> solely to read your availability and write your digitized events. We request highly restricted access to your <strong>Google Drive</strong> to only create and update the specific tracking spreadsheets generated by this app. We cannot, and do not, access any of your other personal Drive files, ensuring your data remains entirely secure and under your control.
+                    To provide this seamless automation, AI Planner requires limited, strictly defined access to your
+                    Google Account. We request access to your <strong>Google Calendar and Tasks</strong> solely to read
+                    your availability and write your digitized events. We request highly restricted access to your
+                    <strong>Google Drive</strong> to only create and update the specific tracking spreadsheets generated
+                    by this app. We cannot, and do not, access any of your other personal Drive files, ensuring your
+                    data remains entirely secure and under your control.
                 </p>
             </div>
 
@@ -148,50 +202,61 @@
         <div id="view-notion-setup" class="view-hidden fade-in space-y-6">
             <!-- Premium Header -->
             <div class="notion-onboard-header text-center py-6 rounded-2xl relative overflow-hidden">
-                <div class="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 animate-gradient-shift"></div>
+                <div
+                    class="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 animate-gradient-shift">
+                </div>
                 <div class="relative z-10">
                     <div class="text-5xl mb-3">📝</div>
                     <h2 class="text-2xl font-black text-theme-text tracking-tight">Connect Notion</h2>
-                    <p class="text-sm text-theme-muted mt-1">Your planner entries will sync to your Notion workspace.</p>
+                    <p class="text-sm text-theme-muted mt-1">Your planner entries will sync to your Notion workspace.
+                    </p>
                 </div>
             </div>
 
             <!-- Step Guide -->
-            <div class="text-center p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-800/20">
-                <p class="text-sm text-theme-muted">Need help? Tap the guide below to get your Notion keys in 4 easy steps.</p>
+            <div
+                class="text-center p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-800/20">
+                <p class="text-sm text-theme-muted">Need help? Tap the guide below to get your Notion keys in 4 easy
+                    steps.</p>
             </div>
 
             <!-- Input Fields -->
             <div class="space-y-4">
                 <div>
-                    <label class="block text-xs font-bold text-theme-muted uppercase mb-1.5 tracking-wider">Integration Key</label>
+                    <label class="block text-xs font-bold text-theme-muted uppercase mb-1.5 tracking-wider">Integration
+                        Key</label>
                     <input type="password" id="notion-key-input"
                         class="w-full rounded-xl border border-theme-border bg-theme-bg p-3.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-theme-text font-mono placeholder:font-sans"
                         placeholder="secret_...">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-theme-muted uppercase mb-1.5 tracking-wider">Database ID</label>
+                    <label class="block text-xs font-bold text-theme-muted uppercase mb-1.5 tracking-wider">Database
+                        ID</label>
                     <input type="text" id="notion-db-input"
                         class="w-full rounded-xl border border-theme-border bg-theme-bg p-3.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-theme-text font-mono placeholder:font-sans"
                         placeholder="Paste your 32-character database ID">
                 </div>
             </div>
 
-            <button id="open-guide-onboard" class="text-blue-500 text-sm hover:underline flex items-center gap-1 mx-auto">
+            <button id="open-guide-onboard"
+                class="text-blue-500 text-sm hover:underline flex items-center gap-1 mx-auto">
                 <span>📚</span> How to find these keys? (Step-by-Step Guide)
             </button>
 
             <!-- Notion Connected Badge (shown when revisiting) -->
-            <div id="notion-onboard-status" class="hidden items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/30 rounded-xl p-3">
+            <div id="notion-onboard-status"
+                class="hidden items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/30 rounded-xl p-3">
                 <span class="text-emerald-600 font-bold text-sm">✅ Notion Connected</span>
-                <button id="change-notion-onboard-btn" class="text-xs text-blue-500 hover:underline ml-auto">Change Keys</button>
+                <button id="change-notion-onboard-btn" class="text-xs text-blue-500 hover:underline ml-auto">Change
+                    Keys</button>
             </div>
 
             <button id="save-notion-btn" type="button"
                 class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all transform hover:scale-[1.01] active:scale-[0.99]">
                 Connect Notion →
             </button>
-            <button id="skip-notion-btn" type="button" class="w-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm py-2 transition-colors">
+            <button id="skip-notion-btn" type="button"
+                class="w-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm py-2 transition-colors">
                 Skip for now → Go to Dashboard
             </button>
         </div>
@@ -207,7 +272,8 @@
             </div>
 
             <!-- Notion Connection Status Card -->
-            <div id="adv-notion-status" class="flex items-center justify-between p-3 rounded-xl border border-theme-border bg-theme-bg">
+            <div id="adv-notion-status"
+                class="flex items-center justify-between p-3 rounded-xl border border-theme-border bg-theme-bg">
                 <div class="flex items-center gap-2">
                     <span class="text-lg">📝</span>
                     <div>
@@ -215,40 +281,57 @@
                         <span id="adv-notion-badge" class="text-xs text-theme-muted ml-1">Not connected</span>
                     </div>
                 </div>
-                <button id="adv-notion-configure" class="text-xs font-medium text-blue-500 hover:underline">Configure</button>
+                <button id="adv-notion-configure"
+                    class="text-xs font-medium text-blue-500 hover:underline">Configure</button>
             </div>
 
             <!-- BYOK Section -->
 
             <!-- SECTION: AI Provider (BYOK) -->
             <details class="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
-                <summary class="flex items-center justify-between p-4 cursor-pointer font-bold text-slate-700 select-none">
-                    <span class="flex items-center gap-2">🔒 AI Provider (BYOK) <span class="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded text-slate-500 uppercase">Power Users</span></span>
-                    <svg class="w-4 h-4 transition-transform group-open:rotate-180 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                <summary
+                    class="flex items-center justify-between p-4 cursor-pointer font-bold text-slate-700 select-none">
+                    <span class="flex items-center gap-2">🔒 AI Provider (BYOK) <span
+                            class="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded text-slate-500 uppercase">Power
+                            Users</span></span>
+                    <svg class="w-4 h-4 transition-transform group-open:rotate-180 text-slate-400" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
                 </summary>
                 <div class="p-4 pt-0 space-y-4 border-t border-slate-200 mt-2">
                     <!-- Disclaimer -->
                     <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
                         <p class="text-xs text-amber-800 leading-relaxed">
-                            <strong>⚠️ Data Routing Disclaimer:</strong> When using BYOK, your planner images are sent to your chosen AI provider for processing. 
-                            Your API key is either kept in-memory only (Session Mode) or encrypted via GCP KMS (Cloud Mode). We never store your key in plaintext.
+                            <strong>⚠️ Data Routing Disclaimer:</strong> When using BYOK, your planner images are sent
+                            to your chosen AI provider for processing.
+                            Your API key is either kept in-memory only (Session Mode) or encrypted via GCP KMS (Cloud
+                            Mode). We never store your key in plaintext.
                         </p>
                     </div>
 
                     <!-- Storage Mode -->
                     <div class="space-y-3">
-                        <label class="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-white transition-colors">
-                            <input type="radio" name="byok-mode" value="stateless" class="mt-0.5 accent-emerald-500" checked>
+                        <label
+                            class="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-white transition-colors">
+                            <input type="radio" name="byok-mode" value="stateless" class="mt-0.5 accent-emerald-500"
+                                checked>
                             <div class="flex flex-col">
-                                <span class="text-sm font-bold text-slate-700 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>Session-Only (Maximum Privacy)</span>
-                                <span class="text-[10px] text-slate-500 mt-0.5">Key is saved ONLY to your device and deleted from RAM instantly after sync.</span>
+                                <span class="text-sm font-bold text-slate-700 flex items-center gap-1.5"><span
+                                        class="w-2 h-2 rounded-full bg-emerald-500"></span>Session-Only (Maximum
+                                    Privacy)</span>
+                                <span class="text-[10px] text-slate-500 mt-0.5">Key is saved ONLY to your device and
+                                    deleted from RAM instantly after sync.</span>
                             </div>
                         </label>
-                        <label class="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-white transition-colors">
+                        <label
+                            class="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-white transition-colors">
                             <input type="radio" name="byok-mode" value="kms" class="mt-0.5 accent-blue-500">
                             <div class="flex flex-col">
-                                <span class="text-sm font-bold text-slate-700 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-blue-500"></span>Save Securely (Cloud KMS)</span>
-                                <span class="text-[10px] text-slate-500 mt-0.5">Key is envelope-encrypted via GCP KMS. Enables background batch syncing.</span>
+                                <span class="text-sm font-bold text-slate-700 flex items-center gap-1.5"><span
+                                        class="w-2 h-2 rounded-full bg-blue-500"></span>Save Securely (Cloud KMS)</span>
+                                <span class="text-[10px] text-slate-500 mt-0.5">Key is envelope-encrypted via GCP KMS.
+                                    Enables background batch syncing.</span>
                             </div>
                         </label>
                     </div>
@@ -256,12 +339,14 @@
                     <!-- Provider Dropdown -->
                     <div class="space-y-3">
                         <label class="block text-xs font-bold text-gray-600 uppercase mb-1">AI Provider & Model</label>
-                        <select id="byok-provider" class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none">
+                        <select id="byok-provider"
+                            class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none">
                             <optgroup label="🌐 Major Cloud Providers">
                                 <option value="openai:gpt-4o">OpenAI — GPT-4o</option>
                                 <option value="openai:gpt-4-turbo">OpenAI — GPT-4 Turbo</option>
                                 <option value="openai:gpt-4o-mini">OpenAI — GPT-4o Mini</option>
-                                <option value="anthropic:claude-3-5-sonnet-20240620">Anthropic — Claude 3.5 Sonnet</option>
+                                <option value="anthropic:claude-3-5-sonnet-20240620">Anthropic — Claude 3.5 Sonnet
+                                </option>
                                 <option value="anthropic:claude-3-opus-20240229">Anthropic — Claude 3 Opus</option>
                                 <option value="google:gemini-2.5-flash">Google — Gemini 2.5 Flash</option>
                                 <option value="google:gemini-2.0-flash">Google — Gemini 2.0 Flash</option>
@@ -277,14 +362,18 @@
                                 <option value="mistral:mistral-small-latest">Mistral — Mistral Small</option>
                             </optgroup>
                             <optgroup label="🔗 Aggregators & Platforms">
-                                <option value="together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo">Together.ai — Llama 3.1 70B</option>
-                                <option value="openrouter:meta-llama/llama-3.1-70b-instruct">OpenRouter — Llama 3.1 70B</option>
-                                <option value="perplexity:llama-3.1-sonar-large-128k-online">Perplexity — Sonar Large</option>
+                                <option value="together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo">Together.ai —
+                                    Llama 3.1 70B</option>
+                                <option value="openrouter:meta-llama/llama-3.1-70b-instruct">OpenRouter — Llama 3.1 70B
+                                </option>
+                                <option value="perplexity:llama-3.1-sonar-large-128k-online">Perplexity — Sonar Large
+                                </option>
                             </optgroup>
                             <optgroup label="🧪 Specialized">
                                 <option value="cohere:command-r-plus">Cohere — Command R+</option>
                                 <option value="cohere:command-r">Cohere — Command R</option>
-                                <option value="huggingface:meta-llama/Llama-3.1-70B-Instruct">HuggingFace — Llama 3.1 70B</option>
+                                <option value="huggingface:meta-llama/Llama-3.1-70B-Instruct">HuggingFace — Llama 3.1
+                                    70B</option>
                             </optgroup>
                             <optgroup label="🔧 Custom / Other">
                                 <option value="custom:cloud">Custom — Standard Cloud API</option>
@@ -292,9 +381,10 @@
                                 <option value="custom:enterprise">Custom — Enterprise Endpoint</option>
                             </optgroup>
                         </select>
-                        
+
                         <!-- Custom Sub-Category Fields -->
-                        <div id="byok-custom-fields" class="space-y-3 hidden mt-3 bg-slate-100 p-4 rounded-lg border border-slate-200 border-dashed">
+                        <div id="byok-custom-fields"
+                            class="space-y-3 hidden mt-3 bg-slate-100 p-4 rounded-lg border border-slate-200 border-dashed">
                             <div id="custom-type-label" class="text-xs font-bold text-indigo-700 mb-2"></div>
                             <div id="custom-url-group">
                                 <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Base URL</label>
@@ -331,7 +421,8 @@
                 class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all">
                 Save BYOK Settings
             </button>
-            <button id="back-to-dash-from-adv" class="w-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm py-2 transition-colors">
+            <button id="back-to-dash-from-adv"
+                class="w-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm py-2 transition-colors">
                 ← Back to Dashboard
             </button>
         </div>
@@ -342,12 +433,17 @@
             <div class="flex items-center justify-between text-xs text-theme-muted border-b border-theme-border pb-3">
                 <div class="flex items-center gap-3">
                     <!-- Hamburger Menu Button -->
-                    <button id="hamburger-btn" class="text-xl hover:opacity-70 transition-opacity" title="Menu">☰</button>
+                    <button id="hamburger-btn" class="text-xl hover:opacity-70 transition-opacity"
+                        title="Menu">☰</button>
                     <div class="flex flex-col">
                         <span id="user-display-name" class="font-semibold text-sm text-theme-text"></span>
                         <div id="gamification-bars" class="flex gap-2 mt-1 hidden">
-                            <span id="streak-badge" class="font-bold text-orange-500 px-1.5 py-0.5 rounded bg-orange-500/10 cursor-default" data-tooltip="Current Streak (days)">🔥 0</span>
-                            <span id="credits-badge" class="font-bold text-yellow-500 px-1.5 py-0.5 rounded bg-yellow-500/10 cursor-default" data-tooltip="Sync Credits Remaining">🪙 0</span>
+                            <span id="streak-badge"
+                                class="font-bold text-orange-500 px-1.5 py-0.5 rounded bg-orange-500/10 cursor-default"
+                                data-tooltip="Current Streak (days)">🔥 0</span>
+                            <span id="credits-badge"
+                                class="font-bold text-yellow-500 px-1.5 py-0.5 rounded bg-yellow-500/10 cursor-default"
+                                data-tooltip="Sync Credits Remaining">🪙 0</span>
                         </div>
                     </div>
                 </div>
@@ -362,11 +458,15 @@
 
             <label for="file-upload" id="drop-zone"
                 class="file-input block w-full h-40 border-2 border-dashed border-theme-border rounded-xl cursor-pointer flex flex-col items-center justify-center transition-all bg-theme-bg relative group overflow-hidden">
-                <div id="upload-ui" class="text-center group-hover:scale-105 transition-transform pointer-events-none w-full h-full flex flex-col items-center justify-center relative">
+                <div id="upload-ui"
+                    class="text-center group-hover:scale-105 transition-transform pointer-events-none w-full h-full flex flex-col items-center justify-center relative">
                     <span class="text-4xl block mb-2 opacity-80">📸</span>
                     <span class="text-sm font-medium text-theme-muted mb-1">Tap to Upload or Drag & Drop (Max 5)</span>
-                    <span class="text-xs text-theme-muted opacity-75">e.g., Take a photo of your handwritten planner</span>
-                    <div class="absolute inset-0 opacity-5 bg-[url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center mix-blend-overlay rounded-xl z-0 pointer-events-none"></div>
+                    <span class="text-xs text-theme-muted opacity-75">e.g., Take a photo of your handwritten
+                        planner</span>
+                    <div
+                        class="absolute inset-0 opacity-5 bg-[url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center mix-blend-overlay rounded-xl z-0 pointer-events-none">
+                    </div>
                 </div>
                 <!-- Previews injected via JS -->
             </label>
@@ -432,15 +532,18 @@
             </div>
 
             <div class="bg-theme-card border border-theme-border rounded-xl p-4 space-y-4">
-                <div class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
+                <div
+                    class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
                     <span class="text-xs uppercase tracking-widest font-bold text-gray-500">Current Streak</span>
                     <span id="reports-current-streak" class="text-2xl font-black text-orange-500">🔥 0</span>
                 </div>
-                <div class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
+                <div
+                    class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
                     <span class="text-xs uppercase tracking-widest font-bold text-gray-500">Highest Streak</span>
                     <span id="reports-highest-streak" class="text-lg font-bold text-theme-text">0</span>
                 </div>
-                <div class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
+                <div
+                    class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
                     <span class="text-xs uppercase tracking-widest font-bold text-gray-500">Streak Freezes</span>
                     <span id="reports-streak-freezes" class="text-lg font-bold text-cyan-500">❄️ 0</span>
                 </div>
@@ -458,13 +561,15 @@
                 </div>
 
                 <div class="pt-4 border-t border-theme-border">
-                    <h4 class="text-xs uppercase tracking-widest font-bold text-gray-500 mb-3 text-center">Sync Heatmap (Last 30 Days)</h4>
+                    <h4 class="text-xs uppercase tracking-widest font-bold text-gray-500 mb-3 text-center">Sync Heatmap
+                        (Last 30 Days)</h4>
                     <div id="heatmap-grid" class="flex flex-wrap gap-1.5 justify-center mt-2">
                         <div class="w-full text-center text-xs text-theme-muted">Loading heatmap data...</div>
                     </div>
                 </div>
 
-                <button id="buy-booster-btn" class="w-full py-3 bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-300 hover:to-orange-400 text-white font-bold rounded-xl shadow-lg transition-all flex justify-center items-center gap-2 mt-4 border border-yellow-500/50">
+                <button id="buy-booster-btn"
+                    class="w-full py-3 bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-300 hover:to-orange-400 text-white font-bold rounded-xl shadow-lg transition-all flex justify-center items-center gap-2 mt-4 border border-yellow-500/50">
                     <span>🪙 Buy 50 Booster Credits (₹19)</span>
                 </button>
             </div>
@@ -475,49 +580,62 @@
     <!-- HAMBURGER DRAWER (slides in from left) -->
     <div id="drawer-container" class="fixed inset-0 z-50 hidden">
         <div class="drawer-overlay fixed inset-0 bg-black/40 opacity-0 pointer-events-none" id="drawer-overlay"></div>
-        <div class="drawer-panel fixed left-0 top-0 bottom-0 w-72 bg-white dark:bg-gray-900 shadow-2xl p-6 overflow-y-auto">
+        <div
+            class="drawer-panel fixed left-0 top-0 bottom-0 w-72 bg-white dark:bg-gray-900 shadow-2xl p-6 overflow-y-auto">
             <div class="flex items-center justify-between mb-6">
                 <h3 class="font-bold text-lg text-theme-text">Menu</h3>
                 <button id="close-drawer" class="text-xl hover:opacity-70 transition-opacity">✕</button>
             </div>
             <nav class="space-y-1">
-                <button data-drawer="upgrade" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
+                <button data-drawer="upgrade"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
                     <span>👑</span> Upgrade
                 </button>
-                <button data-drawer="reports" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
+                <button data-drawer="reports"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
                     <span>📊</span> Reports
                 </button>
-                <button data-drawer="notion" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
+                <button data-drawer="notion"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
                     <span>📝</span> Notion Settings
                 </button>
-                <button data-drawer="history" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
+                <button data-drawer="history"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
                     <span>🕐</span> History
                 </button>
-                <button data-drawer="settings" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
+                <button data-drawer="settings"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
                     <span>⚙️</span> Advanced Settings
                 </button>
                 <hr class="border-theme-border my-2">
-                <a href="privacy.html" target="_blank" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
+                <a href="privacy.html" target="_blank"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
                     <span>🛡️</span> Privacy
                 </a>
-                <a href="planner.html" target="_blank" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
+                <a href="planner.html" target="_blank"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
                     <span>📄</span> Planner PDF
                 </a>
-                <a href="gear.html" target="_blank" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
+                <a href="gear.html" target="_blank"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
                     <span>🛍️</span> Gear List
                 </a>
-                <button data-drawer="export" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
+                <button data-drawer="export"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
                     <span>📦</span> Export Data
                 </button>
                 <hr class="border-theme-border my-2">
-                <button data-drawer="delete" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-sm text-red-500">
+                <button data-drawer="delete"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-sm text-red-500">
                     <span>🗑️</span> Delete Account
                 </button>
                 <div class="flex items-center gap-3 px-3 py-2.5 text-sm text-gray-400 opacity-50 cursor-not-allowed">
-                    <span>⌚</span> Health <span class="text-[10px] bg-slate-100 px-1 py-0.5 rounded font-bold uppercase">Soon</span>
+                    <span>⌚</span> Health <span
+                        class="text-[10px] bg-slate-100 px-1 py-0.5 rounded font-bold uppercase">Soon</span>
                 </div>
                 <hr class="border-theme-border my-2">
-                <button data-drawer="logout" class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-red-400">
+                <button data-drawer="logout"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-red-400">
                     <span>↪️</span> Sign Out
                 </button>
             </nav>
@@ -586,20 +704,30 @@
     </div>
 
     <!-- PRICING MODAL (Full Comparison) -->
-    <div id="pricing-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
-        <div class="bg-theme-card border border-theme-border rounded-2xl max-w-lg w-full shadow-2xl overflow-y-auto max-h-[90vh] relative">
+    <div id="pricing-modal"
+        class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
+        <div
+            class="bg-theme-card border border-theme-border rounded-2xl max-w-lg w-full shadow-2xl overflow-y-auto max-h-[90vh] relative">
             <!-- Close -->
-            <button id="close-pricing" class="absolute top-4 right-4 text-theme-muted hover:text-theme-text text-xl z-10 transition-colors">✕</button>
-            
+            <button id="close-pricing"
+                class="absolute top-4 right-4 text-theme-muted hover:text-theme-text text-xl z-10 transition-colors">✕</button>
+
             <div class="p-6 pb-4 text-center border-b border-theme-border">
                 <h2 class="text-2xl font-bold text-theme-text tracking-tight">Invest in Your Productivity.</h2>
                 <p class="text-sm text-theme-muted mt-1">Explore what's coming next! Paid plans arriving soon.</p>
-                
+
                 <!-- Monthly / Upfront Toggle (disabled) -->
-                <div class="inline-flex items-center bg-theme-bg border border-theme-border opacity-50 pointer-events-none rounded-full p-1 mt-4 relative">
-                    <button id="toggle-monthly" class="pricing-toggle-active px-4 py-1.5 rounded-full text-xs font-bold text-theme-text bg-theme-card transition-all">Pay Monthly</button>
-                    <button id="toggle-upfront" class="px-4 py-1.5 rounded-full text-xs font-bold text-theme-muted transition-all">Pay Upfront</button>
-                    <span id="save-badge" class="absolute -top-2 -right-2 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full hidden">Save 16%</span>
+                <div
+                    class="inline-flex items-center bg-theme-bg border border-theme-border opacity-50 pointer-events-none rounded-full p-1 mt-4 relative">
+                    <button id="toggle-monthly"
+                        class="pricing-toggle-active px-4 py-1.5 rounded-full text-xs font-bold text-theme-text bg-theme-card transition-all">Pay
+                        Monthly</button>
+                    <button id="toggle-upfront"
+                        class="px-4 py-1.5 rounded-full text-xs font-bold text-theme-muted transition-all">Pay
+                        Upfront</button>
+                    <span id="save-badge"
+                        class="absolute -top-2 -right-2 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full hidden">Save
+                        16%</span>
                 </div>
             </div>
 
@@ -609,72 +737,106 @@
                 <div class="bg-theme-bg border border-theme-border rounded-xl p-4 space-y-3">
                     <div>
                         <h3 class="font-bold text-theme-text">Standard</h3>
-                        <span class="text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-md">Coming Soon</span>
+                        <span
+                            class="text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-md">Coming
+                            Soon</span>
                     </div>
                     <p class="text-[10px] text-theme-muted">For the organized planner.</p>
-                    <div id="standard-price" class="text-2xl font-black text-theme-text opacity-40">₹29<span class="text-sm font-medium text-theme-muted"> /mo</span></div>
+                    <div id="standard-price" class="text-2xl font-black text-theme-text opacity-40">₹29<span
+                            class="text-sm font-medium text-theme-muted"> /mo</span></div>
                     <ul class="text-xs text-theme-muted space-y-2 opacity-80">
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> 100 Sync Credits</li>
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> Multi-page uploads</li>
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> Standard AI (Gemini)</li>
+                        <li class="flex items-center gap-2"><span
+                                class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
+                            100 Sync Credits</li>
+                        <li class="flex items-center gap-2"><span
+                                class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
+                            Multi-page uploads</li>
+                        <li class="flex items-center gap-2"><span
+                                class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
+                            Standard AI (Gemini)</li>
                     </ul>
                     <!-- Upfront Options (hidden by default) -->
-                    <div id="standard-upfront-opts" class="hidden space-y-2 bg-theme-card border border-theme-border p-2 rounded-lg">
+                    <div id="standard-upfront-opts"
+                        class="hidden space-y-2 bg-theme-card border border-theme-border p-2 rounded-lg">
                         <label class="flex items-center justify-between cursor-pointer">
                             <div class="flex items-center gap-2">
-                                <input type="radio" name="standard-duration" value="annual" class="accent-blue-500" checked>
-                                <div><span class="text-xs font-bold text-theme-text">12-Month</span><br><span class="text-[10px] text-theme-muted">Best value</span></div>
+                                <input type="radio" name="standard-duration" value="annual" class="accent-blue-500"
+                                    checked>
+                                <div><span class="text-xs font-bold text-theme-text">12-Month</span><br><span
+                                        class="text-[10px] text-theme-muted">Best value</span></div>
                             </div>
                             <span class="text-xs font-bold text-theme-text">₹290</span>
                         </label>
                         <label class="flex items-center justify-between cursor-pointer">
                             <div class="flex items-center gap-2">
                                 <input type="radio" name="standard-duration" value="sprint" class="accent-blue-500">
-                                <div><span class="text-xs font-bold text-theme-text">90-Day Sprint</span><br><span class="text-[10px] text-theme-muted">No auto-debit</span></div>
+                                <div><span class="text-xs font-bold text-theme-text">90-Day Sprint</span><br><span
+                                        class="text-[10px] text-theme-muted">No auto-debit</span></div>
                             </div>
                             <span class="text-xs font-bold text-theme-text">₹79</span>
                         </label>
                     </div>
-                    <div id="standard-annual-tag" class="hidden text-[10px] text-emerald-500 font-bold text-center">🎁 Includes 2 Months FREE</div>
-                    <button id="upgrade-standard-pricing-btn" class="upgrade-cta w-full py-2.5 bg-blue-600/40 text-blue-300 font-bold rounded-xl text-sm cursor-not-allowed select-none border border-blue-500/30">
+                    <div id="standard-annual-tag" class="hidden text-[10px] text-emerald-500 font-bold text-center">🎁
+                        Includes 2 Months FREE</div>
+                    <button id="upgrade-standard-pricing-btn"
+                        class="upgrade-cta w-full py-2.5 bg-blue-600/40 text-blue-300 font-bold rounded-xl text-sm cursor-not-allowed select-none border border-blue-500/30">
                         🔒 Coming Soon
                     </button>
                 </div>
 
                 <!-- Pro Card -->
                 <div class="bg-indigo-600/10 border-2 border-indigo-500/60 rounded-xl p-4 space-y-3 relative">
-                    <span class="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[9px] font-bold px-3 py-0.5 rounded-full uppercase tracking-wider shadow-lg">Most Popular</span>
+                    <span
+                        class="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[9px] font-bold px-3 py-0.5 rounded-full uppercase tracking-wider shadow-lg">Most
+                        Popular</span>
                     <div>
                         <h3 class="font-bold text-theme-text">Pro</h3>
-                        <span class="text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-md">Coming Soon</span>
+                        <span
+                            class="text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-md">Coming
+                            Soon</span>
                     </div>
                     <p class="text-[10px] text-theme-muted">For the productivity power user.</p>
-                    <div id="pro-price" class="text-2xl font-black text-theme-text opacity-40">₹49<span class="text-sm font-medium text-theme-muted"> /mo</span></div>
+                    <div id="pro-price" class="text-2xl font-black text-theme-text opacity-40">₹49<span
+                            class="text-sm font-medium text-theme-muted"> /mo</span></div>
                     <ul class="text-xs text-theme-muted space-y-2 opacity-80">
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> 250 Sync Credits</li>
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> Custom prompts</li>
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> Premium LLM routing</li>
-                        <li class="flex items-center gap-2"><span class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span> 5-page batch uploads</li>
+                        <li class="flex items-center gap-2"><span
+                                class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
+                            250 Sync Credits</li>
+                        <li class="flex items-center gap-2"><span
+                                class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
+                            Custom prompts</li>
+                        <li class="flex items-center gap-2"><span
+                                class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
+                            Premium LLM routing</li>
+                        <li class="flex items-center gap-2"><span
+                                class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
+                            5-page batch uploads</li>
                     </ul>
                     <!-- Upfront Options -->
-                    <div id="pro-upfront-opts" class="hidden space-y-2 bg-theme-card border border-theme-border p-2 rounded-lg">
+                    <div id="pro-upfront-opts"
+                        class="hidden space-y-2 bg-theme-card border border-theme-border p-2 rounded-lg">
                         <label class="flex items-center justify-between cursor-pointer">
                             <div class="flex items-center gap-2">
-                                <input type="radio" name="pro-duration" value="annual" class="accent-indigo-500" checked>
-                                <div><span class="text-xs font-bold text-theme-text">12-Month Mastery</span><br><span class="text-[10px] text-theme-muted">Billed once</span></div>
+                                <input type="radio" name="pro-duration" value="annual" class="accent-indigo-500"
+                                    checked>
+                                <div><span class="text-xs font-bold text-theme-text">12-Month Mastery</span><br><span
+                                        class="text-[10px] text-theme-muted">Billed once</span></div>
                             </div>
                             <span class="text-xs font-bold text-theme-text">₹490</span>
                         </label>
                         <label class="flex items-center justify-between cursor-pointer">
                             <div class="flex items-center gap-2">
                                 <input type="radio" name="pro-duration" value="sprint" class="accent-indigo-500">
-                                <div><span class="text-xs font-bold text-theme-text">90-Day Sprint</span><br><span class="text-[10px] text-theme-muted">No auto-debit</span></div>
+                                <div><span class="text-xs font-bold text-theme-text">90-Day Sprint</span><br><span
+                                        class="text-[10px] text-theme-muted">No auto-debit</span></div>
                             </div>
                             <span class="text-xs font-bold text-theme-text">₹129</span>
                         </label>
                     </div>
-                    <div id="pro-annual-tag" class="hidden text-[10px] text-emerald-500 font-bold text-center">🎁 Includes 2 Months FREE</div>
-                    <button id="upgrade-pro-btn" class="upgrade-cta w-full py-2.5 bg-indigo-600/40 text-indigo-300 font-bold rounded-xl text-sm cursor-not-allowed select-none border border-indigo-500/30">
+                    <div id="pro-annual-tag" class="hidden text-[10px] text-emerald-500 font-bold text-center">🎁
+                        Includes 2 Months FREE</div>
+                    <button id="upgrade-pro-btn"
+                        class="upgrade-cta w-full py-2.5 bg-indigo-600/40 text-indigo-300 font-bold rounded-xl text-sm cursor-not-allowed select-none border border-indigo-500/30">
                         🔒 Coming Soon
                     </button>
                 </div>
@@ -682,7 +844,8 @@
 
             <!-- Booster Pack -->
             <div class="px-6 pb-4">
-                <div class="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 gap-3">
+                <div
+                    class="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 gap-3">
                     <div class="flex items-center gap-3">
                         <span class="text-2xl">⚡</span>
                         <div>
@@ -690,7 +853,9 @@
                             <p class="text-[10px] text-theme-muted">One-time top-up. Credits never expire.</p>
                         </div>
                     </div>
-                    <button id="buy-booster-btn-modal" class="upgrade-cta bg-amber-500/30 text-amber-400 font-bold px-4 py-2 rounded-xl text-xs cursor-not-allowed select-none border border-amber-500/30 whitespace-nowrap">🔒 Soon</button>
+                    <button id="buy-booster-btn-modal"
+                        class="upgrade-cta bg-amber-500/30 text-amber-400 font-bold px-4 py-2 rounded-xl text-xs cursor-not-allowed select-none border border-amber-500/30 whitespace-nowrap">🔒
+                        Soon</button>
                 </div>
             </div>
 
@@ -701,11 +866,15 @@
     </div>
 
     <!-- PAYWALL MODAL (Out of Credits - Bottom Sheet) -->
-    <div id="paywall-modal" class="fixed inset-0 bg-black/50 hidden items-end sm:items-center justify-center p-0 sm:p-4 z-50 backdrop-blur-sm">
-        <div class="bg-white dark:bg-gray-900 rounded-t-[2rem] sm:rounded-2xl max-w-sm w-full p-7 shadow-2xl relative overflow-hidden">
+    <div id="paywall-modal"
+        class="fixed inset-0 bg-black/50 hidden items-end sm:items-center justify-center p-0 sm:p-4 z-50 backdrop-blur-sm">
+        <div
+            class="bg-white dark:bg-gray-900 rounded-t-[2rem] sm:rounded-2xl max-w-sm w-full p-7 shadow-2xl relative overflow-hidden">
             <!-- Decorative blur -->
-            <div class="absolute -top-10 -right-10 w-40 h-40 bg-orange-400/30 blur-[60px] rounded-full pointer-events-none"></div>
-            
+            <div
+                class="absolute -top-10 -right-10 w-40 h-40 bg-orange-400/30 blur-[60px] rounded-full pointer-events-none">
+            </div>
+
             <div class="text-center relative z-10">
                 <div class="text-4xl mb-3">⛽</div>
                 <h3 class="font-black text-2xl text-theme-text mb-2 tracking-tight">Upgrade to Unlock</h3>
@@ -719,11 +888,12 @@
                 <div class="border-2 border-blue-200 bg-blue-50/50 rounded-2xl p-4">
                     <p class="font-bold text-blue-900 text-sm">Unlock Standard — ₹29/month</p>
                     <p class="text-[11px] text-blue-700 mt-1">100 credits/mo + Batch Uploading</p>
-                    <button id="upgrade-standard-btn" class="w-full mt-3 bg-blue-600 text-white font-bold py-3 rounded-xl text-sm opacity-60 pointer-events-none select-none">
+                    <button id="upgrade-standard-btn"
+                        class="w-full mt-3 bg-blue-600 text-white font-bold py-3 rounded-xl text-sm opacity-60 pointer-events-none select-none">
                         🔒 Coming Soon
                     </button>
                 </div>
-                
+
                 <!-- OR divider -->
                 <div class="flex items-center gap-3 px-2">
                     <div class="flex-1 border-t border-gray-200"></div>
@@ -732,7 +902,8 @@
                 </div>
 
                 <!-- Sachet -->
-                <div class="flex items-center justify-between bg-white dark:bg-black/20 border border-gray-200 rounded-2xl p-4 shadow-sm">
+                <div
+                    class="flex items-center justify-between bg-white dark:bg-black/20 border border-gray-200 rounded-2xl p-4 shadow-sm">
                     <div class="flex items-center gap-3">
                         <span class="text-2xl">⚡</span>
                         <div>
@@ -740,12 +911,15 @@
                             <p class="text-[10px] text-theme-muted">One-time. Credits never expire.</p>
                         </div>
                     </div>
-                    <button class="bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-sm opacity-50 cursor-not-allowed" disabled>₹19</button>
+                    <button
+                        class="bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-sm opacity-50 cursor-not-allowed"
+                        disabled>₹19</button>
                 </div>
             </div>
 
             <div class="pt-6 pb-1 text-center relative z-10">
-                <button id="close-paywall" class="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                <button id="close-paywall"
+                    class="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                     Maybe Later
                 </button>
             </div>
