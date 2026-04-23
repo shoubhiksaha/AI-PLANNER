@@ -64,7 +64,8 @@ jest.mock('firebase-admin', () => {
             FieldPath: { documentId: jest.fn(() => '_id') }
         })), { FieldValue, FieldPath: { documentId: jest.fn(() => '_id') } }),
         auth: jest.fn(() => ({
-            verifyIdToken: mockVerifyIdToken
+            verifyIdToken: mockVerifyIdToken,
+            deleteUser: jest.fn().mockResolvedValue(undefined)
         }))
     };
 });
