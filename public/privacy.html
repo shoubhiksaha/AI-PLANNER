@@ -7,64 +7,114 @@
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            line-height: 1.6;
+            line-height: 1.7;
             color: #333;
-            max-width: 800px;
+            max-width: 820px;
             margin: 0 auto;
             padding: 40px 20px;
         }
-        h1, h2, h3 { color: #111; }
-        h1 { border-bottom: 2px solid #eaeaea; padding-bottom: 10px; }
+        h1 { border-bottom: 2px solid #eaeaea; padding-bottom: 10px; color: #111; }
+        h2 { color: #111; margin-top: 2rem; }
+        h3 { color: #222; margin-top: 1.5rem; }
         a { color: #0066cc; text-decoration: none; }
         a:hover { text-decoration: underline; }
+        ul { padding-left: 1.4rem; }
+        li { margin-bottom: 0.4rem; }
+        .badge {
+            display: inline-block;
+            background: #e8f5e9;
+            color: #2e7d32;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid #a5d6a7;
+            vertical-align: middle;
+            margin-left: 6px;
+        }
     </style>
 </head>
 <body>
 
-    <h1>Privacy Policy</h1>
-    <p><strong>Last updated: April 12, 2026</strong></p>
+    <h1>Privacy Policy <span class="badge">Final Audit v5</span></h1>
+    <p><strong>Last Updated: April 23, 2026</strong></p>
 
-    <p>This Privacy Policy describes Our policies and procedures on the collection, use, and disclosure of Your information when You use the Service and tells You about Your privacy rights and how the law protects You.</p>
+    <h2>1. Introduction</h2>
+    <p>AI Planner ("we", "our", or "us") is committed to protecting your privacy. This policy explains how we handle your data, with a specific focus on our Zero Storage Architecture and our strict adherence to Google API policies. By using AI Planner (accessible from <a href="https://planner.analogdigital.tech/" target="_blank">https://planner.analogdigital.tech/</a>), you agree to the collection and use of information in accordance with this policy.</p>
 
-    <h3>Interpretation and Definitions</h3>
-    <p><strong>Definitions</strong><br>For the purposes of this Privacy Policy:</p>
+    <h2>2. Zero Storage Architecture</h2>
+    <p><strong>Core Principle: Your Data is Transient.</strong><br>
+    Unlike traditional cloud applications, AI Planner does not store your journal entries, planner pages, or images on our servers.</p>
     <ul>
-        <li><strong>Company</strong> refers to analogdigital.tech.</li>
-        <li><strong>Service</strong> refers to the Website, known as AI Planner.</li>
-        <li><strong>Website</strong> refers to analogdigital.tech, accessible from <code>https://planner.analogdigital.tech/</code>.</li>
+        <li><strong>In-Memory Processing:</strong> When you upload an image, it is streamed directly into the temporary memory (RAM) of our processing function.</li>
+        <li><strong>Immediate Deletion:</strong> Once the AI analysis is complete and the data is synced to your accounts (Notion/Google), the image buffer is immediately wiped from our memory.</li>
+        <li><strong>No Persistent Storage:</strong> We do not write your images to a database or a storage bucket (AWS S3/Google Cloud Storage).</li>
     </ul>
 
-    <h3>Collecting and Using Your Personal Data</h3>
-    
-    <p><strong>1. Personal Data</strong><br>
-    While using Our Service, We may ask You to provide Us with certain personally identifiable information, including your Email address and First/Last name.</p>
-
-    <p><strong>2. Google Integrations (Calendar, Tasks, and Drive) and Notion Data</strong><br>
-    While using Our Service, you may choose to connect third-party accounts, including Google and Notion, to enable the core scheduling and tracking features of the AI Planner. We only request the minimum permissions necessary to operate the application:
+    <h2>3. Data Collection &amp; Diagnostics</h2>
+    <p>In addition to your account information, we temporarily collect diagnostic data to ensure the application runs smoothly:</p>
     <ul>
-        <li><strong>Google Calendar:</strong> To read your existing events and write new, AI-generated tasks to your calendar.</li>
+        <li><strong>Crash Diagnostics:</strong> If an error occurs in the browser, our application automatically captures the error stack trace, the URL, and your email address, securely transmitting this data to Google Cloud Logging. This personally identifiable information is used strictly by our developers to identify and resolve critical bugs and is never used for marketing.</li>
+    </ul>
+
+    <h2>4. Google Integrations &amp; Limited Use Policy</h2>
+    <p>While using Our Service, you may choose to connect your Google account to enable the core scheduling and tracking features. We only request the minimum permissions necessary to operate the application:</p>
+    <ul>
+        <li><strong>Google Calendar:</strong> Strictly to write and insert new, AI-generated events and tasks into your calendar. We do not read, scan, or extract your existing calendar events.</li>
         <li><strong>Google Tasks:</strong> To sync, read, and manage your daily to-do lists.</li>
-        <li><strong>Google Drive:</strong> To create and edit specific files generated by the app, such as the Expense Spreadsheet utilized during the Evening Sync. We only access files created by the AI Planner.</li>
+        <li><strong>Google Drive:</strong> To create and edit specific files generated by the app, such as the Expense and Health tracking spreadsheets. We only access files created directly by the AI Planner.</li>
     </ul>
-    </p>
-
-    <p><strong>3. Google API Services User Data Policy (Limited Use)</strong><br>
-    AI Planner's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank">Google API Services User Data Policy</a>, including the Limited Use requirements. 
+    <p><strong>Google API Services User Data Policy (Limited Use):</strong><br>
+    AI Planner's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
     <ul>
         <li>We do not sell your Google data (Calendar, Tasks, or Drive files).</li>
         <li>We do not use your data for serving advertisements.</li>
         <li>Your data is strictly utilized to provide the automated scheduling, task-syncing, and data-logging functionalities of this application.</li>
     </ul>
-    </p>
 
-    <h3>Use of Your Personal Data</h3>
-    <p>The Company may use Personal Data to provide and maintain our Service, manage Your Account, and for AI Processing to generate automated schedules using secure AI service providers strictly for the purpose of generating your personal itinerary.</p>
+    <h2>5. Data Sharing, Transfer, and AI/ML Model Training Disclosure</h2>
+    <p>We do not sell, rent, or trade your personal information or Google Workspace data to any outside parties. We only transfer data to trusted third-party infrastructure and service providers strictly for the temporary purpose of processing your planner images to provide the core application features.</p>
+    <ul>
+        <li><strong>Default AI Processing Models:</strong> By default, AI Planner utilizes Google's Gemini models for rapid handwriting extraction. We currently prioritize the Gemini 2.5 Flash / Flash-Lite architectures. However, to ensure a seamless experience, our systems dynamically switch between different secure enterprise model versions based on real-time metrics such as processing speed, cost-efficiency, server uptime, and stability. Regardless of the specific model version used at any given time, your data remains strictly governed by the Zero Training and Zero Storage guarantees outlined in this policy.</li>
+        <li><strong>Custom AI Providers (BYOK):</strong> If you configure a custom Bring Your Own Key (BYOK) provider via our Universal AI Adapter (e.g., DeepSeek, Groq, Mistral, OpenRouter, Cohere, Perplexity, Together.ai, HuggingFace, Azure OpenAI, or Local/Ollama models), your data is securely routed to them and bounded by their specific privacy and data usage terms.</li>
+        <li><strong>AI/ML Model Training Disclosure:</strong> We strictly prohibit the use of your Google Workspace data (including Calendar events, Tasks, and Drive files) to train, improve, or fine-tune generalized artificial intelligence or machine learning models. Your data is never used for training purposes by us or our third-party AI providers.</li>
+    </ul>
 
-    <h3>Retention and Deletion</h3>
-    <p>The Company will retain Your Personal Data only for as long as is necessary. You may update, amend, or delete Your information at any time by signing in to Your Account and visiting the account settings section, or by contacting Us to revoke access.</p>
+    <h2>6. Data Protection Mechanisms for Sensitive Data</h2>
+    <p>We implement robust, multi-layered security measures to maintain the safety of your sensitive personal information and Google data:</p>
+    <ul>
+        <li><strong>Encryption in Transit:</strong> All communications between your browser, our application, and Google/Notion servers are fully encrypted using modern TLS/HTTPS protocols.</li>
+        <li><strong>Encryption at Rest:</strong> Your account integrations (like Notion API keys) and Cloud-saved BYOK keys are encrypted with AES-256-GCM before storage. The encryption key is managed via Google Cloud Secret Manager / Cloud KMS and is never exposed in plaintext.</li>
+        <li><strong>Secure Access:</strong> We utilize secure OAuth 2.0 token-based authentication. We never see, process, or store your Google account password. OAuth tokens are kept in memory only and are never saved to browser storage.</li>
+    </ul>
 
-    <h3>Contact Us</h3>
-    <p>If you have any questions about this Privacy Policy, You can contact us by email: <strong>support@analogdigital.tech</strong></p>
+    <h2>7. Third-Party Processors</h2>
+    <ul>
+        <li><strong>Notion (Sync Destination):</strong> We upload the original image file of your handwritten planner, along with the extracted text, directly to your Notion workspace using the Notion API. Once uploaded, the image file and data reside on Notion's servers and are governed by <a href="https://www.notion.so/Privacy-Policy-3468d120cf614d4c9014c09f6adc9091" target="_blank">Notion's Privacy Policy</a>.</li>
+        <li><strong>Content Delivery Networks (CDNs):</strong> We use third-party CDNs (including jsDelivr, Google Fonts, Flaticon, and Unsplash) to serve static user interface assets. When your browser requests these assets, these services automatically receive your IP address and standard browser fingerprinting data as a fundamental function of web traffic.</li>
+    </ul>
+
+    <h2>8. Data We Persist</h2>
+    <p><strong>Important:</strong> While images and calendar data are never stored on our servers, we do persist necessary account state and telemetry in our secure database:</p>
+    <ul>
+        <li><strong>Email Address &amp; Name:</strong> Stored securely to authenticate and identify your account.</li>
+        <li><strong>Usage &amp; Gamification Metrics:</strong> We store platform usage metrics including your subscription tier status, sync quotas, booster credits, and gamification stats (such as current streak, highest streak, and total images processed), as well as internal sync timing fields (last sync date, daily sync count, and subscription cycle date) used to power streak tracking and billing logic.</li>
+        <li><strong>Sync Activity Logs:</strong> We maintain a log of your sync events (timestamp, sync type, image count, and success/failure status, including brief summary messages) to power your dashboard history. These logs are permanently deleted when you delete your account.</li>
+        <li><strong>Integration Keys &amp; Identifiers:</strong> Notion keys and BYOK API keys saved in "Cloud KMS" mode are encrypted with AES-256-GCM and securely stored in Firestore. We cannot fundamentally read these without the Secret Manager key. We also store your Google Drive Spreadsheet ID (a non-sensitive file identifier used to locate the AI Planner Data tracking spreadsheet in your Google Drive) and your Notion Database ID for routing purposes. If you use BYOK "Session-Only" mode, the key remains securely in your device's temporal memory and is deleted instantly after the sync; it is never written to our database.</li>
+        <li><strong>Local Browser Storage:</strong> We store your UI theme preference (e.g., dark mode) in your browser's local storage (<code>localStorage</code>) as a convenience setting.</li>
+        <li><strong>Session-Only BYOK Keys:</strong> If you utilize the "Session-Only" mode for your Bring Your Own Key (BYOK) integrations, your custom API key is never transmitted to or stored in our database. It is kept securely in your browser's temporary memory (<code>sessionStorage</code>) and is automatically and permanently erased by your browser the moment you close the tab or window.</li>
+    </ul>
+
+    <h2>9. User Rights &amp; GDPR Compliance</h2>
+    <p>Your image content deletes itself automatically from our servers after every sync (Zero Storage). For your persisted account data, you have the right to:</p>
+    <ul>
+        <li><strong>Export Data:</strong> Download a JSON file of all data we hold about you via your dashboard.</li>
+        <li><strong>Delete Account:</strong> Permanently delete your email, metrics, logs, and encrypted keys from our database instantly via the dashboard. This also removes your Firebase Authentication identity record, completing a full GDPR Article 17 erasure.</li>
+        <li><strong>Revoke Access:</strong> You may revoke our access to your Google accounts at any time via your <a href="https://myaccount.google.com/permissions" target="_blank">Google Account Permissions page</a>, and Notion access via your <a href="https://www.notion.so/my-integrations" target="_blank">Notion Integrations page</a>.</li>
+    </ul>
+
+    <h2>10. Contact Us</h2>
+    <p>If you have any questions about this Privacy Policy or your data, you can contact us by email: <strong>support@analogdigital.tech</strong></p>
 
 </body>
 </html>
