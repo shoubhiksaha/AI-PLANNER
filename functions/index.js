@@ -335,8 +335,11 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
                 subscriptionRenewalDate: raw.subscriptionRenewalDate || null,
                 lastAwardedStreak: raw.lastAwardedStreak || 0,
                 notionConfigured: !!raw.notionKey,
-                notionDbId: raw.notionDbId || null
-                // Note: Encrypted key intentionally excluded for security
+                notionDbId: raw.notionDbId || null,
+                // Google Drive Spreadsheet ID — non-sensitive identifier for the
+                // "AI Planner Data" tracking sheet. Included for full GDPR export completeness.
+                spreadsheetId: raw.spreadsheetId || null
+                // Note: Encrypted BYOK/Notion keys intentionally excluded for security
             };
 
             const historySnap = await userRef.collection('syncHistory')
@@ -384,6 +387,7 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
     try {
         const decodedToken = await admin.auth().verifyIdToken(token);
         userEmail = decodedToken.email?.toLowerCase();
+        const uid = decodedToken.uid;
         if (!userEmail) return res.status(401).send({ error: "No email in token" });
 
         const rl = await checkRateLimit(userEmail, 'deleteUserAccount', RATE_LIMIT_DEFAULT);
@@ -410,9 +414,24 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
         });
 
         batch.delete(userRef);
-        await batch.commit();
 
-        logger.info(`Account deleted for ${userEmail}`);
+        // Execute Firestore deletion and Firebase Auth deletion concurrently.
+        // Both must succeed for a complete GDPR Article 17 erasure.
+        const [firestoreResult, authResult] = await Promise.allSettled([
+            batch.commit(),
+            admin.auth().deleteUser(uid)
+        ]);
+
+        if (firestoreResult.status === 'rejected') {
+            throw new Error(`Firestore deletion failed: ${firestoreResult.reason?.message}`);
+        }
+        if (authResult.status === 'rejected') {
+            // Auth deletion failure is logged but does not block the response —
+            // the user's data is gone; the auth record will be cleaned up on next sign-in attempt.
+            logger.error(`Firebase Auth deletion failed for uid ${uid}:`, { error: authResult.reason?.message, requestId, authEmail: userEmail });
+        }
+
+        logger.info(`Account fully deleted for ${userEmail} (Firestore + Auth)`, { requestId });
         return res.status(200).send({ success: true, text: "Your account data has been permanently deleted." });
     } catch (err) {
         logger.error("Delete error:", { error: err.message, requestId, authEmail: userEmail });

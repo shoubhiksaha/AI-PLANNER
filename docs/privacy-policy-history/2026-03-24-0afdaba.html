@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - AI Planner</title>
+    <link href="/tailwind.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-700 p-8 max-w-3xl mx-auto">
+    <header class="mb-10 text-center">
+        <h1 class="text-4xl font-bold mb-2 text-emerald-700">Privacy Policy</h1>
+        <p class="text-slate-500">Last Updated: March 24, 2026</p>
+    </header>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">1. Introduction</h2>
+        <p class="mb-2">AI Planner ("we", "our", or "us") is committed to protecting your privacy. This policy explains
+            how we handle your data, with a specific focus on our <strong>Zero Storage Architecture</strong>.</p>
+        <p>By using AI Planner, you agree to the collection and use of information in accordance with this policy.</p>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">2. Zero Storage Architecture</h2>
+        <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 mb-4">
+            <p class="font-bold text-emerald-800">Core Principle: Your Data is Transient.</p>
+        </div>
+        <p class="mb-2">Unlike traditional cloud applications, AI Planner does not store your journal entries, planner
+            pages, or images on our servers.</p>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><strong>In-Memory Processing</strong>: When you upload an image, it is streamed directly into the
+                temporary memory (RAM) of our processing function.</li>
+            <li><strong>Immediate Deletion</strong>: Once the AI analysis is complete and the data is synced to your
+                accounts (Notion/Google), the image buffer is immediately wiped from memory.</li>
+            <li><strong>No Persistent Storage</strong>: We do not write your images to a database or a storage bucket
+                (AWS S3/Google Cloud Storage).</li>
+        </ul>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">3. Data Collection & Usage</h2>
+        <p class="mb-4">We collect and process the following types of information:</p>
+
+        <h3 class="text-xl font-semibold mb-2">A. Personal Information</h3>
+        <p class="mb-4">We collect your email address via Google Sign-In solely for authentication purposes and to
+            identify your user preferences (like your Notion API keys).</p>
+
+        <h3 class="text-xl font-semibold mb-2">B. User Content</h3>
+        <p class="mb-4">Images of your handwritten planners are processed solely to extract structure data (tasks,
+            events, expenses). This data is passed to the AI model and then discarded.</p>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">4. Third-Party Processors</h2>
+        <p class="mb-4">To provide our service, we transmit data to the following trusted third-party providers. We do
+            not control how these providers process data, but we use them in accordance with their standard API terms.
+        </p>
+
+        <div class="space-y-4">
+            <div>
+                <h4 class="font-bold">Third-Party AI Models (e.g., Google Gemini)</h4>
+                <p class="text-sm">We process your data using enterprise-grade AI providers. We currently use Google
+                    Gemini, but may switch to other providers (like OpenAI or Anthropic) to improve performance.
+                    <strong>We only select providers whose API terms explicitly prohibit using your data to train their
+                        models.</strong>
+                </p>
+            </div>
+            <div>
+                <h4 class="font-bold">Notion (Sync Destination)</h4>
+                <p class="text-sm">We upload images directly to your Notion workspace using the Notion API. Once
+                    uploaded, the data resides on Notion's servers and is governed by Notion's Privacy Policy.</p>
+            </div>
+            <div>
+                <h4 class="font-bold">Google Workspace (Calendar/Tasks/Drive/Sheets)</h4>
+                <p class="text-sm">We use read/write access to your Google Calendar and Tasks to sync your schedule. For the Evening Sync feature, we also request minimal Drive and Sheets access to automatically initialize and append to an "AI Planner Data" spreadsheet for your expenses and health tracking. We do not store your calendar or spreadsheet data.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">5. Security</h2>
+        <p class="mb-2">We implement multiple layers of security:</p>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Encryption in Transit</strong>: All data transmitted over HTTPS.</li>
+            <li><strong>Encryption at Rest</strong>: Your Notion API keys are encrypted with AES-256-GCM before storage.
+                The encryption key is managed via Google Cloud Secret Manager and never exposed in code.</li>
+            <li><strong>Content Security Policy</strong>: Strict CSP headers prevent cross-site scripting (XSS) attacks.
+            </li>
+            <li><strong>Firestore Access Control</strong>: Your account data is read-only from the client. All writes go
+                through authenticated server-side functions.</li>
+            <li><strong>Token Management</strong>: OAuth tokens are kept in memory only and are never saved to browser
+                storage.</li>
+        </ul>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">6. Data We Persist</h2>
+        <div class="bg-amber-50 border-l-4 border-amber-500 p-4 mb-4">
+            <p class="font-bold text-amber-800">Important: While images are never stored, we do persist minimal account
+                data.</p>
+        </div>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Email Address</strong>: Stored in Firestore to identify your account.</li>
+            <li><strong>Notion Integration Keys</strong>: Encrypted with AES-256-GCM and stored in Firestore. We cannot
+                read these without the Secret Manager encryption key.</li>
+            <li><strong>No images, journal text, calendar data, or planner content is ever stored.</strong></li>
+        </ul>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">7. GDPR Compliance (EU Users)</h2>
+        <p class="mb-2">For users in the European Economic Area (EEA):</p>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Legal Basis</strong>: We process data based on your <strong>Consent</strong> (granted when you
+                sign in and use the service). You may withdraw consent at any time by revoking access via your Google
+                Account settings.</li>
+            <li><strong>Data Controller</strong>: AI Planner Project (Contact: officialshoubhiksaha@gmail.com)</li>
+            <li><strong>Data Processors</strong>: Google Cloud (hosting, AI, auth), Notion (journal storage). We rely on
+                their standard Data Processing Addendums.</li>
+            <li><strong>International Transfers</strong>: Your data is processed in the United States (Google Cloud
+                <code>us-central1</code>). We rely on Google's Standard Contractual Clauses for lawful transfer.
+            </li>
+            <li><strong>Right to Erasure</strong>: Image content is erased automatically (Zero Storage). To delete your
+                account data (email + encrypted keys), use the <strong>🗑️ Delete Account</strong> button in your
+                dashboard. Deletion is instant.</li>
+            <li><strong>Right to Access</strong>: Use the <strong>📦 Export Data</strong> button in your dashboard to
+                download a JSON file of all data we hold about you.</li>
+            <li><strong>Data Retention</strong>: Account data is retained as long as your account is active. Inactive
+                accounts may be purged after 12 months of no activity.</li>
+        </ul>
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">8. User Rights (Self-Service)</h2>
+        <p class="mb-2">Your image content deletes itself automatically after every sync (Zero Storage).</p>
+        <p class="mb-2">For your account data, use the buttons in your dashboard:</p>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><strong>📦 Export Data</strong>: Download a JSON file of all data we hold about you.</li>
+            <li><strong>🗑️ Delete Account</strong>: Permanently delete your email and encrypted keys from our database.
+            </li>
+            <li>Revoke Google access via <a href="https://myaccount.google.com/permissions"
+                    class="text-emerald-700 underline" target="_blank">Google Account Permissions</a>.</li>
+            <li>Revoke Notion access via your <a href="https://www.notion.so/my-integrations"
+                    class="text-emerald-700 underline" target="_blank">Notion Integrations</a> page.</li>
+        </ul>
+    </section>
+
+    <section class="mb-12">
+        <h2 class="text-2xl font-bold mb-4 text-slate-800">9. Contact Us</h2>
+        <p>If you have any questions about this Privacy Policy, please contact us at:</p>
+        <p class="mt-2 font-semibold">officialshoubhiksaha@gmail.com</p>
+    </section>
+
+    <footer class="text-center pt-8 border-t border-slate-200">
+        <a href="index.html"
+            class="inline-block px-6 py-2 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-700 font-semibold transition-colors">
+            ← Return to App
+        </a>
+    </footer>
+</body>
+
+</html>
