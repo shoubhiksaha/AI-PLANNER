@@ -3,11 +3,9 @@
 **A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini AI.**
 
 [![Watch Demo](https://img.shields.io/badge/Demo-Watch%20Video-red)](https://youtu.be/8NFqb9xvnIU?si=7pPnuoKzNEHtZS_m)
-[![Live App](https://img.shields.io/badge/Live-Try%20Beta-blue)](https://planner.analogdigital.tech)
+[![Live App](https://img.shields.io/badge/Live-Try%20out%20yourself-blue)](https://planner.analogdigital.tech/)
 
-> [!NOTE]
-> **Testing Mode**: New users need to be whitelisted. Email [officialshoubhiksaha@gmail.com](mailto:officialshoubhiksaha@gmail.com) with subject "Beta Access".
-
+👉 **Try out yourself:** [https://planner.analogdigital.tech/](https://planner.analogdigital.tech/)
 ![Status](https://img.shields.io/badge/Status-Production-success)
 ![Privacy](https://img.shields.io/badge/Privacy-Zero%20Storage-green)
 ![Security](https://img.shields.io/badge/Security-CSP%20Enforced-brightgreen)

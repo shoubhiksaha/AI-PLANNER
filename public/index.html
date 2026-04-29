@@ -117,43 +117,52 @@
             </button>
 
             <!-- SCOPE EXPLANATION -->
-            <div
-                class="w-full text-left bg-black/5 dark:bg-white/5 border border-theme-border rounded-xl p-5 mb-8 text-[13px] text-theme-muted space-y-4">
-                <h3 class="font-bold text-theme-text text-base tracking-tight">About AI Planner: Bridging Your Analog
-                    and Digital Life</h3>
-                <p>Welcome to AI Planner, the ultimate productivity tool designed for those who love the tactile feel of
-                    a physical, handwritten notebook but need the organization and accessibility of a digital ecosystem.
-                </p>
-                <p>AI Planner acts as a smart bridge between your paper journal and your digital life. By simply taking
-                    a photo of your handwritten planner, our AI instantly extracts your schedule, to-do lists, daily
-                    habits, and financial logs, seamlessly organizing them into your Google workspace.</p>
+            <div class="w-full text-left mb-8 space-y-4">
+                
+                <!-- Hero Pitch -->
+                <div class="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-blue-500/10 border border-emerald-500/20 dark:border-emerald-500/10 rounded-2xl p-5 shadow-sm relative overflow-hidden">
+                    <div class="absolute -top-4 -right-4 text-6xl opacity-10 blur-[2px] pointer-events-none">✨</div>
+                    <h3 class="font-bold text-theme-text text-[17px] tracking-tight mb-2">Love your paper planner? <span class="text-emerald-600 dark:text-emerald-400">Upgrade it with AI.</span></h3>
+                    <p class="text-[13px] text-theme-muted leading-relaxed">
+                        AI Planner is the ultimate bridge between your handwritten journal and your digital life. Just snap a photo of your notebook, and our AI instantly organizes your day into your Google Workspace.
+                    </p>
+                </div>
 
-                <h4 class="font-bold text-theme-text pt-2">How AI Planner Works:</h4>
-                <ul class="space-y-3 text-[12px] leading-relaxed">
-                    <li><strong class="text-theme-text">📅 Smart Schedule Syncing (Google Calendar):</strong> Stop
-                        double-entering your day. Upload an image of your morning plan, and the app reads your
-                        handwritten schedule, and automatically creates accurate events directly in your Google
-                        Calendar.</li>
-                    <li><strong class="text-theme-text">✅ Automated Task Management (Google Tasks):</strong> Your
-                        handwritten to-do lists are instantly digitized and synced to your Google Tasks. When you do
-                        your "Evening Sync," the app scans your updated planner to see which items you physically marked
-                        as done, and automatically marks them as completed in your digital task list.</li>
-                    <li><strong class="text-theme-text">📊 Expense & Health Tracking (Google Drive):</strong> Log your
-                        daily expenses, meals, or health metrics on paper planner just like you always have. AI Planner
-                        extracts this specific data from your page and securely logs it into a dedicated, app-generated
-                        spreadsheet in your Google Drive, giving you a perfect digital archive of your daily habits.
-                    </li>
-                </ul>
+                <!-- Feature Cards -->
+                <div class="grid grid-cols-1 gap-3">
+                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default">
+                        <div class="text-2xl pt-0.5 group-hover:scale-110 transition-transform">📅</div>
+                        <div>
+                            <h4 class="font-bold text-theme-text text-[13px]">Schedule It</h4>
+                            <p class="text-[12px] text-theme-muted mt-1 leading-relaxed">We read your handwritten plans and automatically create Google Calendar events. No more double-entry.</p>
+                        </div>
+                    </div>
 
-                <h4 class="font-bold text-theme-text pt-3">Privacy and Data Transparency:</h4>
-                <p class="text-[11px] opacity-90 leading-relaxed bg-theme-bg p-3 rounded-lg border border-theme-border">
-                    To provide this seamless automation, AI Planner requires limited, strictly defined access to your
-                    Google Account. We request access to your <strong>Google Calendar and Tasks</strong> solely to read
-                    your availability and write your digitized events. We request highly restricted access to your
-                    <strong>Google Drive</strong> to only create and update the specific tracking spreadsheets generated
-                    by this app. We cannot, and do not, access any of your other personal Drive files, ensuring your
-                    data remains entirely secure and under your control.
-                </p>
+                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default">
+                        <div class="text-2xl pt-0.5 group-hover:scale-110 transition-transform">✅</div>
+                        <div>
+                            <h4 class="font-bold text-theme-text text-[13px]">Crush Your To-Dos</h4>
+                            <p class="text-[12px] text-theme-muted mt-1 leading-relaxed">We digitize your tasks. Do an "Evening Sync" to scan what you crossed out on paper, and we'll auto-complete them in Google Tasks.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default">
+                        <div class="text-2xl pt-0.5 group-hover:scale-110 transition-transform">📊</div>
+                        <div>
+                            <h4 class="font-bold text-theme-text text-[13px]">Track Your Habits</h4>
+                            <p class="text-[12px] text-theme-muted mt-1 leading-relaxed">Log expenses or health metrics on paper; we'll perfectly format them into a private Google Drive spreadsheet.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Privacy Badge -->
+                <div class="flex items-center gap-3 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/30 rounded-xl p-3.5 mt-2">
+                    <div class="text-xl">🔒</div>
+                    <p class="text-[11px] text-emerald-800 dark:text-emerald-300/90 leading-relaxed">
+                        <strong class="font-bold">Zero Snooping:</strong> We only request the exact permissions needed to sync your data. Your private files stay 100% secure and untouched.
+                    </p>
+                </div>
+
             </div>
 
             <!-- FOOTER LINKS -->
