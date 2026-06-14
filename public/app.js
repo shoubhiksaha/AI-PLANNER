@@ -1,7 +1,7 @@
 // AI Planner — Main Application Module
 // Extracted from inline <script type="module"> for CSP compliance
 
-import { computeDisplayStreak } from './streak-utils.js?v=1';
+import { computeDisplayStreak, normalizeSyncDateStr } from './streak-utils.js';
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
@@ -382,9 +382,20 @@ function updateGamificationUI(data) {
     const hasStatelessBYOK = !!sessionStorage.getItem('byok_stateless_config') || !!sessionStorage.getItem('byok_stateless_key');
     const hasBYOK = hasKmsBYOK || hasStatelessBYOK;
 
+    const streakBadge = document.getElementById('streak-badge');
+    const timeZone = data.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+    const normalizedLastSync = normalizeSyncDateStr(data.lastSyncDate, timeZone);
+    const lastSyncLabel = normalizedLastSync ? ` · last sync ${normalizedLastSync}` : '';
+    if (streakBadge) {
+        streakBadge.dataset.tooltip = currentStreak > 0
+            ? `Current streak (days)${lastSyncLabel}`
+            : `Streak lapsed — sync to start again${lastSyncLabel}`;
+    }
+
     // Head HUD
     document.getElementById('streak-badge').textContent = `🔥 ${currentStreak}`;
     document.getElementById('credits-badge').textContent = hasBYOK ? `🪙 ∞` : `🪙 ${tierCredits + boosterCredits}`;
+    document.getElementById('freezes-badge').textContent = `❄️ ${streakFreezes}`;
     
     // Reports Metrics
     document.getElementById('reports-current-streak').textContent = `🔥 ${currentStreak}`;
