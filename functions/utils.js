@@ -222,6 +222,31 @@ function calendarDayDiff(fromDateStr, toDateStr) {
     return Math.round((toDate - fromDate) / (1000 * 60 * 60 * 24));
 }
 
+const SYNC_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Coerce Firestore/client lastSyncDate values to YYYY-MM-DD in the user's timezone. */
+function normalizeSyncDateStr(value, timeZone) {
+    if (value == null || value === '') return null;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (SYNC_DATE_RE.test(trimmed)) return trimmed;
+        const isoDay = trimmed.slice(0, 10);
+        return SYNC_DATE_RE.test(isoDay) ? isoDay : null;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return new Date(value).toLocaleDateString('en-CA', { timeZone });
+    }
+    if (typeof value === 'object') {
+        if (typeof value.toDate === 'function') {
+            return value.toDate().toLocaleDateString('en-CA', { timeZone });
+        }
+        if (typeof value.seconds === 'number') {
+            return new Date(value.seconds * 1000).toLocaleDateString('en-CA', { timeZone });
+        }
+    }
+    return null;
+}
+
 /**
  * Effective streak for display when the user has not synced recently.
  * Streak is only written to Firestore on sync; without this, a stored value
@@ -231,14 +256,19 @@ function calendarDayDiff(fromDateStr, toDateStr) {
  */
 function computeDisplayStreak(userData, todayStr) {
     const storedStreak = userData.currentStreak || 0;
-    const lastSyncDateStr = userData.lastSyncDate;
     const streakFreezes = userData.streakFreezes || 0;
     const timeZone = userData.timeZone || 'Asia/Kolkata';
 
-    if (!lastSyncDateStr || storedStreak === 0) return 0;
+    if (storedStreak === 0) return 0;
+
+    const lastSyncDateStr = normalizeSyncDateStr(userData.lastSyncDate, timeZone);
+    if (!lastSyncDateStr) return 0;
 
     const today = todayStr || new Date().toLocaleDateString('en-CA', { timeZone });
     const diffDays = calendarDayDiff(lastSyncDateStr, today);
+
+    // Future or corrupt dates must not preserve a stale stored streak forever.
+    if (!Number.isFinite(diffDays) || diffDays < 0) return 0;
 
     if (diffDays <= 1) return storedStreak;
 
@@ -275,6 +305,7 @@ module.exports = {
     parseDateTime,
     validateTokenFormat,
     calendarDayDiff,
+    normalizeSyncDateStr,
     computeDisplayStreak,
     // HTTP
     setStandardHeaders,

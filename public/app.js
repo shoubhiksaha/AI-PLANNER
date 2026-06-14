@@ -1,7 +1,7 @@
 // AI Planner — Main Application Module
 // Extracted from inline <script type="module"> for CSP compliance
 
-import { computeDisplayStreak } from './streak-utils.js?v=1';
+import { computeDisplayStreak } from './streak-utils.js';
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
@@ -381,6 +381,14 @@ function updateGamificationUI(data) {
     const hasKmsBYOK = !!data.geminiKey || !!data.byokConfig || !!data.byokKmsData;
     const hasStatelessBYOK = !!sessionStorage.getItem('byok_stateless_config') || !!sessionStorage.getItem('byok_stateless_key');
     const hasBYOK = hasKmsBYOK || hasStatelessBYOK;
+
+    const streakBadge = document.getElementById('streak-badge');
+    const lastSyncLabel = data.lastSyncDate ? ` · last sync ${String(data.lastSyncDate).slice(0, 10)}` : '';
+    if (streakBadge) {
+        streakBadge.dataset.tooltip = currentStreak > 0
+            ? `Current streak (days)${lastSyncLabel}`
+            : `Streak lapsed — sync to start again${lastSyncLabel}`;
+    }
 
     // Head HUD
     document.getElementById('streak-badge').textContent = `🔥 ${currentStreak}`;

@@ -777,4 +777,20 @@ describe('computeDisplayStreak', () => {
             currentStreak: 3, lastSyncDate: '2026-06-10', streakFreezes: 1
         }, '2026-06-14')).toBe(0);
     });
+
+    test('returns 0 when lastSyncDate is in the future (timezone skew)', () => {
+        expect(computeDisplayStreak({
+            currentStreak: 3, lastSyncDate: '2026-12-31', streakFreezes: 0
+        }, '2026-06-14')).toBe(0);
+    });
+
+    test('returns 0 when lastSyncDate is missing but stored streak exists', () => {
+        expect(computeDisplayStreak({ currentStreak: 3 }, '2026-06-14')).toBe(0);
+    });
+
+    test('parses ISO datetime lastSyncDate strings', () => {
+        expect(computeDisplayStreak({
+            currentStreak: 3, lastSyncDate: '2026-06-10T08:00:00.000Z', streakFreezes: 0
+        }, '2026-06-14')).toBe(0);
+    });
 });
