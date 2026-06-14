@@ -784,13 +784,22 @@ describe('computeDisplayStreak', () => {
         }, '2026-06-14')).toBe(0);
     });
 
-    test('returns 0 when lastSyncDate is missing but stored streak exists', () => {
-        expect(computeDisplayStreak({ currentStreak: 3 }, '2026-06-14')).toBe(0);
+    test('normalizes ISO datetime to user timezone (not UTC day slice)', () => {
+        // UTC is June 15 but still June 14 in Los Angeles — slice(0,10) would wrongly use June 15
+        expect(computeDisplayStreak({
+            currentStreak: 3,
+            lastSyncDate: '2026-06-15T06:00:00.000Z',
+            streakFreezes: 0,
+            timeZone: 'America/Los_Angeles',
+        }, '2026-06-14')).toBe(3);
     });
 
-    test('parses ISO datetime lastSyncDate strings', () => {
+    test('returns 0 for lapsed streak with ISO datetime lastSyncDate', () => {
         expect(computeDisplayStreak({
-            currentStreak: 3, lastSyncDate: '2026-06-10T08:00:00.000Z', streakFreezes: 0
+            currentStreak: 3,
+            lastSyncDate: '2026-06-10T08:00:00.000Z',
+            streakFreezes: 0,
+            timeZone: 'Asia/Kolkata',
         }, '2026-06-14')).toBe(0);
     });
 });

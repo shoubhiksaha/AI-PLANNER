@@ -12,11 +12,15 @@ function calendarDayDiff(fromDateStr, toDateStr) {
     return Math.round((toDate - fromDate) / (1000 * 60 * 60 * 24));
 }
 
-function normalizeSyncDateStr(value, timeZone) {
+export function normalizeSyncDateStr(value, timeZone) {
     if (value == null || value === '') return null;
     if (typeof value === 'string') {
         const trimmed = value.trim();
         if (SYNC_DATE_RE.test(trimmed)) return trimmed;
+        const parsed = new Date(trimmed);
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed.toLocaleDateString('en-CA', { timeZone });
+        }
         const isoDay = trimmed.slice(0, 10);
         return SYNC_DATE_RE.test(isoDay) ? isoDay : null;
     }

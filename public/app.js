@@ -1,7 +1,7 @@
 // AI Planner — Main Application Module
 // Extracted from inline <script type="module"> for CSP compliance
 
-import { computeDisplayStreak } from './streak-utils.js';
+import { computeDisplayStreak, normalizeSyncDateStr } from './streak-utils.js';
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
@@ -383,7 +383,9 @@ function updateGamificationUI(data) {
     const hasBYOK = hasKmsBYOK || hasStatelessBYOK;
 
     const streakBadge = document.getElementById('streak-badge');
-    const lastSyncLabel = data.lastSyncDate ? ` · last sync ${String(data.lastSyncDate).slice(0, 10)}` : '';
+    const timeZone = data.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+    const normalizedLastSync = normalizeSyncDateStr(data.lastSyncDate, timeZone);
+    const lastSyncLabel = normalizedLastSync ? ` · last sync ${normalizedLastSync}` : '';
     if (streakBadge) {
         streakBadge.dataset.tooltip = currentStreak > 0
             ? `Current streak (days)${lastSyncLabel}`
