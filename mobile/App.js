@@ -437,7 +437,7 @@ export default function App() {
         ref={webviewRef}
         source={{ uri: nocacheUrl }}
         style={styles.webview}
-        originWhitelist={['*']}
+        originWhitelist={['https://planner.analogdigital.tech/*', 'about:blank']}
         javaScriptEnabled={true}
         domStorageEnabled={true}
         sharedCookiesEnabled={true}
