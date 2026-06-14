@@ -213,6 +213,41 @@ function parseDateTime(timeString, dateString) {
     return d;
 }
 
+/** Calendar-day delta between two YYYY-MM-DD strings (local-date math, DST-safe). */
+function calendarDayDiff(fromDateStr, toDateStr) {
+    const fromParts = fromDateStr.split('-').map(Number);
+    const toParts = toDateStr.split('-').map(Number);
+    const fromDate = new Date(fromParts[0], fromParts[1] - 1, fromParts[2]);
+    const toDate = new Date(toParts[0], toParts[1] - 1, toParts[2]);
+    return Math.round((toDate - fromDate) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Effective streak for display when the user has not synced recently.
+ * Streak is only written to Firestore on sync; without this, a stored value
+ * of 3 would show forever until the next sync even after weeks of inactivity.
+ * Returns 0 when the streak has lapsed (missed days exceed available freezes).
+ * Returns stored currentStreak while still within grace (synced yesterday or today).
+ */
+function computeDisplayStreak(userData, todayStr) {
+    const storedStreak = userData.currentStreak || 0;
+    const lastSyncDateStr = userData.lastSyncDate;
+    const streakFreezes = userData.streakFreezes || 0;
+    const timeZone = userData.timeZone || 'Asia/Kolkata';
+
+    if (!lastSyncDateStr || storedStreak === 0) return 0;
+
+    const today = todayStr || new Date().toLocaleDateString('en-CA', { timeZone });
+    const diffDays = calendarDayDiff(lastSyncDateStr, today);
+
+    if (diffDays <= 1) return storedStreak;
+
+    const daysMissed = diffDays - 1;
+    if (streakFreezes >= daysMissed) return storedStreak;
+
+    return 0;
+}
+
 module.exports = {
     // Constants
     MAX_IMAGE_BYTES,
@@ -239,6 +274,8 @@ module.exports = {
     isJsonRequest,
     parseDateTime,
     validateTokenFormat,
+    calendarDayDiff,
+    computeDisplayStreak,
     // HTTP
     setStandardHeaders,
     applyCors,
