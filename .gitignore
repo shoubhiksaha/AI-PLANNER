@@ -48,6 +48,7 @@ firebase-debug.log
 # Test coverage artifacts
 functions/coverage/
 coverage/
+public/coverage/
 
 # Functions dependencies (installed via npm ci)
 functions/node_modules/

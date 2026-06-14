@@ -134,7 +134,7 @@ graph TD
 
 ### 1.7 Gamification System
 
-Users earn **streak rewards** for consecutive daily syncs:
+Users earn **streak rewards** for consecutive daily syncs (morning, evening, or journal — one streak day per calendar day in the user's timezone):
 
 | Milestone | Reward |
 |-----------|--------|
@@ -142,12 +142,23 @@ Users earn **streak rewards** for consecutive daily syncs:
 | 30-Day Streak | +20 Booster Credits + 1 Freeze |
 | 90-Day Streak | +50 Booster Credits + 3 Freezes |
 
+**Streak rules**
 - `lastAwardedStreak` prevents double-paying the same milestone.
-- **Streak Freezes** let users maintain a streak over a missed day.
-- `subscriptionRenewalDate` (YYYY-MM format) gates monthly free credit reset:
-  - Free tier: 15 credits/month
-  - Standard: 100 credits/month
-  - Pro: 250 credits/month
+- **Streak Freezes** cover missed days (`daysMissed = gapDays - 1`); insufficient freezes reset the streak to 1.
+- Same-day re-syncs (`diffDays <= 0`) never advance the streak (guards clock skew / timezone edge cases).
+- **Partial evening syncs** (Sheets/Notion branch failed, credit refunded) do **not** advance the streak.
+- Streak updates retry once on Firestore errors; if both attempts fail, the sync response includes a warning and a `warning` entry is written to `syncHistory`.
+- Day boundaries use the persisted `timeZone` field (sent by the client, stored on sync).
+
+**Monthly tier credits (rolling 30-day window)**
+- `lastTierCreditRenewalAt` (`YYYY-MM-DD`, user's timezone) gates tier credit replenishment — **not** calendar month.
+- `subscriptionRenewalDate` (`YYYY-MM`) is kept for display/legacy migration only.
+- Credits reset (not stack) on renewal:
+  - Free tier: 15 credits
+  - Standard: 100 credits
+  - Pro: 250 credits
+- Payment webhooks stamp `lastTierCreditRenewalAt` so a purchase and the next day's sync cannot double-grant.
+- Unused tier credits are lost at renewal (monthly allowance model).
 
 ---
 
@@ -239,7 +250,7 @@ The hardest bug here: images appeared as static noise in Notion. Root cause was 
 - **UI & Accessibility**: Replaced static Tailwind utility classes with dynamic theme variables to guarantee legibility in Light, Dark, and OLED modes.
 
 ### Google Verification Readiness (April 2026)
-- **Monthly Credit Renewal**: Implemented `subscriptionRenewalDate`-based credit replenishment on every sync — resets `tierCredits` on new calendar month without touching `boosterCredits`.
+- **Monthly Credit Renewal**: Rolling **30-day** tier credit replenishment keyed on `lastTierCreditRenewalAt` (user timezone) — resets `tierCredits` without touching `boosterCredits`. Prevents month-end double-grants (e.g. Jan-31 payment + Feb-1 sync).
 - **Gamification Overhaul**: Replaced `% 5` quality-scoring system with clean 7/30/90-day milestone table. Added `lastAwardedStreak` to prevent double-payout. Added `usedFreeze` flag so "Freeze sustained!" message only shows when a freeze was actually consumed.
 - **Cascading Account Deletion**: `deleteUserAccount` now batch-deletes `syncHistory` sub-docs and matching `rateLimits` records before removing the root user document.
 - **Full GDPR Export**: `exportUserData` now returns complete profile (tier, credits, streaks, freezes, sync dates) and last 50 `syncHistory` entries.
@@ -251,6 +262,16 @@ The hardest bug here: images appeared as static noise in Notion. Root cause was 
 - **New Gamification Tests**: Added `functions/__tests__/gamification.test.js` with 4 deterministic unit tests.
 - **Pricing Modal Theme Fix**: All hardcoded `bg-white dark:bg-gray-900`, `bg-gray-50 dark:bg-black/10`, `text-amber-900` etc. replaced with theme CSS variables. Modal now fully adapts to OLED, dark, and light themes automatically.
 - **Documentation Consolidation**: 10 separate markdown files merged into `WIKI.md` (this file) and `README.md`.
+
+### Advanced Security & Architecture Remediation (May 2026)
+- **Financial Transaction Integrity**: Rewrote the `syncPlanner` credit deduction logic to execute within a strict try/finally block, automatically refunding credits if the Gemini AI fails, Notion is down, or Google APIs rate-limit the request.
+- **Spreadsheet Formula Injection Prevented**: Switched the Google Sheets payload submission mode from `USER_ENTERED` to `RAW`, neutralizing the risk of `=IMPORTXML()` injections from handwritten AI extractions.
+- **SSRF (Server-Side Request Forgery) Blocked**: The Universal AI Adapter now strictly validates custom BYOK API Base URLs, outright blocking connections to internal Google Cloud metadata IPs (169.254.169.254) and localhost.
+- **DDoS Log Ingestion Protection**: Applied strict IP-based sliding window rate-limiting to the unauthenticated `logClientError` endpoint.
+- **GDPR Deletion Scaled**: Account deletion function now chunks Firestore batch deletes into 500-write arrays to support deleting power users with massive sync histories.
+- **Frontend XSS Patched**: Swapped `.innerHTML` with explicit DOM creation and HTML escaping for rendering user-supplied AI history logs in the dashboard.
+- **Corrupt Image Crash Loops**: Prevented frontend silent freezing by implementing `img.onerror` fallbacks to proactively reject corrupted images before they reach the upload queue.
+- **Multi-Modal BYOK Unlimited Credits**: Unified the credit validation UI to recognize both KMS-Encrypted BYOK and Stateless Browser-Memory BYOK, accurately reflecting an "Unlimited" state to the user.
 
 ---
 

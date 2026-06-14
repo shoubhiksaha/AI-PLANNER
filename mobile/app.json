@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "AI Planner",
+    "slug": "aiplanner",
+    "version": "1.0.0",
+    "scheme": [
+      "aiplanner",
+      "com.googleusercontent.apps.195957114195-hols2jof51j0f0bde36qrjd0tmq5j5e1"
+    ],
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#061224"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.analogdigital.aiplanner",
+      "infoPlist": {
+        "NSCameraUsageDescription": "AI Planner needs access to your camera to take photos of your physical notebook for AI extraction."
+      }
+    },
+    "android": {
+      "package": "com.analogdigital.aiplanner",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#061224"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "CAMERA",
+        "INTERNET",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-web-browser",
+      "expo-secure-store",
+      "@react-native-google-signin/google-signin"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a317ee97-c4e0-4f1b-ad27-fcc71cd3aa3c"
+      }
+    }
+  }
+}

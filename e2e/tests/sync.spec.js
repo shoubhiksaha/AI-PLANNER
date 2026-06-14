@@ -31,7 +31,7 @@ test.describe('E2E Sync Flow', () => {
     });
 
     // Verify Login Side Effect (Dashboard visible)
-    await expect(page.locator('#logout-btn')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-drawer="logout"], #btn-logout')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('#btn-morning')).toBeVisible();
 
     // Intercept the API to validate UI side effects without triggering real backend charges/quota
@@ -40,11 +40,12 @@ test.describe('E2E Sync Flow', () => {
         await route.fulfill({ json, status: 200, contentType: 'application/json' });
     });
 
-    // Upload an image
-    const buffer = Buffer.from('fake-image-data', 'utf-8');
+    // Upload a real 1x1 transparent PNG to pass browser image parsing rules
+    const base64Image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const buffer = Buffer.from(base64Image, 'base64');
     await page.setInputFiles('#file-upload', {
-        name: 'test-planner.jpg',
-        mimeType: 'image/jpeg',
+        name: 'test-planner.png',
+        mimeType: 'image/png',
         buffer
     });
 

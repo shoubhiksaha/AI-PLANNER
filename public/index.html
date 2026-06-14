@@ -9,9 +9,10 @@
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2921/2921226.png">
     <meta name="theme-color" content="#ffffff">
     <link rel="stylesheet" href="tailwind.css">
-    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" integrity="sha256-CWPPpQ6eHn5q+SmkCoHj6Jimc/EnDq+mkX3RN+SWgWQ=" crossorigin="anonymous"></script>
+    <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script>if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(async (r) => { await r.update(); console.log('SW registered'); }).catch(e => console.log('SW failed', e)); }); }</script>
+    <script src="sw-register.js" defer></script>
     <style>
         /* Hamburger Drawer */
         .drawer-overlay {
@@ -64,6 +65,49 @@
             border-color: #6366f1;
             background: #eef2ff;
         }
+
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #cbd5e1;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+        .toggle-slider::before {
+            content: "";
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background: #fff;
+            transition: 0.3s;
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background: #10b981;
+        }
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(20px);
+        }
+        .toggle-switch input:focus + .toggle-slider {
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+        }
     </style>
 </head>
 
@@ -111,8 +155,17 @@
 
             <button id="login-btn"
                 class="w-full max-w-sm py-3.5 px-6 bg-theme-card hover:bg-theme-bg border border-theme-border rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-center group mb-4">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                    class="w-6 h-6 mr-3 group-hover:scale-110 transition-transform">
+                <svg class="w-6 h-6 mr-3 group-hover:scale-110 transition-transform" viewBox="0 0 24 24"
+                    aria-hidden="true" focusable="false">
+                    <path fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
+                    <path fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
+                </svg>
                 <span class="text-theme-text font-medium">Continue with Google</span>
             </button>
 
@@ -171,6 +224,14 @@
                 <a href="privacy.html" target="_blank"
                     class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
                     <span class="group-hover:scale-110 transition-transform">🛡️</span> Privacy Policy
+                </a>
+                <a href="pricing-policy.html" target="_blank"
+                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
+                    <span class="group-hover:scale-110 transition-transform">💳</span> Pricing Policy
+                </a>
+                <a href="refund-policy.html" target="_blank"
+                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
+                    <span class="group-hover:scale-110 transition-transform">💸</span> Refund Policy
                 </a>
                 <a href="planner.html" target="_blank"
                     class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
@@ -293,6 +354,60 @@
                 <button id="adv-notion-configure"
                     class="text-xs font-medium text-blue-500 hover:underline">Configure</button>
             </div>
+
+            <!-- SECTION: Sync Preferences -->
+            <details class="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden" open>
+                <summary
+                    class="flex items-center justify-between p-4 cursor-pointer font-bold text-slate-700 select-none">
+                    <span class="flex items-center gap-2">🔄 Sync Preferences</span>
+                    <svg class="w-4 h-4 transition-transform group-open:rotate-180 text-slate-400" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </summary>
+                <div class="p-4 pt-0 space-y-4 border-t border-slate-200 mt-2">
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p class="text-xs text-blue-800 leading-relaxed">
+                            <strong>ℹ️ What is Duplicate Prevention?</strong> When enabled, the app checks your
+                            existing Google Calendar events and Tasks before adding new ones. If an entry with the
+                            same title already exists for that date, it skips it — preventing duplicates when you
+                            re-sync the same planner page. For Calendar events, it checks for the same title on the same date with the exact same start and end time.
+                        </p>
+                    </div>
+
+                    <!-- Calendar Dedup Toggle -->
+                    <div class="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white">
+                        <div class="flex-1 pr-3">
+                            <span class="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                                📅 Calendar Duplicate Prevention
+                            </span>
+                            <span class="text-[10px] text-slate-500 mt-0.5 block">
+                                Skips creating events that already exist at the same time on that date.
+                            </span>
+                        </div>
+                        <label class="toggle-switch" for="dedup-calendar">
+                            <input type="checkbox" id="dedup-calendar" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <!-- Tasks Dedup Toggle -->
+                    <div class="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white">
+                        <div class="flex-1 pr-3">
+                            <span class="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                                ✅ Tasks Duplicate Prevention
+                            </span>
+                            <span class="text-[10px] text-slate-500 mt-0.5 block">
+                                Skips creating tasks that already exist with the same name on that date.
+                            </span>
+                        </div>
+                        <label class="toggle-switch" for="dedup-tasks">
+                            <input type="checkbox" id="dedup-tasks" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </details>
 
             <!-- BYOK Section -->
 
@@ -465,21 +580,29 @@
                 </div>
             </div>
 
-            <label for="file-upload" id="drop-zone"
-                class="file-input block w-full h-40 border-2 border-dashed border-theme-border rounded-xl cursor-pointer flex flex-col items-center justify-center transition-all bg-theme-bg relative group overflow-hidden">
-                <div id="upload-ui"
-                    class="text-center group-hover:scale-105 transition-transform pointer-events-none w-full h-full flex flex-col items-center justify-center relative">
-                    <span class="text-4xl block mb-2 opacity-80">📸</span>
-                    <span class="text-sm font-medium text-theme-muted mb-1">Tap to Upload or Drag & Drop (Max 5)</span>
-                    <span class="text-xs text-theme-muted opacity-75">e.g., Take a photo of your handwritten
-                        planner</span>
-                    <div
-                        class="absolute inset-0 opacity-5 bg-[url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center mix-blend-overlay rounded-xl z-0 pointer-events-none">
-                    </div>
+            <div id="drop-zone"
+                class="block w-full h-40 border-2 border-dashed border-theme-border rounded-xl flex items-center justify-center transition-all bg-theme-bg relative group overflow-hidden">
+                <div id="upload-ui" class="w-full h-full flex items-center justify-center gap-4 sm:gap-6 relative z-10">
+                    <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
+                        <input type="file" accept="image/*" capture="environment" class="upload-input hidden">
+                        <span class="text-3xl mb-1.5 pointer-events-none">📷</span>
+                        <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Camera</span>
+                    </label>
+                    <div class="w-px h-14 bg-theme-border/60"></div>
+                    <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
+                        <input type="file" accept="image/*" class="upload-input hidden">
+                        <span class="text-3xl mb-1.5 pointer-events-none">🖼️</span>
+                        <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Gallery</span>
+                    </label>
+                    <div class="w-px h-14 bg-theme-border/60"></div>
+                    <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
+                        <input type="file" accept="*/*" class="upload-input hidden">
+                        <span class="text-3xl mb-1.5 pointer-events-none">📁</span>
+                        <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Files</span>
+                    </label>
                 </div>
                 <!-- Previews injected via JS -->
-            </label>
-            <input id="file-upload" type="file" accept="image/*" multiple class="hidden">
+            </div>
 
             <!-- Buttons -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -589,11 +712,11 @@
     <!-- HAMBURGER DRAWER (slides in from left) -->
     <div id="drawer-container" class="fixed inset-0 z-50 hidden">
         <div class="drawer-overlay fixed inset-0 bg-black/40 opacity-0 pointer-events-none" id="drawer-overlay"></div>
-        <div
-            class="drawer-panel fixed left-0 top-0 bottom-0 w-72 bg-white dark:bg-gray-900 shadow-2xl p-6 overflow-y-auto">
+        <div id="drawer-panel" style="background-color: var(--bg-main);"
+            class="drawer-panel fixed left-0 top-0 bottom-0 w-72 shadow-2xl p-6 overflow-y-auto">
             <div class="flex items-center justify-between mb-6">
                 <h3 class="font-bold text-lg text-theme-text">Menu</h3>
-                <button id="close-drawer" class="text-xl hover:opacity-70 transition-opacity">✕</button>
+                <button id="close-drawer" class="text-xl hover:opacity-70 transition-opacity" style="color: var(--text-main);">✕</button>
             </div>
             <nav class="space-y-1">
                 <button data-drawer="upgrade"
@@ -619,7 +742,15 @@
                 <hr class="border-theme-border my-2">
                 <a href="privacy.html" target="_blank"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>🛡️</span> Privacy
+                    <span>🛡️</span> Privacy Policy
+                </a>
+                <a href="pricing-policy.html" target="_blank"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
+                    <span>💳</span> Pricing Policy
+                </a>
+                <a href="refund-policy.html" target="_blank"
+                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
+                    <span>💸</span> Refund Policy
                 </a>
                 <a href="planner.html" target="_blank"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
@@ -723,16 +854,16 @@
 
             <div class="p-6 pb-4 text-center border-b border-theme-border">
                 <h2 class="text-2xl font-bold text-theme-text tracking-tight">Invest in Your Productivity.</h2>
-                <p class="text-sm text-theme-muted mt-1">Explore what's coming next! Paid plans arriving soon.</p>
+                <p class="text-sm text-theme-muted mt-1">Choose the plan that fits your workflow.</p>
 
-                <!-- Monthly / Upfront Toggle (disabled) -->
+                <!-- Monthly / Upfront Toggle -->
                 <div
-                    class="inline-flex items-center bg-theme-bg border border-theme-border opacity-50 pointer-events-none rounded-full p-1 mt-4 relative">
+                    class="inline-flex items-center bg-theme-bg border border-theme-border rounded-full p-1 mt-4 relative">
                     <button id="toggle-monthly"
-                        class="pricing-toggle-active px-4 py-1.5 rounded-full text-xs font-bold text-theme-text bg-theme-card transition-all">Pay
+                        class="pricing-toggle-active px-4 py-1.5 rounded-full text-xs font-bold transition-all" style="background-color: var(--text-main); color: var(--bg-main);">Pay
                         Monthly</button>
                     <button id="toggle-upfront"
-                        class="px-4 py-1.5 rounded-full text-xs font-bold text-theme-muted transition-all">Pay
+                        class="px-4 py-1.5 rounded-full text-xs font-bold transition-all" style="background-color: transparent; color: var(--text-muted);">Pay
                         Upfront</button>
                     <span id="save-badge"
                         class="absolute -top-2 -right-2 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full hidden">Save
@@ -746,12 +877,9 @@
                 <div class="bg-theme-bg border border-theme-border rounded-xl p-4 space-y-3">
                     <div>
                         <h3 class="font-bold text-theme-text">Standard</h3>
-                        <span
-                            class="text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-md">Coming
-                            Soon</span>
                     </div>
                     <p class="text-[10px] text-theme-muted">For the organized planner.</p>
-                    <div id="standard-price" class="text-2xl font-black text-theme-text opacity-40">₹29<span
+                    <div id="standard-price" class="text-2xl font-black text-theme-text">₹29<span
                             class="text-sm font-medium text-theme-muted"> /mo</span></div>
                     <ul class="text-xs text-theme-muted space-y-2 opacity-80">
                         <li class="flex items-center gap-2"><span
@@ -769,16 +897,16 @@
                         class="hidden space-y-2 bg-theme-card border border-theme-border p-2 rounded-lg">
                         <label class="flex items-center justify-between cursor-pointer">
                             <div class="flex items-center gap-2">
-                                <input type="radio" name="standard-duration" value="annual" class="accent-blue-500"
+                                <input type="radio" name="standard-duration" value="annual" class="accent-emerald-500"
                                     checked>
-                                <div><span class="text-xs font-bold text-theme-text">12-Month</span><br><span
-                                        class="text-[10px] text-theme-muted">Best value</span></div>
+                                <div><span class="text-xs font-bold text-theme-text">12-Month Mastery</span><br><span
+                                        class="text-[10px] text-theme-muted">Billed once</span></div>
                             </div>
                             <span class="text-xs font-bold text-theme-text">₹290</span>
                         </label>
                         <label class="flex items-center justify-between cursor-pointer">
                             <div class="flex items-center gap-2">
-                                <input type="radio" name="standard-duration" value="sprint" class="accent-blue-500">
+                                <input type="radio" name="standard-duration" value="sprint" class="accent-emerald-500">
                                 <div><span class="text-xs font-bold text-theme-text">90-Day Sprint</span><br><span
                                         class="text-[10px] text-theme-muted">No auto-debit</span></div>
                             </div>
@@ -788,24 +916,21 @@
                     <div id="standard-annual-tag" class="hidden text-[10px] text-emerald-500 font-bold text-center">🎁
                         Includes 2 Months FREE</div>
                     <button id="upgrade-standard-pricing-btn"
-                        class="upgrade-cta w-full py-2.5 bg-blue-600/40 text-blue-300 font-bold rounded-xl text-sm cursor-not-allowed select-none border border-blue-500/30">
-                        🔒 Coming Soon
+                        class="upgrade-cta w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors shadow shadow-blue-500/20 active:scale-95">
+                        Upgrade Now
                     </button>
                 </div>
 
                 <!-- Pro Card -->
                 <div class="bg-indigo-600/10 border-2 border-indigo-500/60 rounded-xl p-4 space-y-3 relative">
-                    <span
-                        class="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[9px] font-bold px-3 py-0.5 rounded-full uppercase tracking-wider shadow-lg">Most
-                        Popular</span>
-                    <div>
+                    <div class="flex justify-between items-center">
                         <h3 class="font-bold text-theme-text">Pro</h3>
-                        <span
-                            class="text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-md">Coming
-                            Soon</span>
+                        <span style="background-color: #4f46e5; color: white;"
+                            class="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">Most
+                            Popular</span>
                     </div>
                     <p class="text-[10px] text-theme-muted">For the productivity power user.</p>
-                    <div id="pro-price" class="text-2xl font-black text-theme-text opacity-40">₹49<span
+                    <div id="pro-price" class="text-2xl font-black text-theme-text">₹49<span
                             class="text-sm font-medium text-theme-muted"> /mo</span></div>
                     <ul class="text-xs text-theme-muted space-y-2 opacity-80">
                         <li class="flex items-center gap-2"><span
@@ -844,9 +969,9 @@
                     </div>
                     <div id="pro-annual-tag" class="hidden text-[10px] text-emerald-500 font-bold text-center">🎁
                         Includes 2 Months FREE</div>
-                    <button id="upgrade-pro-btn"
-                        class="upgrade-cta w-full py-2.5 bg-indigo-600/40 text-indigo-300 font-bold rounded-xl text-sm cursor-not-allowed select-none border border-indigo-500/30">
-                        🔒 Coming Soon
+                    <button id="upgrade-pro-btn" style="background-color: #2563eb; color: white;"
+                        class="upgrade-cta w-full py-2.5 font-bold rounded-xl text-sm transition-colors shadow shadow-blue-500/20 active:scale-95">
+                        Upgrade to Pro
                     </button>
                 </div>
             </div>
@@ -859,12 +984,12 @@
                         <span class="text-2xl">⚡</span>
                         <div>
                             <p class="text-sm font-bold text-theme-text">50 Credit Booster</p>
-                            <p class="text-[10px] text-theme-muted">One-time top-up. Credits never expire.</p>
+                            <p class="text-[10px] text-theme-muted">One-time top-up. ₹19 only.</p>
                         </div>
                     </div>
-                    <button id="buy-booster-btn-modal"
-                        class="upgrade-cta bg-amber-500/30 text-amber-400 font-bold px-4 py-2 rounded-xl text-xs cursor-not-allowed select-none border border-amber-500/30 whitespace-nowrap">🔒
-                        Soon</button>
+                    <button id="buy-booster-btn-modal" style="background-color: #2563eb; color: white;"
+                        class="upgrade-cta font-bold px-4 py-2 rounded-xl text-xs transition-colors shadow shadow-blue-500/20 active:scale-95 whitespace-nowrap">
+                        Buy for ₹19</button>
                 </div>
             </div>
 
@@ -898,8 +1023,8 @@
                     <p class="font-bold text-blue-900 text-sm">Unlock Standard — ₹29/month</p>
                     <p class="text-[11px] text-blue-700 mt-1">100 credits/mo + Batch Uploading</p>
                     <button id="upgrade-standard-btn"
-                        class="w-full mt-3 bg-blue-600 text-white font-bold py-3 rounded-xl text-sm opacity-60 pointer-events-none select-none">
-                        🔒 Coming Soon
+                        class="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition-colors shadow shadow-blue-500/20 active:scale-95">
+                        Upgrade Now
                     </button>
                 </div>
 
@@ -935,8 +1060,55 @@
         </div>
     </div>
 
-    <script src="app-helpers.js?v=9"></script>
-    <script type="module" src="app.js?v=9"></script>
+    <!-- PHONE NUMBER MODAL (Cashfree Compliance) -->
+    <div id="phone-modal" style="z-index: 9999;"
+        class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
+        <div style="background-color: var(--bg-main);" class="rounded-2xl max-w-sm w-full p-7 shadow-2xl relative overflow-hidden transform scale-95 opacity-0 transition-all duration-300" id="phone-modal-content">
+            <!-- Decorative icon -->
+            <div class="w-12 h-12 rounded-full flex items-center justify-center text-xl mx-auto mb-4" style="background-color: rgba(37, 99, 235, 0.1); color: #2563eb;">
+                📱
+            </div>
+            
+            <h3 class="font-bold text-xl text-center mb-2" style="color: var(--text-main);">Billing Details</h3>
+            <p class="text-center mb-4 leading-relaxed text-[13px]" style="color: var(--text-muted);">
+                For RBI billing compliance, Cashfree requires a mobile number. 
+            </p>
+
+            <form id="phone-form" class="space-y-4">
+                <div>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 font-medium" style="color: var(--text-muted);">+91</span>
+                        <input type="tel" id="user-phone" required pattern="[0-9]{10}"
+                            style="background-color: var(--glass-bg); color: var(--text-main); border: 1px solid var(--border-color);"
+                            class="w-full rounded-xl px-4 py-3 pl-12 outline-none transition-all font-medium"
+                            placeholder="10-digit mobile number">
+                    </div>
+                </div>
+
+                <div class="text-center pb-2 leading-relaxed text-[13px]" style="color: var(--text-muted);">
+                    <span style="background-color: rgba(16, 185, 129, 0.1); color: #10b981;" class="inline-flex items-center gap-1 font-medium px-2 py-1 rounded">
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path></svg>
+                        Zero-Storage Promise
+                    </span>
+                    <div class="mt-1 text-[11px]">Passed directly to the gateway. Never saved.</div>
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button type="button" id="close-phone-modal"
+                        class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-colors" style="color: var(--text-muted);">
+                        Cancel
+                    </button>
+                    <button type="submit" id="submit-phone-btn"
+                        class="flex-[2] py-2.5 px-4 rounded-xl text-sm font-bold transition-colors active:scale-95 flex items-center justify-center" style="background-color: #2563eb; color: white;">
+                        Continue
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app-helpers.js?v=10"></script>
+    <script type="module" src="app.js?v=16"></script>
 </body>
 
 </html>

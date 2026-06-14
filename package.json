@@ -23,8 +23,9 @@
     "test:e2e:smoke": "cd e2e && CI=true npx playwright test tests/sync.spec.js --project=chromium",
     "test:e2e:ui": "cd e2e && npx playwright test tests/ui.spec.js --project=chromium",
     "test:e2e:full": "firebase emulators:exec 'cd e2e && npx playwright test --project=chromium'",
-    "quality:ci": "npm run check:conflicts && npm run test:frontend && npm run test:backend && npm run test:e2e:smoke",
-    "test:all": "npm run test:backend && npm run test:frontend && npm run test:e2e:smoke",
+    "quality:ci": "npm run check:conflicts && npm run test:frontend && npm run test:backend && npm run test:mobile && npm run test:e2e:smoke",
+    "test:all": "npm run test:backend && npm run test:frontend && npm run test:mobile && npm run test:e2e:smoke",
+    "test:mobile": "cd mobile && npm run lint",
     "test:rules": "cd functions && npm run test:rules"
   },
   "repository": {

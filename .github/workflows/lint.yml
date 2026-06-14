@@ -18,7 +18,7 @@ jobs:
           node-version: '20'
       - name: Install Dependencies
         working-directory: ./functions
-        run: npm ci || npm install
+        run: npm ci
       - name: Run ESLint
         working-directory: ./functions
         run: npm run lint

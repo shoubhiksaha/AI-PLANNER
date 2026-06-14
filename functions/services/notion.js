@@ -115,7 +115,7 @@ async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, file
     if ((!plannerData.brainDump || plannerData.brainDump.trim() === '') && !fileId) return false;
 
     if (!notionApiKey || notionApiKey.includes("YOUR_")) {
-        console.warn("Notion API Key not configured.");
+        logger.warn("Notion API Key not configured.");
         return false;
     }
 
@@ -124,6 +124,16 @@ async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, file
     const pageTitle = `Brain Dump - ${plannerData.date}`;
 
     try {
+        const existingPages = await notion.databases.query({
+            database_id: databaseId,
+            filter: { property: "Name", title: { equals: pageTitle } }
+        });
+
+        if (existingPages.results.length > 0) {
+            logger.info("Notion page already exists for this date, skipping duplicate creation.");
+            return true; // Treat as success to not break the flow
+        }
+
         const children = [];
 
         if (plannerData.brainDump) {

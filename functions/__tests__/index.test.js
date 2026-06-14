@@ -3,6 +3,7 @@ const admin = require('firebase-admin');
 // 1. Mock Firebase Admin
 const mockSet = jest.fn();
 const mockGet = jest.fn();
+const mockUpdate = jest.fn();
 const mockDelete = jest.fn();
 const mockAdd = jest.fn();
 const mockCollectionInner = jest.fn(() => ({
@@ -19,6 +20,7 @@ const mockBatch = {
 const mockDoc = jest.fn(() => ({
     set: mockSet,
     get: mockGet,
+    update: mockUpdate,
     delete: mockDelete,
     collection: mockCollectionInner
 }));
@@ -84,25 +86,27 @@ jest.mock('firebase-functions/params', () => ({
 // 3. Mock Google APIs
 const mockGetUserInfo = jest.fn();
 const mockCalendarInsert = jest.fn();
+const mockCalendarList = jest.fn().mockResolvedValue({ data: { items: [] } });
 const mockTasksInsert = jest.fn();
 const mockTasksList = jest.fn();
 const mockTasksPatch = jest.fn();
 const mockSheetsCreate = jest.fn();
 const mockSheetsUpdate = jest.fn();
 const mockSheetsAppend = jest.fn();
+const mockSheetsGet = jest.fn().mockResolvedValue({ data: { values: [] } });
 
 jest.mock('googleapis', () => ({
     google: {
         auth: { OAuth2: jest.fn(() => ({ setCredentials: jest.fn() })) },
         oauth2: jest.fn(() => ({ userinfo: { get: mockGetUserInfo } })),
-        calendar: jest.fn(() => ({ events: { insert: mockCalendarInsert } })),
+        calendar: jest.fn(() => ({ events: { insert: mockCalendarInsert, list: mockCalendarList } })),
         tasks: jest.fn(() => ({
             tasks: { insert: mockTasksInsert, list: mockTasksList, patch: mockTasksPatch }
         })),
         sheets: jest.fn(() => ({
             spreadsheets: {
                 create: mockSheetsCreate,
-                values: { update: mockSheetsUpdate, append: mockSheetsAppend }
+                values: { update: mockSheetsUpdate, append: mockSheetsAppend, get: mockSheetsGet }
             }
         }))
     },
@@ -122,9 +126,11 @@ jest.mock('@google/generative-ai', () => ({
     }))
 }));
 
+const mockNotionDbQuery = jest.fn().mockResolvedValue({ results: [] });
 const mockNotionPagesCreate = jest.fn();
 jest.mock('@notionhq/client', () => ({
     Client: jest.fn(() => ({
+        databases: { query: mockNotionDbQuery },
         pages: { create: mockNotionPagesCreate }
     }))
 }));
@@ -187,9 +193,9 @@ describe('index.js Integration Tests', () => {
             req.body = {
                 notionKey: 'secret_1234567890abcdef1234',
                 notionDbId: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6',
-                token: 'valid-google-oauth-token-string'
+                idToken: 'valid-firebase-id-token'
             };
-            _mockGetUserInfo.mockResolvedValue({ data: { email: 'test@example.com' } });
+            mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com' });
 
             await myFunctions.setupNotion(req, res);
 
@@ -207,13 +213,13 @@ describe('index.js Integration Tests', () => {
             expect(setArg.notionKey).not.toBe('secret_1234567890abcdef1234');
         });
 
-        test('handles Google API token lookup failure', async () => {
+        test('handles Firebase ID token lookup failure', async () => {
             req.body = {
                 notionKey: 'secret_1234567890abcdef1234',
                 notionDbId: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6',
-                token: 'invalid-google-oauth-token-string'
+                idToken: 'invalid-firebase-id-token'
             };
-            _mockGetUserInfo.mockRejectedValue(new Error('Invalid credentials'));
+            mockVerifyIdToken.mockRejectedValue(new Error('Invalid credentials'));
 
             await myFunctions.setupNotion(req, res);
 
@@ -223,8 +229,8 @@ describe('index.js Integration Tests', () => {
         });
 
         test('returns 429 when rate limit exceeded', async () => {
-            req.body = { token: 'valid-google-oauth-token-string', notionKey: 'secret_1234567890abcdef1234567890abcdef', notionDbId: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6' };
-            _mockGetUserInfo.mockResolvedValue({ data: { email: 'test@example.com' } });
+            req.body = { idToken: 'valid-firebase-id-token', notionKey: 'secret_1234567890abcdef1234567890abcdef', notionDbId: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6' };
+            mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com' });
             mockRateLimitGet.mockResolvedValue({ exists: true, data: () => ({ count: 100, windowStart: Date.now() }) });
             await myFunctions.setupNotion(req, res);
             expect(res.status).toHaveBeenCalledWith(429);
@@ -251,9 +257,9 @@ describe('index.js Integration Tests', () => {
                 apiKey: 'sk-abcdefg1234567',
                 provider: 'openai',
                 modelName: 'gpt-4o',
-                token: 'valid-token-string-at-least-twenty-chars'
+                idToken: 'valid-firebase-id-token'
             };
-            _mockGetUserInfo.mockResolvedValue({ data: { email: 'test@example.com' } });
+            mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com' });
 
             mockGenerateAndWrapDEK.mockResolvedValue({
                 wrappedDek: 'wrappedD3k',
@@ -274,8 +280,8 @@ describe('index.js Integration Tests', () => {
         });
 
         test('returns 429 when rate limit exceeded', async () => {
-            req.body = { token: 'valid-token-string-at-least-twenty-chars', apiKey: 'test' };
-            _mockGetUserInfo.mockResolvedValue({ data: { email: 'test@example.com' } });
+            req.body = { idToken: 'valid-firebase-id-token', apiKey: 'test' };
+            mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com' });
             mockRateLimitGet.mockResolvedValue({ exists: true, data: () => ({ count: 100, windowStart: Date.now() }) });
             await myFunctions.setupBYOK(req, res);
             expect(res.status).toHaveBeenCalledWith(429);
@@ -376,11 +382,17 @@ describe('index.js Integration Tests', () => {
         beforeEach(() => {
             delete global.__geminiMockText;
             req.body = {
-                token: 'valid-google-oauth-token-string',
+                idToken: 'valid-firebase-id-token',
+                googleToken: 'valid-google-oauth-token-string',
                 syncType: 'morning',
                 images: [validImageData]
             };
+            mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com' });
             _mockGetUserInfo.mockResolvedValue({ data: { email: 'test@example.com' } });
+
+            // Default calendar/tasks list mocks for dedup (empty = no existing items)
+            mockCalendarList.mockResolvedValue({ data: { items: [] } });
+            _mockTasksList.mockResolvedValue({ data: { items: [] } });
 
             // Default user exists
             mockGet.mockResolvedValue({
@@ -469,9 +481,10 @@ describe('index.js Integration Tests', () => {
             req.headers['x-byok-token'] = 'sk-mock-123';
             // Re-mock to assert transaction doesn't throw on 0 credits
             const currentMonth = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7);
+            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
             mockGet.mockResolvedValue({
                 exists: true,
-                data: () => ({ tierCredits: 0, boosterCredits: 0, tier: 'free', subscriptionRenewalDate: currentMonth })
+                data: () => ({ tierCredits: 0, boosterCredits: 0, tier: 'free', subscriptionRenewalDate: currentMonth, lastTierCreditRenewalAt: today })
             });
 
             // Mock response corresponding to OpenAI / UniversalAIAdapter structure
@@ -532,7 +545,8 @@ describe('index.js Integration Tests', () => {
         });
 
         test('rejects request with invalid token', async () => {
-            req.body.token = null;
+            req.body.idToken = null;
+            delete req.body.googleToken;
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(401);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Unauthorized" }));
@@ -585,6 +599,19 @@ describe('index.js Integration Tests', () => {
             expect(mockTasksInsert).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ text: "Morning Sync Complete! Created 1 events, 0 reminders, and 1 tasks." }));
+        });
+
+        test('persists the client timezone on the user document during sync', async () => {
+            req.body.syncType = 'morning';
+            req.body.timeZone = 'America/New_York';
+
+            await myFunctions.syncPlanner(req, res);
+
+            // The credit/gamification transaction writes the resolved timezone so the
+            // separate streak transaction and monthly renewal use the user's local day.
+            const tzWrite = mockSet.mock.calls.find(c => c[0] && c[0].timeZone === 'America/New_York');
+            expect(tzWrite).toBeDefined();
+            expect(res.status).toHaveBeenCalledWith(200);
         });
 
         test('morning sync does not crash when planner date is invalid', async () => {
@@ -1005,6 +1032,31 @@ describe('index.js Integration Tests', () => {
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
+        test('evening sync refunds the credit and warns the user when a sheet write fails', async () => {
+            req.body.syncType = 'evening';
+            global.__geminiMockText = JSON.stringify({ date: '2025-01-01', todos: [], expenses: [{ item: 'Coffee', amount: 5 }], health: {} });
+            _mockTasksList.mockResolvedValue({ data: { items: [] } });
+            // Genuine Sheets API failure on append (dedup .get returns empty, so it tries to append)
+            mockSheetsAppend.mockRejectedValue(new Error('Sheets API down'));
+
+            const streakSpy = jest.spyOn(myFunctions, 'applyGamificationMilestones');
+
+            await myFunctions.syncPlanner(req, res);
+
+            // Still returns 200 so the user keeps whatever partially synced, but the
+            // response surfaces the failure and the deducted credit is refunded.
+            expect(res.status).toHaveBeenCalledWith(200);
+            const responseText = res.send.mock.calls[0][0].text;
+            expect(responseText).toContain('Could not sync: Expenses');
+            expect(responseText).toContain('refunded');
+            expect(streakSpy).not.toHaveBeenCalled();
+
+            const refundCall = mockUpdate.mock.calls.find(c => c[0] && c[0].tierCredits === 'mockIncrement(1)');
+            expect(refundCall).toBeDefined();
+
+            streakSpy.mockRestore();
+        });
+
         // --- Branch coverage: 429 retry loop (lines 553-560) ---
         test('handles 429 rate limit with retry and eventual success', async () => {
             req.body.syncType = 'morning';
@@ -1036,8 +1088,12 @@ describe('index.js Integration Tests', () => {
         }, 15000);
 
         // --- Branch coverage: Gemini 4xx API error (lines 563-564) ---
-        test('handles Gemini 400 API error', async () => {
+        test('handles Gemini 400 API error without refunding the credit', async () => {
             req.body.syncType = 'morning';
+            mockGet.mockResolvedValue({
+                exists: true,
+                data: () => ({ tierCredits: 10, boosterCredits: 0, tier: 'free', subscriptionRenewalDate: '2025-06', lastTierCreditRenewalAt: '2025-06-01' })
+            });
             global.fetch.mockImplementation(async (url) => {
                 if (url.includes('generativelanguage')) {
                     return { ok: false, status: 400, text: async () => 'Bad Request: invalid image' };
@@ -1045,7 +1101,9 @@ describe('index.js Integration Tests', () => {
                 return { ok: true, json: async () => ({}) };
             });
             await myFunctions.syncPlanner(req, res);
-            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.status).toHaveBeenCalledWith(400);
+            const refundCall = mockUpdate.mock.calls.find(c => c[0] && c[0].tierCredits === 'mockIncrement(1)');
+            expect(refundCall).toBeUndefined();
         });
 
         // --- Branch coverage: Notion placeholder key (lines 789-790) ---
@@ -1089,11 +1147,20 @@ describe('index.js Integration Tests', () => {
             expect(responseText).toContain("Skipped Notion");
         });
 
-        // --- Branch coverage: Google OAuth returns no email (line 94) ---
-        test('returns 401 when Google OAuth has no email', async () => {
-            _mockGetUserInfo.mockResolvedValue({ data: {} }); // No email field
+        // --- Branch coverage: Firebase ID token returns no email ---
+        test('returns error when Firebase ID token has no email', async () => {
+            mockVerifyIdToken.mockResolvedValue({}); // No email field
             await myFunctions.syncPlanner(req, res);
-            expect(res.status).toHaveBeenCalledWith(500); // TOKEN_USER_LOOKUP_FAILED → caught by outer catch
+            expect(res.status).toHaveBeenCalledWith(500);
+        });
+
+        // --- Branch coverage: Google Token identity mismatch ---
+        test('returns 403 when Google Token email does not match Firebase ID email', async () => {
+            mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com' });
+            _mockGetUserInfo.mockResolvedValue({ data: { email: 'malicious@example.com' } });
+            await myFunctions.syncPlanner(req, res);
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(res.send).toHaveBeenCalledWith({ error: "Token identity mismatch" });
         });
 
         // --- Branch coverage: legacy CBC notionKey path (lines 57, 70-71) ---
@@ -1190,15 +1257,9 @@ describe('index.js Integration Tests', () => {
         test('returns 500 when Firestore delete throws', async () => {
             req.body.token = 'valid-google-oauth-token-string';
             mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com' });
+            mockGet.mockResolvedValue({ exists: true });
             // Make Firestore delete throw
-            const mockDelete = jest.fn().mockRejectedValue(new Error('Firestore unavailable'));
-            jest.spyOn(admin, 'firestore').mockReturnValue({
-                collection: () => ({
-                    doc: () => ({
-                        delete: mockDelete
-                    })
-                })
-            });
+            mockBatch.commit.mockRejectedValueOnce(new Error('Firestore unavailable'));
 
             await myFunctions.deleteUserAccount(req, res);
 

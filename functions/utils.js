@@ -157,7 +157,7 @@ function handleOptions(req, res) {
         return true;
     }
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-byok-token, x-byok-provider, x-byok-model, x-byok-baseurl');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-byok-token, x-byok-provider, x-byok-model, x-byok-baseurl, x-byok-apiversion');
     res.status(204).send('');
     return true;
 }
@@ -172,22 +172,41 @@ function validateTokenFormat(token) {
 function parseDateTime(timeString, dateString) {
     if (!timeString || !dateString) return null;
 
-    timeString = timeString.trim();
-    dateString = dateString.trim();
+    timeString = String(timeString).trim();
+    dateString = String(dateString).trim();
 
-    // Match "9 AM", "12 PM", "9:30 AM", "12:45 PM" — anchored to prevent partial matches
-    const match = timeString.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+    // Support 24-hour and 12-hour formats
+    const match = timeString.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/i);
     if (!match) return null;
 
     let hours = parseInt(match[1]);
     const minutes = match[2] ? parseInt(match[2]) : 0;
-    if (isNaN(hours) || hours < 1 || hours > 12) return null;
+    
+    if (isNaN(hours) || hours < 0 || hours > 23) return null;
     if (minutes < 0 || minutes > 59) return null;
 
-    if (match[3].toUpperCase() === 'PM' && hours < 12) hours += 12;
-    if (match[3].toUpperCase() === 'AM' && hours === 12) hours = 0;
+    const modifier = match[3] ? match[3].toUpperCase() : null;
+    if (modifier) {
+        if (hours < 1 || hours > 12) return null;
+    }
+    if (modifier === 'PM' && hours < 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
 
-    const d = new Date(dateString);
+    let year, month, day;
+    const dateMatch = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateMatch) {
+        year = parseInt(dateMatch[1]);
+        month = parseInt(dateMatch[2]) - 1;
+        day = parseInt(dateMatch[3]);
+    } else {
+        const tempDate = new Date(dateString);
+        if (isNaN(tempDate.getTime())) return null;
+        year = tempDate.getFullYear();
+        month = tempDate.getMonth();
+        day = tempDate.getDate();
+    }
+
+    const d = new Date(year, month, day);
     if (isNaN(d.getTime())) return null;
 
     d.setHours(hours, minutes, 0, 0);

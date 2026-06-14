@@ -121,12 +121,12 @@ describe('syncCalendarEvents', () => {
 
     test('handles empty schedule gracefully', async () => {
         const counts = await syncCalendarEvents(mockCalendar, { date: '6-August-2025', schedule: [] });
-        expect(counts).toEqual({ events: 0, reminders: 0 });
+        expect(counts).toEqual({ events: 0, reminders: 0, skippedDuplicates: 0 });
     });
 
     test('handles missing schedule key', async () => {
         const counts = await syncCalendarEvents(mockCalendar, { date: '6-August-2025' });
-        expect(counts).toEqual({ events: 0, reminders: 0 });
+        expect(counts).toEqual({ events: 0, reminders: 0, skippedDuplicates: 0 });
     });
 
     test('event dateTime is local ISO (no Z UTC suffix)', async () => {
@@ -145,7 +145,10 @@ describe('syncCalendarEvents', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 describe('syncGoogleTasks', () => {
     const mockTasks = {
-        tasks: { insert: jest.fn().mockResolvedValue({ data: {} }) }
+        tasks: { 
+            insert: jest.fn().mockResolvedValue({ data: {} }),
+            list: jest.fn().mockResolvedValue({ data: { items: [] } })
+        }
     };
 
     beforeEach(() => mockTasks.tasks.insert.mockClear());
@@ -153,7 +156,7 @@ describe('syncGoogleTasks', () => {
     test('creates tasks with due date when date is valid (ISO format)', async () => {
         const plannerData = { date: '2025-08-06', todos: [{ task: 'Buy milk', done: false }] };
         const count = await syncGoogleTasks(mockTasks, plannerData);
-        expect(count).toBe(1);
+        expect(count.tasks).toBe(1);
         const callArg = mockTasks.tasks.insert.mock.calls[0][0];
         expect(callArg.requestBody.due).toBeDefined();
     });
@@ -162,7 +165,7 @@ describe('syncGoogleTasks', () => {
         // Previously uncovered branch — line 59
         const plannerData = { date: 'not-a-date', todos: [{ task: 'Buy milk', done: false }] };
         const count = await syncGoogleTasks(mockTasks, plannerData);
-        expect(count).toBe(1);
+        expect(count.tasks).toBe(1);
         const callArg = mockTasks.tasks.insert.mock.calls[0][0];
         expect(callArg.requestBody.due).toBeUndefined();
     });
@@ -190,18 +193,18 @@ describe('syncGoogleTasks', () => {
             todos: [{ task: 'Fail', done: false }, { task: 'OK', done: false }]
         };
         const count = await syncGoogleTasks(mockTasks, plannerData);
-        expect(count).toBe(1);
+        expect(count.tasks).toBe(1);
     });
 
     test('skips empty task strings and returns 0', async () => {
         const count = await syncGoogleTasks(mockTasks, { date: '2025-08-06', todos: [{ task: '', done: false }] });
-        expect(count).toBe(0);
+        expect(count.tasks).toBe(0);
         expect(mockTasks.tasks.insert).not.toHaveBeenCalled();
     });
 
     test('handles missing todos key', async () => {
         const count = await syncGoogleTasks(mockTasks, { date: '2025-08-06' });
-        expect(count).toBe(0);
+        expect(count.tasks).toBe(0);
     });
 });
 
@@ -270,7 +273,7 @@ describe('updateCompletedTasks', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 describe('syncExpensesToSheet', () => {
     const mockSheets = {
-        spreadsheets: { values: { append: jest.fn().mockResolvedValue({}) } }
+        spreadsheets: { values: { append: jest.fn().mockResolvedValue({}), get: jest.fn().mockResolvedValue({ data: { values: [] } }) } }
     };
 
     beforeEach(() => mockSheets.spreadsheets.values.append.mockClear());
@@ -291,10 +294,11 @@ describe('syncExpensesToSheet', () => {
             .toEqual(['2025-08-06', 'Coffee', 150]);
     });
 
-    test('returns 0 on API failure without throwing', async () => {
+    test('throws on genuine API failure so the caller can refund and warn', async () => {
         mockSheets.spreadsheets.values.append.mockRejectedValueOnce(new Error('fail'));
-        const count = await syncExpensesToSheet(mockSheets, { date: '2025-08-06', expenses: [{ item: 'Tea', amount: 50 }] }, 'sid');
-        expect(count).toBe(0);
+        await expect(
+            syncExpensesToSheet(mockSheets, { date: '2025-08-06', expenses: [{ item: 'Tea', amount: 50 }] }, 'sid')
+        ).rejects.toThrow('fail');
     });
 });
 
@@ -303,7 +307,7 @@ describe('syncExpensesToSheet', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 describe('syncHealthToSheet', () => {
     const mockSheets = {
-        spreadsheets: { values: { append: jest.fn().mockResolvedValue({}) } }
+        spreadsheets: { values: { append: jest.fn().mockResolvedValue({}), get: jest.fn().mockResolvedValue({ data: { values: [] } }) } }
     };
 
     beforeEach(() => mockSheets.spreadsheets.values.append.mockClear());
@@ -331,9 +335,10 @@ describe('syncHealthToSheet', () => {
             .toEqual(['2025-08-06', 'Yoga', 0, 0, 0]);
     });
 
-    test('returns 0 on API failure without throwing', async () => {
+    test('throws on genuine API failure so the caller can refund and warn', async () => {
         mockSheets.spreadsheets.values.append.mockRejectedValueOnce(new Error('fail'));
-        const count = await syncHealthToSheet(mockSheets, { date: '2025-08-06', health: { exercise: 'Walk', water: 5, sleep: 8, energy: 3 } }, 'sid');
-        expect(count).toBe(0);
+        await expect(
+            syncHealthToSheet(mockSheets, { date: '2025-08-06', health: { exercise: 'Walk', water: 5, sleep: 8, energy: 3 } }, 'sid')
+        ).rejects.toThrow('fail');
     });
 });
