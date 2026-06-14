@@ -43,7 +43,7 @@ test.describe('E2E Sync Flow', () => {
     // Upload a real 1x1 transparent PNG to pass browser image parsing rules
     const base64Image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
     const buffer = Buffer.from(base64Image, 'base64');
-    await page.setInputFiles('#file-upload', {
+    await page.setInputFiles('#drop-zone input.upload-input[accept="image/*"]:not([capture])', {
         name: 'test-planner.png',
         mimeType: 'image/png',
         buffer
