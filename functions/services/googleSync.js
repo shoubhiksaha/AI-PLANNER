@@ -28,14 +28,22 @@ async function syncCalendarEvents(calendar, plannerData, timeZone = 'UTC', enabl
                 const dedupStart = new Date(dayStart.getTime() - 24 * 60 * 60 * 1000);
                 const dedupEnd = new Date(dayEnd.getTime() + 24 * 60 * 60 * 1000);
 
-                const listRes = await calendar.events.list({
-                    calendarId: 'primary',
-                    timeMin: dedupStart.toISOString(),
-                    timeMax: dedupEnd.toISOString(),
-                    singleEvents: true,
-                    maxResults: 250,
-                });
-                existingEvents = (listRes.data.items || []).map(e => ({
+                let pageToken = undefined;
+                let allItems = [];
+                do {
+                    const listRes = await calendar.events.list({
+                        calendarId: 'primary',
+                        timeMin: dedupStart.toISOString(),
+                        timeMax: dedupEnd.toISOString(),
+                        singleEvents: true,
+                        maxResults: 250,
+                        pageToken,
+                    });
+                    allItems = allItems.concat(listRes.data.items || []);
+                    pageToken = listRes.data.nextPageToken;
+                } while (pageToken);
+
+                existingEvents = allItems.map(e => ({
                     summary: (e.summary || '').trim().toLowerCase(),
                     start: e.start?.dateTime || e.start?.date || '',
                     end: e.end?.dateTime || e.end?.date || '',
