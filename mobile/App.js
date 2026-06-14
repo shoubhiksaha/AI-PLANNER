@@ -444,8 +444,8 @@ export default function App() {
         cacheEnabled={false}
         incognito={false}
         allowFileAccess={true}
-        allowFileAccessFromFileURLs={true}
-        allowUniversalAccessFromFileURLs={true}
+        allowFileAccessFromFileURLs={false}
+        allowUniversalAccessFromFileURLs={false}
         bounces={false}
         overScrollMode="never"
         onLoadEnd={handleWebViewLoad}
