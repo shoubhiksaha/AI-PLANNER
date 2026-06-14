@@ -1343,8 +1343,8 @@ const handlePaymentClick = async (e, tierName, basePrice) => {
         }
 
         // 4. Initialize Cashfree SDK and trigger popup
-        const cashfree = await Cashfree({ mode: "sandbox" }); // Use "production" for live
-        
+        const isProd = !/^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+        const cashfree = await Cashfree({ mode: isProd ? "production" : "sandbox" });
         cashfree.checkout({
             paymentSessionId: data.payment_session_id,
             redirectTarget: "_modal"
