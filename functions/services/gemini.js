@@ -145,7 +145,7 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
         if (type === 'morning') {
             if (!Array.isArray(data.schedule)) data.schedule = [];
             if (!Array.isArray(data.todos)) data.todos = [];
-            if (typeof data.date !== 'string') data.date = new Date().toLocaleDateString('en-US');
+            if (typeof data.date !== 'string') data.date = new Date().toISOString().slice(0, 10);
             // Sanitize each schedule item
             data.schedule = data.schedule.filter(item => item && typeof item.task === 'string');
             data.todos = data.todos.filter(item => item && typeof item.task === 'string');
