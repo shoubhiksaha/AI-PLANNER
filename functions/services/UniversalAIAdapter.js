@@ -127,6 +127,26 @@ class UniversalAIAdapter {
                 // NODATA/NXDOMAIN for IPv6 is ok
             }
 
+            // Fail closed if DNS resolution returns no public addresses
+            const addrs = await dns.lookup(host, { all: true });
+            if (!Array.isArray(addrs) || addrs.length === 0) {
+                throw new Error('SSRF blocked: Could not validate DNS for custom URL');
+            }
+            for (const a of addrs) {
+                const ip = String(a.address || '').toLowerCase();
+                if (
+                    ip === '127.0.0.1' || ip === '0.0.0.0' ||
+                    ip.startsWith('169.254.') ||
+                    ip.startsWith('10.') || ip.startsWith('192.168.') ||
+                    /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
+                    ip === '::1' || ip === '::' || ip.startsWith('fe80:') ||
+                    ip.startsWith('fc') || ip.startsWith('fd') ||
+                    ip.startsWith('::ffff:127.') || ip.startsWith('::ffff:10.') || ip.startsWith('::ffff:192.168.')
+                ) {
+                    throw new Error(`SSRF blocked: DNS lookup resolved to private address ${ip}`);
+                }
+            }
+
             // Only mark validated after successful checks
             this._dnsValidated = true;
         } catch (dnsErr) {
