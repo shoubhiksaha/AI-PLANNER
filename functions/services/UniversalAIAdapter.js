@@ -40,7 +40,8 @@ class UniversalAIAdapter {
                     throw new Error("Internal or reserved hostnames are strictly prohibited");
                 }
 
-                // DNS rebinding check deferred to _validateBaseUrlDns() (async)
+                // DNS rebinding check deferred to _validateBaseUrlDns() (async, custom URLs only)
+                this._customBaseUrl = true;
                 this._dnsValidated = false;
                 this.baseUrl = config.baseUrl;
             } catch (err) {
@@ -73,6 +74,7 @@ class UniversalAIAdapter {
             };
             this.baseUrl = urlMap[this.provider];
         }
+        if (!this._customBaseUrl) this._customBaseUrl = false;
     }
 
     /**
@@ -80,11 +82,13 @@ class UniversalAIAdapter {
      * the resolved IP isn't an internal/private address. Called once before first request.
      */
     async _validateBaseUrlDns() {
-        if (this._dnsValidated || !this.baseUrl) return;
+        // Built-in provider endpoints are hardcoded HTTPS URLs — no DNS rebinding risk.
+        if (this._dnsValidated || !this._customBaseUrl) return;
 
         try {
             const host = new URL(this.baseUrl).hostname;
             const dns = require('dns').promises;
+            let resolvedAny = false;
 
             // Check IPv4 resolved addresses
             try {
@@ -101,6 +105,7 @@ class UniversalAIAdapter {
                         throw new Error(`SSRF blocked: DNS resolved to private IPv4 ${ip}`);
                     }
                 }
+                if (v4.length > 0) resolvedAny = true;
             } catch (e) {
                 if (e && e.message && e.message.includes('SSRF blocked')) throw e;
                 // NODATA/NXDOMAIN for IPv4 is ok if IPv6 exists; handled below
@@ -122,29 +127,14 @@ class UniversalAIAdapter {
                         throw new Error(`SSRF blocked: DNS resolved to private IPv6 ${ip}`);
                     }
                 }
+                if (v6.length > 0) resolvedAny = true;
             } catch (e) {
                 if (e && e.message && e.message.includes('SSRF blocked')) throw e;
                 // NODATA/NXDOMAIN for IPv6 is ok
             }
 
-            // Fail closed if DNS resolution returns no public addresses
-            const addrs = await dns.lookup(host, { all: true });
-            if (!Array.isArray(addrs) || addrs.length === 0) {
+            if (!resolvedAny) {
                 throw new Error('SSRF blocked: Could not validate DNS for custom URL');
-            }
-            for (const a of addrs) {
-                const ip = String(a.address || '').toLowerCase();
-                if (
-                    ip === '127.0.0.1' || ip === '0.0.0.0' ||
-                    ip.startsWith('169.254.') ||
-                    ip.startsWith('10.') || ip.startsWith('192.168.') ||
-                    /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
-                    ip === '::1' || ip === '::' || ip.startsWith('fe80:') ||
-                    ip.startsWith('fc') || ip.startsWith('fd') ||
-                    ip.startsWith('::ffff:127.') || ip.startsWith('::ffff:10.') || ip.startsWith('::ffff:192.168.')
-                ) {
-                    throw new Error(`SSRF blocked: DNS lookup resolved to private address ${ip}`);
-                }
             }
 
             // Only mark validated after successful checks

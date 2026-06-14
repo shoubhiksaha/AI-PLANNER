@@ -18,7 +18,7 @@ describe('UniversalAIAdapter', () => {
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        jest.clearAllMocks();
     });
 
     // ──────────────────────────────────────────────────────────────────────────
