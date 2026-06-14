@@ -150,7 +150,7 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
             data.schedule = data.schedule.filter(item => item && typeof item.task === 'string');
             data.todos = data.todos.filter(item => item && typeof item.task === 'string');
         } else if (type === 'evening') {
-            if (typeof data.date !== 'string') data.date = new Date().toLocaleDateString('en-US');
+            if (typeof data.date !== 'string') data.date = new Date().toISOString().slice(0, 10);
             if (!Array.isArray(data.todos)) data.todos = [];
             if (!Array.isArray(data.expenses)) data.expenses = [];
             if (!data.health || typeof data.health !== 'object') data.health = {};
