@@ -87,7 +87,7 @@ jobs:
         java-version: '21'
 
     - name: Install Firebase CLI
-      run: npm install -g firebase-tools
+      run: npm install -g firebase-tools@13
 
     - name: Install Functions Dependencies
       working-directory: ./functions
@@ -182,7 +182,7 @@ jobs:
       run: npm ci
 
     - name: Install Firebase CLI
-      run: npm install -g firebase-tools
+      run: npm install -g firebase-tools@13
 
     - name: Create Functions .env from secrets
       working-directory: ./functions

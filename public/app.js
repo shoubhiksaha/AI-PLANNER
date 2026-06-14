@@ -2,12 +2,12 @@
 // Extracted from inline <script type="module"> for CSP compliance
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+import { getAuth, initializeAuth, inMemoryPersistence, GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
 
 // FIREBASE CONFIG
 const firebaseConfig = {
     apiKey: "AIzaSyBRVEfF58gL3yxQ2UY-_lMgftPnFrZ0_T0",
-    authDomain: "ai-planner-project-467800.firebaseapp.com",
+    authDomain: "planner.analogdigital.tech",
     projectId: "ai-planner-project-467800",
     storageBucket: "ai-planner-project-467800.firebasestorage.app",
     messagingSenderId: "195957114195",
@@ -15,7 +15,62 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+const isNativeWebView = !!window.ReactNativeWebView;
+
+
+
+const auth = isNativeWebView
+    ? initializeAuth(app, { persistence: inMemoryPersistence })
+    : getAuth(app);
+
+const postNativeMessage = (type, payload = {}) => {
+    if (!window.ReactNativeWebView?.postMessage) return;
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type, payload }));
+};
+
+// Bridge for native mobile login
+window.mobileLogin = async (idToken, accessToken, pushToken) => {
+    postNativeMessage('MOBILE_LOGIN_START');
+
+    try {
+        if (!idToken || !accessToken) {
+            throw new Error("Native Google login did not provide the required tokens.");
+        }
+
+        const credential = GoogleAuthProvider.credential(idToken, accessToken);
+        const result = await signInWithCredential(auth, credential);
+        googleAccessToken = accessToken;
+        
+        // Save Push Token securely via backend
+        if (pushToken && result.user) {
+            try {
+                const firebaseIdToken = await result.user.getIdToken();
+                const pushRes = await fetch('/updateProfile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idToken: firebaseIdToken, updates: { expoPushToken: pushToken } })
+                });
+                if (!pushRes.ok) console.warn("Push token update failed:", pushRes.status);
+            } catch (pushError) {
+                console.warn("Push token update failed:", pushError);
+            }
+        }
+
+        postNativeMessage('MOBILE_LOGIN_SUCCESS', { email: result.user?.email || null });
+        return { ok: true };
+    } catch (e) {
+        console.error("Mobile login bridge failed:", e);
+        window.__AI_PLANNER_NATIVE_LOGIN_ERROR_POSTED = true;
+        postNativeMessage('MOBILE_LOGIN_ERROR', {
+            code: e.code || null,
+            message: e.message || String(e)
+        });
+        throw e;
+    } finally {
+        // Security: Remove the bridge function after use to reduce XSS token exposure surface
+        delete window.mobileLogin;
+    }
+};
 
 if (window.location.hostname === "localhost" && window.location.search.includes("emulator=true")) {
     connectAuthEmulator(auth, "http://127.0.0.1:9099");
@@ -84,6 +139,9 @@ window.addEventListener('unhandledrejection', logToGCP);
 // NAVIGATION
 const switchView = (viewId) => {
     switchViewHelper(viewId);
+    if (viewId !== 'view-login') {
+        postNativeMessage('MOBILE_APP_READY', { viewId });
+    }
 };
 
 // Display a deterministic frontend build marker (derived from app.js?v=...)
@@ -189,7 +247,7 @@ getRedirectResult(auth).then((result) => {
 }).catch((err) => console.warn("Redirect result error:", err));
 
 const loginBtn = document.getElementById('login-btn');
-loginBtn.addEventListener('click', async () => {
+loginBtn?.addEventListener('click', async () => {
     try {
         const result = await signInWithPopup(auth, buildLoginProvider());
         const credential = GoogleAuthProvider.credentialFromResult(result);
@@ -239,10 +297,15 @@ async function checkUserSetup(user) {
             if (docSnap.exists()) {
                 userProfile = docSnap.data();
                 updateGamificationUI(userProfile);
+                // Sync dedup toggles from stored preferences (default: ON)
+                const calToggle = document.getElementById('dedup-calendar');
+                const taskToggle = document.getElementById('dedup-tasks');
+                if (calToggle) calToggle.checked = userProfile.dedupCalendar !== false;
+                if (taskToggle) taskToggle.checked = userProfile.dedupTasks !== false;
             }
         });
 
-        if (snap.exists() && (snap.data().notionKey || snap.data().geminiKey || snap.data().byokConfig || snap.data().setupComplete)) {
+        if (snap.exists() && (snap.data().notionKey || snap.data().geminiKey || snap.data().byokConfig || snap.data().byokKmsData || snap.data().setupComplete)) {
             // Update display name from Firestore if stored
             if (snap.data().displayName) {
                 document.getElementById('user-display-name').textContent = `Hi, ${snap.data().displayName}`;
@@ -283,7 +346,7 @@ async function checkUserSetup(user) {
         }
     } catch (err) {
         console.error("Profile Load Error:", err);
-        switchView('view-setup');
+        switchView('view-dashboard');
     }
 }
 
@@ -293,7 +356,9 @@ function updateGamificationUI(data) {
     const currentStreak = data.currentStreak || 0;
     const highestStreak = data.highestStreak || 0;
     const streakFreezes = data.streakFreezes || 0;
-    const hasBYOK = !!data.geminiKey || !!data.byokConfig;
+    const hasKmsBYOK = !!data.geminiKey || !!data.byokConfig || !!data.byokKmsData;
+    const hasStatelessBYOK = !!sessionStorage.getItem('byok_stateless_config') || !!sessionStorage.getItem('byok_stateless_key');
+    const hasBYOK = hasKmsBYOK || hasStatelessBYOK;
 
     // Head HUD
     document.getElementById('streak-badge').textContent = `🔥 ${currentStreak}`;
@@ -368,7 +433,7 @@ document.getElementById('byok-provider').addEventListener('change', (e) => {
 
 
 // --- NOTION ONBOARDING SAVE HANDLER ---
-document.getElementById('save-notion-btn').addEventListener('click', async () => {
+document.getElementById('save-notion-btn')?.addEventListener('click', async () => {
     const key = document.getElementById('notion-key-input').value.trim();
     const dbId = document.getElementById('notion-db-input').value.trim();
 
@@ -383,18 +448,21 @@ document.getElementById('save-notion-btn').addEventListener('click', async () =>
     saveBtn.disabled = true;
 
     try {
-        const token = await ensureGoogleAccessToken();
+        const idToken = await auth.currentUser.getIdToken();
 
         const res = await fetch('/setupNotion', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, notionKey: key, notionDbId: dbId })
+            body: JSON.stringify({ idToken, notionKey: key, notionDbId: dbId })
         });
         if (!res.ok) throw new Error("Failed to secure Notion keys.");
 
-        const { getFirestore, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js');
-        const db = getFirestore(app);
-        await setDoc(doc(db, 'users', currentUser.email), { setupComplete: true }, { merge: true });
+        // Mark setup complete via backend instead of frontend to bypass security rules
+        await fetch('/updateProfile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken, updates: { setupComplete: true } })
+        });
 
         switchView('view-dashboard');
         if (currentUser) loadSyncHistory(currentUser.email);
@@ -407,7 +475,7 @@ document.getElementById('save-notion-btn').addEventListener('click', async () =>
     }
 });
 
-document.getElementById('skip-notion-btn').addEventListener('click', async (event) => {
+document.getElementById('skip-notion-btn')?.addEventListener('click', async (event) => {
     event.preventDefault();
     // Defensive fallback: enforce a single visible view even if stale CSS/helper is cached.
     document.querySelectorAll('[id^="view-"]').forEach((el) => {
@@ -425,9 +493,12 @@ document.getElementById('skip-notion-btn').addEventListener('click', async (even
     }
 
     try {
-        const { getFirestore, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js');
-        const db = getFirestore(app);
-        await setDoc(doc(db, 'users', currentUser.email), { setupComplete: true }, { merge: true });
+        const idToken = await auth.currentUser.getIdToken();
+        await fetch('/updateProfile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken, updates: { setupComplete: true } })
+        });
     } catch (e) { /* best effort */ }
     switchView('view-dashboard');
     if (currentUser) loadSyncHistory(currentUser.email);
@@ -452,7 +523,7 @@ document.getElementById('back-to-dash-from-adv')?.addEventListener('click', () =
 });
 
 // --- BYOK SAVE HANDLER (Advanced Settings only) ---
-document.getElementById('save-setup-btn').addEventListener('click', async () => {
+document.getElementById('save-setup-btn')?.addEventListener('click', async () => {
     // BYOK Config
     const byokMode = document.querySelector('input[name="byok-mode"]:checked').value;
     const byokKey = document.getElementById('byok-api-key').value.trim();
@@ -485,11 +556,11 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
     saveBtn.disabled = true;
 
     try {
-        const token = await ensureGoogleAccessToken();
+        const idToken = await auth.currentUser.getIdToken();
 
         // Save BYOK Keys
         if (byokKey) {
-            const byokConfig = { apiKey: byokKey, provider, modelName, customUrl };
+            const byokConfig = { apiKey: byokKey, provider, modelName, customUrl, apiVersion };
             if (byokMode === 'stateless') {
                 sessionStorage.setItem('byok_stateless_config', JSON.stringify(byokConfig));
                 sessionStorage.removeItem('byok_stateless_key');
@@ -503,7 +574,7 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
                 const byokRes = await fetch('/setupBYOK', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token, apiKey: byokKey, provider, modelName, baseUrl: customUrl })
+                    body: JSON.stringify({ idToken, apiKey: byokKey, provider, modelName, baseUrl: customUrl, apiVersion })
                 });
                 if (!byokRes.ok) throw new Error("Failed to securely envelope BYOK keys.");
             }
@@ -524,28 +595,79 @@ document.getElementById('save-setup-btn').addEventListener('click', async () => 
     }
 });
 
+// --- Dedup Preference Toggles ---
+const dedupCalendarToggle = document.getElementById('dedup-calendar');
+const dedupTasksToggle = document.getElementById('dedup-tasks');
+
+async function saveDedupPreference(field, value) {
+    try {
+        const idToken = await auth.currentUser.getIdToken();
+        await fetch('/updateProfile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken, updates: { [field]: value } })
+        });
+    } catch (err) {
+        console.error('Failed to save dedup preference:', err);
+    }
+}
+
+dedupCalendarToggle?.addEventListener('change', (e) => {
+    saveDedupPreference('dedupCalendar', e.target.checked);
+});
+
+dedupTasksToggle?.addEventListener('change', (e) => {
+    saveDedupPreference('dedupTasks', e.target.checked);
+});
+
 // Guide Modal
 const modal = document.getElementById('guide-modal');
 document.getElementById('open-guide-onboard')?.addEventListener('click', () => {
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 });
-document.getElementById('close-guide').addEventListener('click', () => {
+document.getElementById('close-guide')?.addEventListener('click', () => {
     modal.classList.add('hidden');
     modal.classList.remove('flex');
 });
 
 // --- 3. DASHBOARD LOGIC ---
-const fileInput = document.getElementById('file-upload');
-const dashPreview = document.getElementById('dash-preview');
-const uploadUi = document.getElementById('upload-ui');
-const dashBtns = document.querySelectorAll('.dash-btn');
 const dropZone = document.getElementById('drop-zone');
+const dashBtns = document.querySelectorAll('.dash-btn');
 
 const updateDashButtons = (enabled) => {
     dashBtns.forEach(b => b.disabled = !enabled);
 };
 updateDashButtons(false);
+
+const defaultUploadUI = `
+    <div id="upload-ui" class="w-full h-full flex items-center justify-center gap-4 sm:gap-6 relative z-10">
+        <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
+            <input type="file" accept="image/*" capture="environment" class="upload-input hidden">
+            <span class="text-3xl mb-1.5 pointer-events-none">📷</span>
+            <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Camera</span>
+        </label>
+        <div class="w-px h-14 bg-theme-border/60"></div>
+        <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
+            <input type="file" accept="image/*" class="upload-input hidden">
+            <span class="text-3xl mb-1.5 pointer-events-none">🖼️</span>
+            <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Gallery</span>
+        </label>
+        <div class="w-px h-14 bg-theme-border/60"></div>
+        <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
+            <input type="file" accept="*/*" class="upload-input hidden">
+            <span class="text-3xl mb-1.5 pointer-events-none">📁</span>
+            <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Files</span>
+        </label>
+    </div>
+`;
+
+// Bind change events on any .upload-input inside the drop zone (works with dynamic HTML)
+dropZone.addEventListener('change', (e) => {
+    if (e.target.classList.contains('upload-input')) {
+        handleFiles(e.target.files);
+    }
+});
 
 const renderThumbnails = () => {
     if (filesAsBase64.length > 0) {
@@ -560,24 +682,28 @@ const renderThumbnails = () => {
                     </div>
                 `).join('')}
                 ${filesAsBase64.length < 5 ? `
-                    <div class="h-24 w-20 shrink-0 border-2 border-dashed border-theme-border flex flex-col items-center justify-center text-theme-muted hover:text-theme-text hover:border-theme-text transition-colors rounded-lg bg-theme-bg/50">
-                        <span class="text-2xl font-light mb-1">+</span>
-                        <span class="text-[10px]">Add</span>
+                    <div class="flex flex-col gap-1">
+                        <label class="h-11 w-11 shrink-0 border-2 border-dashed border-theme-border flex items-center justify-center text-theme-muted hover:text-theme-text hover:border-theme-text transition-colors rounded-lg bg-theme-bg/50 cursor-pointer" title="Take Photo">
+                            <input type="file" accept="image/*" capture="environment" class="upload-input hidden">
+                            <span class="text-lg pointer-events-none">📷</span>
+                        </label>
+                        <label class="h-11 w-11 shrink-0 border-2 border-dashed border-theme-border flex items-center justify-center text-theme-muted hover:text-theme-text hover:border-theme-text transition-colors rounded-lg bg-theme-bg/50 cursor-pointer" title="Add from Gallery">
+                            <input type="file" accept="image/*" class="upload-input hidden">
+                            <span class="text-lg pointer-events-none">🖼️</span>
+                        </label>
                     </div>
                 ` : ''}
             </div>
-            <div class="absolute bottom-2 right-2 bg-emerald-500/90 text-white text-xs px-2 py-1 rounded-full font-medium pointer-events-none shadow-sm">
+            <div class="absolute bottom-2 right-2 bg-emerald-500/90 text-white text-xs px-2 py-1 rounded-full font-medium pointer-events-none shadow-sm z-20">
                 ${filesAsBase64.length}/5 Page${filesAsBase64.length > 1 ? 's' : ''}
             </div>
         `;
 
-        // Add event listeners to delete buttons
         const deleteBtns = dropZone.querySelectorAll('.delete-btn');
         deleteBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-
                 const idx = parseInt(e.currentTarget.dataset.idx);
                 filesAsBase64.splice(idx, 1);
                 renderThumbnails();
@@ -586,26 +712,26 @@ const renderThumbnails = () => {
 
         updateDashButtons(true);
     } else {
-        dropZone.innerHTML = `
-            <div id="upload-ui" class="text-center group-hover:scale-105 transition-transform pointer-events-none">
-                <span class="text-3xl block mb-2">📸</span>
-                <span class="text-sm font-medium text-theme-muted">Tap to Upload or Drag & Drop (Max 5)</span>
-            </div>
-        `;
+        dropZone.innerHTML = defaultUploadUI;
         updateDashButtons(false);
     }
-
-    // Reset file input so selecting the same file again works
-    fileInput.value = '';
 };
 
 // File Handler with Compression & HEIC Support
 const handleFiles = async (files) => {
     if (!files || files.length === 0) return;
 
-    // Feature Guarding: Check limits based on Tier
+    // Feature Guarding: Check limits based on Tier + sync mode (must match backend)
     const tier = userProfile?.tier || 'free';
-    const limit = tier === 'free' ? 1 : tier === 'standard' ? 3 : 5;
+    const selectedMode = document.querySelector('.sync-btn.active')?.dataset?.mode || 'morning';
+    let limit;
+    if (tier === 'free') {
+        limit = 1;
+    } else if (tier === 'standard') {
+        limit = (selectedMode === 'journal') ? 3 : 1;
+    } else {
+        limit = 5; // pro
+    }
     const remainingSlots = limit - filesAsBase64.length;
 
     if (remainingSlots <= 0) {
@@ -656,6 +782,10 @@ const handleFiles = async (files) => {
                 const reader = new FileReader();
                 reader.onload = (ev) => {
                     const img = new Image();
+                    img.onerror = () => {
+                        alert("Corrupted or unsupported image file detected.");
+                        resolve(null);
+                    };
                     img.onload = () => {
                         // Max dimensions
                         const MAX_WIDTH = 1200;
@@ -685,17 +815,21 @@ const handleFiles = async (files) => {
                     };
                     img.src = ev.target.result;
                 };
+                reader.onerror = () => {
+                    alert("Failed to read image file.");
+                    resolve(null);
+                };
                 reader.readAsDataURL(file);
             });
-            filesAsBase64.push(base64Data);
+            if (base64Data) {
+                filesAsBase64.push(base64Data);
+            }
         }
     }
 
     renderThumbnails();
 };
 
-// Click Upload
-fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 
 // Drag & Drop Logic
 ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -725,9 +859,9 @@ dropZone.addEventListener('drop', (e) => {
 });
 
 // Sync button bindings
-document.getElementById('btn-morning').addEventListener('click', () => triggerSync('morning'));
-document.getElementById('btn-night').addEventListener('click', () => triggerSync('night'));
-document.getElementById('btn-journal').addEventListener('click', () => triggerSync('journal'));
+document.getElementById('btn-morning')?.addEventListener('click', () => triggerSync('morning'));
+document.getElementById('btn-night')?.addEventListener('click', () => triggerSync('night'));
+document.getElementById('btn-journal')?.addEventListener('click', () => triggerSync('journal'));
 
 const triggerSync = async (syncType) => {
     // UI Loading with Granular Messages
@@ -765,10 +899,12 @@ const triggerSync = async (syncType) => {
         let data;
         let attempt = 0;
         let currentToken = await ensureGoogleAccessToken();
+        const idToken = await auth.currentUser.getIdToken();
 
         while (attempt < 2) {
             const payload = {
-                token: currentToken,
+                idToken,
+                googleToken: currentToken,
                 images: filesAsBase64,
                 syncType,
                 timeZone: clientTimeZone
@@ -787,6 +923,7 @@ const triggerSync = async (syncType) => {
                     fetchHeaders['X-BYOK-Provider'] = config.provider;
                     fetchHeaders['X-BYOK-Model'] = config.modelName;
                     if (config.customUrl) fetchHeaders['X-BYOK-BaseURL'] = config.customUrl;
+                    if (config.apiVersion) fetchHeaders['X-BYOK-ApiVersion'] = config.apiVersion;
                 } catch(e) {}
             } else {
                 const storedToken = sessionStorage.getItem('byok_stateless_key');
@@ -833,17 +970,10 @@ const triggerSync = async (syncType) => {
 
         timers.forEach(t => clearTimeout(t)); // Stop simulated progress
 
-        document.getElementById('file-upload').value = ''; // Reset input
+        // Reset all file inputs inside the drop zone
+        dropZone.querySelectorAll('.upload-input').forEach(input => { input.value = ''; });
         filesAsBase64 = [];
-        dropZone.innerHTML = `
-            <div id="upload-ui" class="text-center group-hover:scale-105 transition-transform pointer-events-none w-full h-full flex flex-col items-center justify-center relative">
-                <span class="text-4xl block mb-2 opacity-80">📸</span>
-                <span class="text-sm font-medium text-theme-muted mb-1">Tap to Upload or Drag & Drop (Max 5)</span>
-                <span class="text-xs text-theme-muted opacity-75">e.g., Take a photo of your handwritten planner</span>
-                <div class="absolute inset-0 opacity-5 bg-[url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=800&q=80')] bg-cover bg-center mix-blend-overlay rounded-xl z-0 pointer-events-none"></div>
-            </div>
-        `;
-        updateDashButtons(false);
+        renderThumbnails();
 
         if (res.ok) {
             statusArea.classList.remove('text-red-600', 'bg-red-50', 'text-blue-600', 'bg-blue-50');
@@ -867,7 +997,7 @@ const triggerSync = async (syncType) => {
         statusArea.classList.add('text-red-600', 'bg-red-50');
     } finally {
         document.getElementById('dash-loader').style.display = 'none';
-        updateDashButtons(true);
+        updateDashButtons(filesAsBase64.length > 0);
     }
 };
 
@@ -923,9 +1053,9 @@ const openDrawer = () => {
 };
 const closeDrawer = () => { drawerContainer.classList.remove('drawer-open'); setTimeout(() => drawerContainer.classList.add('hidden'), 300); };
 
-document.getElementById('hamburger-btn').addEventListener('click', openDrawer);
-document.getElementById('close-drawer').addEventListener('click', closeDrawer);
-document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
+document.getElementById('hamburger-btn')?.addEventListener('click', openDrawer);
+document.getElementById('close-drawer')?.addEventListener('click', closeDrawer);
+document.getElementById('drawer-overlay')?.addEventListener('click', closeDrawer);
 
 // Drawer item handlers
 document.querySelectorAll('[data-drawer]').forEach(btn => {
@@ -985,11 +1115,12 @@ const saveBadge = document.getElementById('save-badge');
 const updatePricingUI = () => {
     const isMonthly = pricingMode === 'monthly';
     toggleMonthly.classList.toggle('pricing-toggle-active', isMonthly);
-    toggleMonthly.classList.toggle('text-theme-muted', !isMonthly);
-    toggleMonthly.classList.toggle('text-theme-text', isMonthly);
+    toggleMonthly.style.backgroundColor = isMonthly ? 'var(--text-main)' : 'transparent';
+    toggleMonthly.style.color = isMonthly ? 'var(--bg-main)' : 'var(--text-muted)';
+
     toggleUpfront.classList.toggle('pricing-toggle-active', !isMonthly);
-    toggleUpfront.classList.toggle('text-theme-muted', isMonthly);
-    toggleUpfront.classList.toggle('text-theme-text', !isMonthly);
+    toggleUpfront.style.backgroundColor = !isMonthly ? 'var(--text-main)' : 'transparent';
+    toggleUpfront.style.color = !isMonthly ? 'var(--bg-main)' : 'var(--text-muted)';
     
     // Show/hide upfront options and save badge
     document.getElementById('standard-upfront-opts')?.classList.toggle('hidden', isMonthly);
@@ -1041,9 +1172,12 @@ document.getElementById('save-name-btn')?.addEventListener('click', async () => 
     if (!name) { nameInput.focus(); return; }
     
     try {
-        const { getFirestore, doc, setDoc } = await import('https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js');
-        const db = getFirestore(app);
-        await setDoc(doc(db, 'users', currentUser.email), { displayName: name }, { merge: true });
+        const idToken = await auth.currentUser.getIdToken();
+        await fetch('/updateProfile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken, updates: { displayName: name } })
+        });
         document.getElementById('user-display-name').textContent = `Hi, ${name}`;
         switchView('view-notion-setup');
     } catch(e) {
@@ -1105,27 +1239,136 @@ const loadHeatmap = async (email) => {
 };
 
 // --- MONETIZATION & CASHFREE PLACEHOLDERS ---
-document.getElementById('close-paywall').addEventListener('click', () => {
+document.getElementById('close-paywall')?.addEventListener('click', () => {
     document.getElementById('paywall-modal').classList.add('hidden');
     document.getElementById('paywall-modal').classList.remove('flex');
 });
 
-const handlePaymentClick = (e, tierName) => {
-    // Placeholder for Cashfree SDK integration
-    const btn = e.currentTarget;
-    const origText = btn.innerHTML;
-    btn.innerHTML = `<span class="spinner w-4 h-4 border-white mr-2"></span> Redirecting to Cashfree...`;
-    setTimeout(() => {
-        alert(`Cashfree Gateway Simulation for ${tierName}. Integration planned for next phase!`);
-        btn.innerHTML = origText;
-    }, 1500);
+const collectPhoneNumber = () => {
+    return new Promise((resolve, reject) => {
+        const modal = document.getElementById('phone-modal');
+        const content = document.getElementById('phone-modal-content');
+        const form = document.getElementById('phone-form');
+        const closeBtn = document.getElementById('close-phone-modal');
+        const phoneInput = document.getElementById('user-phone');
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        
+        setTimeout(() => {
+            content.classList.remove('scale-95', 'opacity-0');
+            content.classList.add('scale-100', 'opacity-100');
+        }, 10);
+
+        phoneInput.focus();
+
+        const cleanup = () => {
+            content.classList.add('scale-95', 'opacity-0');
+            content.classList.remove('scale-100', 'opacity-100');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }, 300);
+            
+            form.removeEventListener('submit', onSubmit);
+            closeBtn.removeEventListener('click', onCancel);
+        };
+
+        const onSubmit = (e) => {
+            e.preventDefault();
+            const phone = phoneInput.value.trim();
+            if (phone.length === 10 && /^\d+$/.test(phone)) {
+                cleanup();
+                resolve(phone);
+            }
+        };
+
+        const onCancel = () => {
+            cleanup();
+            reject(new Error("Payment cancelled by user."));
+        };
+
+        form.addEventListener('submit', onSubmit);
+        closeBtn.addEventListener('click', onCancel);
+    });
 };
 
-document.getElementById('buy-booster-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
-document.getElementById('buy-booster-btn-modal')?.addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits (₹19)'));
-document.getElementById('upgrade-standard-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
-document.getElementById('upgrade-standard-pricing-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier (₹29/mo)'));
-document.getElementById('upgrade-pro-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Pro Tier (₹49/mo)'));
+const handlePaymentClick = async (e, tierName, basePrice) => {
+    const btn = e.currentTarget;
+    const origText = btn.innerHTML;
+    
+    if (btn.disabled) return;
+    
+    let price = basePrice;
+    if (typeof pricingMode !== 'undefined' && pricingMode === 'upfront') {
+        if (tierName === 'Standard Tier') {
+            const stdDuration = document.querySelector('input[name="standard-duration"]:checked')?.value || 'annual';
+            price = stdDuration === 'annual' ? 290 : 79;
+        } else if (tierName === 'Pro Tier') {
+            const proDuration = document.querySelector('input[name="pro-duration"]:checked')?.value || 'annual';
+            price = proDuration === 'annual' ? 490 : 129;
+        }
+    }
+
+    try {
+        if (!currentUser) {
+            throw new Error("You must be logged in to upgrade.");
+        }
+
+        // 1. Get Phone Number (Ephemeral)
+        const phoneNumber = await collectPhoneNumber();
+
+        // Prevent double clicks after phone is collected
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner w-4 h-4 border-white mr-2"></span> Redirecting...`;
+
+        // 2. Get a fresh Firebase ID token for backend verification
+        const freshIdToken = await auth.currentUser.getIdToken();
+
+        // 3. Call your backend to create the Cashfree order
+        const response = await fetch('/createCashfreeOrder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                idToken: freshIdToken,
+                price: price,
+                phone: phoneNumber // Send the collected phone number
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.payment_session_id) {
+            throw new Error(data.error || "Failed to initialize payment.");
+        }
+
+        // 4. Initialize Cashfree SDK and trigger popup
+        const isProd = !/^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+        const cashfree = await Cashfree({ mode: isProd ? "production" : "sandbox" });
+        cashfree.checkout({
+            paymentSessionId: data.payment_session_id,
+            redirectTarget: "_modal"
+        });
+
+    } catch (err) {
+        if (err.message !== "Payment cancelled by user.") {
+            console.error("Payment error:", err);
+            alert(err.message || "An error occurred while launching payment.");
+        }
+    } finally {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        // Clear phone input to ensure Zero-Storage
+        const phoneInput = document.getElementById('user-phone');
+        if (phoneInput) phoneInput.value = '';
+    }
+};
+
+document.getElementById('buy-booster-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits', 19));
+document.getElementById('buy-booster-btn-modal')?.addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits', 19));
+document.getElementById('upgrade-standard-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier', 29));
+document.getElementById('upgrade-standard-pricing-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier', 29));
+document.getElementById('upgrade-pro-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Pro Tier', 49));
 const loadSyncHistory = async (email) => {
     import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, orderBy, limit, getDocs }) => {
         const db = getFirestore(app);
@@ -1153,6 +1396,7 @@ const loadSyncHistory = async (email) => {
                 const d = data.timestamp ? data.timestamp.toDate() : new Date();
                 const timeString = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+                const escapeHTML = str => String(str || '').replace(/[&<>'"]/g, tag => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'}[tag]));
                 const typeIcon = data.syncType === 'morning' ? '☀️' : data.syncType === 'evening' ? '🌙' : '📖';
                 const statusColor = data.status === 'success' ? 'text-emerald-600' : 'text-red-500';
                 const statusIcon = data.status === 'success' ? '✓' : '⚠️';
@@ -1161,10 +1405,10 @@ const loadSyncHistory = async (email) => {
                     <div class="p-3 border flex justify-between items-center rounded-xl border-theme-border mb-2 bg-theme-bg/50">
                         <div>
                             <span class="font-medium text-theme-text text-sm flex items-center gap-2 mb-1">
-                                ${typeIcon} <span class="capitalize">${data.syncType}</span>
+                                ${typeIcon} <span class="capitalize">${escapeHTML(data.syncType)}</span>
                                 <span class="text-[10px] text-theme-muted font-normal bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full">${data.imageCount || 1} pg</span>
                             </span>
-                            <p class="text-xs ${statusColor} font-medium leading-snug">${statusIcon} ${data.message}</p>
+                            <p class="text-xs ${statusColor} font-medium leading-snug">${statusIcon} ${escapeHTML(data.message)}</p>
                         </div>
                         <span class="text-[10px] text-theme-muted ml-2 text-right">${timeString}</span>
                     </div>
@@ -1203,6 +1447,10 @@ async function deleteMyAccount() {
         if (!res.ok) throw new Error(data.error || "Delete failed");
 
         alert("✅ Your account data has been permanently deleted.");
+        // Notify native app to clear SecureStore tokens (mobile sign-out path)
+        if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage('SIGNOUT');
+        }
         auth.signOut();
     } catch (err) {
         console.error("Delete error:", err);
@@ -1215,7 +1463,7 @@ const themeBtn = document.getElementById('theme-btn');
 const themeMenu = document.getElementById('theme-dropdown');
 
 // Toggle Dropdown
-themeBtn.addEventListener('click', () => {
+themeBtn?.addEventListener('click', () => {
     themeMenu.classList.toggle('active');
 });
 

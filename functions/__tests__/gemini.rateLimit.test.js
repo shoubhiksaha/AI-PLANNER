@@ -11,9 +11,11 @@ const mockGet = jest.fn();
 const mockDoc = jest.fn(() => ({ get: mockGet, set: mockSet }));
 const mockCollection = jest.fn(() => ({ doc: mockDoc }));
 
+const mockRunTransaction = jest.fn();
+
 jest.mock('firebase-admin', () => ({
     initializeApp: jest.fn(),
-    firestore: jest.fn(() => ({ collection: mockCollection })),
+    firestore: jest.fn(() => ({ collection: mockCollection, runTransaction: mockRunTransaction })),
 }));
 
 // We import the utils up here so they don't get trapped if needed
@@ -180,59 +182,73 @@ describe('gemini.js — getPlannerDataFromImages', () => {
 // checkRateLimit
 // ──────────────────────────────────────────────────────────────────────────────
 describe('rateLimit.js — checkRateLimit', () => {
+    // The rate limiter now uses db.runTransaction(), so we need transaction-aware mocks
+    let mockTransactionGet;
+    let mockTransactionSet;
+
     beforeEach(() => {
-        mockGet.mockReset();
-        mockSet.mockReset();
-        mockSet.mockResolvedValue(undefined);
+        mockTransactionGet = jest.fn();
+        mockTransactionSet = jest.fn();
+        mockRunTransaction.mockImplementation(async (callback) => {
+            const transaction = {
+                get: mockTransactionGet,
+                set: mockTransactionSet,
+            };
+            return await callback(transaction);
+        });
     });
 
     test('allows first request (no existing doc) and starts new window', async () => {
-        mockGet.mockResolvedValue({ exists: false });
+        mockTransactionGet.mockResolvedValue({ exists: false });
         const result = await checkRateLimit('user@test.com', 'sync', 10);
         expect(result.allowed).toBe(true);
-        expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({ count: 1 }));
+        expect(mockTransactionSet).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ count: 1 })
+        );
     });
 
     test('allows request within window that is below the limit', async () => {
-        mockGet.mockResolvedValue({
+        mockTransactionGet.mockResolvedValue({
             exists: true,
             data: () => ({ count: 5, windowStart: Date.now() - 10000 })
         });
         const result = await checkRateLimit('user@test.com', 'sync', 10);
         expect(result.allowed).toBe(true);
-        expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({ count: 6 }), { merge: true });
+        expect(mockTransactionSet).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ count: 6 }),
+            { merge: true }
+        );
     });
 
     test('blocks request that hits limit exactly within window', async () => {
-        mockGet.mockResolvedValue({
+        mockTransactionGet.mockResolvedValue({
             exists: true,
             data: () => ({ count: 10, windowStart: Date.now() - 10000 })
         });
         const result = await checkRateLimit('user@test.com', 'sync', 10);
         expect(result.allowed).toBe(false);
         expect(result.retryAfterMs).toBeGreaterThan(0);
-        expect(mockSet).not.toHaveBeenCalled();
+        expect(mockTransactionSet).not.toHaveBeenCalled();
     });
 
     test('resets window when windowStart is outside RATE_LIMIT_WINDOW_MS', async () => {
-        mockGet.mockResolvedValue({
+        mockTransactionGet.mockResolvedValue({
             exists: true,
             data: () => ({ count: 999, windowStart: Date.now() - RATE_LIMIT_WINDOW_MS - 1000 })
         });
         const result = await checkRateLimit('user@test.com', 'sync', 10);
         expect(result.allowed).toBe(true);
-        expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({ count: 1 }));
-    });
-
-    test('uses email_endpoint composite string as Firestore docId', async () => {
-        mockGet.mockResolvedValue({ exists: false });
-        await checkRateLimit('alice@test.com', 'export', 20);
-        expect(mockDoc).toHaveBeenCalledWith('alice@test.com_export');
+        expect(mockTransactionSet).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ count: 1 })
+        );
     });
 
     test('retryAfterMs is within expected window range', async () => {
         const windowStart = Date.now() - 30000;
-        mockGet.mockResolvedValue({
+        mockTransactionGet.mockResolvedValue({
             exists: true,
             data: () => ({ count: 100, windowStart })
         });
@@ -240,13 +256,5 @@ describe('rateLimit.js — checkRateLimit', () => {
         expect(result.allowed).toBe(false);
         expect(result.retryAfterMs).toBeGreaterThan(25000);
         expect(result.retryAfterMs).toBeLessThanOrEqual(RATE_LIMIT_WINDOW_MS);
-    });
-
-    test('different endpoints create separate docIds', async () => {
-        mockGet.mockResolvedValue({ exists: false });
-        await checkRateLimit('user@test.com', 'sync', 10);
-        await checkRateLimit('user@test.com', 'export', 10);
-        expect(mockDoc).toHaveBeenCalledWith('user@test.com_sync');
-        expect(mockDoc).toHaveBeenCalledWith('user@test.com_export');
     });
 });

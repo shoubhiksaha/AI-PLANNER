@@ -1,54 +1,123 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Download Planner - AI Planner</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-main: #f8fafc;
+            --text-main: #334155;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --accent: #2563eb;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-main: #0f172a;
+                --text-main: #e2e8f0;
+                --text-muted: #94a3b8;
+                --border-color: #334155;
+                --accent: #3b82f6;
+            }
+        }
         body {
-            font-family: 'Outfit', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 2rem 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .container {
+            max-width: 500px;
+            width: 100%;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 2.5rem;
+            border-radius: 1rem;
+            border: 1px solid var(--border-color);
+            text-align: center;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+        .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        h1 { font-size: 1.75rem; margin-top: 0; margin-bottom: 0.5rem; color: var(--text-main); }
+        p { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; }
+        
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            background-color: var(--accent);
+            color: white;
+            padding: 0.875rem 1.5rem;
+            border-radius: 0.75rem;
+            font-size: 1rem;
+            font-weight: 600;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+        }
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+        .btn-primary svg {
+            margin-right: 0.5rem;
+            width: 20px;
+            height: 20px;
+        }
+
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: transparent;
+            color: var(--text-muted);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-decoration: none;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover {
+            background-color: rgba(100, 116, 139, 0.1);
+            color: var(--text-main);
         }
     </style>
 </head>
+<body>
+    <div class="container">
+        <div class="icon">📄</div>
+        <h1>AI Planner Template</h1>
+        <p>Download the official PDF template designed and optimized specifically for our high-accuracy AI OCR engine.</p>
+        
+        <form action="planner-file.pdf" method="get" target="_blank" style="margin: 0; padding: 0;">
+            <button type="submit" class="btn-primary">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Download PDF
+            </button>
+        </form>
 
-<body class="bg-slate-50 text-slate-700 min-h-screen flex flex-col items-center justify-center p-4 text-center">
-
-    <div class="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-slate-100">
-        <div class="text-4xl mb-4">📄</div>
-        <h1 class="text-2xl font-bold mb-2 text-slate-800">2026 AI Planner Template</h1>
-        <p class="text-slate-500 mb-8">Download the official PDF template optimized for our AI OCR engine.</p>
-
-
-
-        <a href="planner-file.pdf" download
-            class="block w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-colors shadow-md shadow-emerald-200">
-            Download PDF Now
-        </a>
-
-        <!-- DONATION SECTION -->
-        <div class="mt-8 pt-8 border-t border-slate-100">
-            <p class="text-xs text-slate-400 font-medium uppercase tracking-wider mb-4">Enjoying the free tool?</p>
-            <div class="bg-white p-4 rounded-xl inline-block border border-slate-200 shadow-sm">
-                <!-- User to upload donate.jpg -->
-                <img src="donate.jpg" alt="Scan to Donate"
-                    class="w-32 h-32 mx-auto mb-2 rounded-lg bg-slate-100 object-cover"
-                    onerror="this.style.display='none'; this.nextElementSibling.textContent='(Upload donate.jpg to see QR)'">
-                <p class="text-xs text-emerald-600 font-bold">Support the Dev ☕</p>
-                <div class="mt-2 text-[10px] text-slate-400">
-                    UPI ID: <span
-                        class="font-mono select-all bg-slate-50 px-1.5 py-0.5 rounded text-slate-600 border border-slate-100">officialshoubhiksaha@oksbi</span>
-                </div>
-            </div>
-        </div>
-
-        <a href="index.html" class="block mt-6 text-sm text-slate-400 hover:text-slate-600">
-            ← Back to Dashboard
-        </a>
+        <form action="index.html" method="get" style="margin: 0; padding: 0; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+            <button type="submit" class="btn-secondary">
+                &larr; Back to Dashboard
+            </button>
+        </form>
     </div>
-
 </body>
-
 </html>

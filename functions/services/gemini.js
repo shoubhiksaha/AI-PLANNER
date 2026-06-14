@@ -5,7 +5,7 @@ const GEMINI_API_KEY = defineString('GEMINI_API_KEY');
 function getMorningPrompt() {
     return `Analyze the attached image of a daily planner.
             Step 1: Extract all relevant data.
-            - Extract the handwritten date as a string (e.g., "6-August-2025").
+            - Extract the handwritten date strictly in "YYYY-MM-DD" format (e.g., "2025-08-06").
             - Extract the schedule items with tasks into a "schedule" array. Each object should have "time", "task", "block" (boolean), and "reminder" (boolean). Ignore empty or crossed-out tasks.
             - Extract the to-do list items into a "todos" array. Each object should have "task" (string) and "done" (boolean). Ignore empty lines.
             - Extract the handwritten total for Blocks, the total for Reminders, and the total for To-Dos as numbers.
@@ -26,7 +26,7 @@ function getMorningPrompt() {
 function getEveningPrompt() {
     return `Analyze the attached image of a filled-out daily planner (Evening Review).
             Step 1: Extract relevant data.
-            - "date": The handwritten date on the page (string).
+            - "date": The handwritten date on the page strictly in "YYYY-MM-DD" format.
             - "todos": Look at the To-Dos list. Return an array of objects ({ "task": string, "done": boolean }). Only include tasks that are CLEARLY marked as done (checked off).
             - "expenses": Look at the Expenses section. Return an array of objects ({ "item": string, "amount": number }).
             - "health": Look at the Health/Wellness section. Extract:
@@ -134,13 +134,45 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
             syncType === 'journal_date_only' ? getJournalDatePrompt() :
                 getMorningPrompt();
 
+    // Schema validation to prevent malformed AI output from crashing downstream sync
+    function validateAIOutput(data, type) {
+        if (!data || typeof data !== 'object') {
+            throw new Error("AI returned non-object output.");
+        }
+        // If the AI itself reported an error, pass it through
+        if (data.error) return data;
+
+        if (type === 'morning') {
+            if (!Array.isArray(data.schedule)) data.schedule = [];
+            if (!Array.isArray(data.todos)) data.todos = [];
+            if (typeof data.date !== 'string') data.date = new Date().toISOString().slice(0, 10);
+            // Sanitize each schedule item
+            data.schedule = data.schedule.filter(item => item && typeof item.task === 'string');
+            data.todos = data.todos.filter(item => item && typeof item.task === 'string');
+        } else if (type === 'evening') {
+            if (typeof data.date !== 'string') data.date = new Date().toISOString().slice(0, 10);
+            if (!Array.isArray(data.todos)) data.todos = [];
+            if (!Array.isArray(data.expenses)) data.expenses = [];
+            if (!data.health || typeof data.health !== 'object') data.health = {};
+            data.todos = data.todos.filter(item => item && typeof item.task === 'string');
+            data.expenses = data.expenses.filter(item => item && typeof item.item === 'string' && typeof item.amount === 'number');
+        } else if (type === 'journal_date_only') {
+            if (typeof data.date !== 'string' && data.date !== null) {
+                data.date = null;
+            }
+        }
+        return data;
+    }
+
     // --- BYOK UNIVERSAL ADAPTER FORK ---
     if (byokConfig && byokConfig.apiKey) {
         const { UniversalAIAdapter } = require('./UniversalAIAdapter');
         const adapter = new UniversalAIAdapter({
             apiKey: byokConfig.apiKey,
             provider: byokConfig.provider,
-            modelName: byokConfig.modelName
+            modelName: byokConfig.modelName,
+            baseUrl: byokConfig.customUrl,
+            apiVersion: byokConfig.apiVersion
         });
         
         const reqId = require('crypto').randomUUID(); 
@@ -152,7 +184,7 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
             resultRaw = resultRaw.replace(/```json\n?/, '').replace(/```$/, '').trim();
         }
         try {
-            return JSON.parse(resultRaw);
+            return validateAIOutput(JSON.parse(resultRaw), syncType);
         } catch(e) {
              logger.error("Failed to parse Universal AI JSON output", { error: e.message, raw: resultRaw });
              throw new Error("Invalid final structured output from AI Adapter.");
@@ -177,7 +209,8 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
 
     for (const model of models) {
         try {
-            return await callGeminiModel(model, geminiApiKey, prompt, parsedImages);
+            const raw = await callGeminiModel(model, geminiApiKey, prompt, parsedImages);
+            return validateAIOutput(raw, syncType);
         } catch (error) {
             lastError = error;
             if (models.indexOf(model) < models.length - 1) {

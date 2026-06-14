@@ -1,12 +1,24 @@
 const { UniversalAIAdapter } = require('../services/UniversalAIAdapter');
 
+// Mock DNS so SSRF validation passes in tests (resolves to public IPs)
+jest.mock('dns', () => ({
+    promises: {
+        resolve4: jest.fn().mockResolvedValue(['93.184.216.34']), // example.com public IP
+        resolve6: jest.fn().mockResolvedValue(['2606:2800:220:1:248:1893:25c8:1946']),
+    }
+}));
+
 describe('UniversalAIAdapter', () => {
     beforeEach(() => {
         global.fetch = jest.fn();
+        // Reset DNS validated state between tests
+        const dns = require('dns');
+        dns.promises.resolve4.mockResolvedValue(['93.184.216.34']);
+        dns.promises.resolve6.mockResolvedValue(['2606:2800:220:1:248:1893:25c8:1946']);
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        jest.clearAllMocks();
     });
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -43,6 +55,39 @@ describe('UniversalAIAdapter', () => {
         test('deepseek gets correct base URL', () => {
             const a = new UniversalAIAdapter({ apiKey: 'k', provider: 'deepseek' });
             expect(a.baseUrl).toBe('https://api.deepseek.com/v1/chat/completions');
+        });
+    });
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // SSRF DNS validation
+    // ──────────────────────────────────────────────────────────────────────────
+    describe('SSRF DNS validation (_validateBaseUrlDns)', () => {
+        test('blocks private IPv4 addresses', async () => {
+            const dns = require('dns');
+            dns.promises.resolve4.mockResolvedValue(['10.0.0.1']);
+            dns.promises.resolve6.mockRejectedValue({ code: 'ENODATA' });
+            const adapter = new UniversalAIAdapter({ apiKey: 'k', provider: 'openai', baseUrl: 'https://evil.example.com' });
+            await expect(adapter.chat('s', 'u', [], 'req')).rejects.toThrow('SSRF blocked');
+        });
+
+        test('blocks private IPv6 addresses (::1)', async () => {
+            const dns = require('dns');
+            dns.promises.resolve4.mockRejectedValue({ code: 'ENODATA' });
+            dns.promises.resolve6.mockResolvedValue(['::1']);
+            const adapter = new UniversalAIAdapter({ apiKey: 'k', provider: 'openai', baseUrl: 'https://evil2.example.com' });
+            await expect(adapter.chat('s', 'u', [], 'req')).rejects.toThrow('SSRF blocked');
+        });
+
+        test('allows public IPv4 addresses', async () => {
+            const dns = require('dns');
+            dns.promises.resolve4.mockResolvedValue(['93.184.216.34']);
+            dns.promises.resolve6.mockRejectedValue({ code: 'ENODATA' });
+            const adapter = new UniversalAIAdapter({ apiKey: 'k', provider: 'openai', baseUrl: 'https://safe.example.com' });
+            global.fetch.mockResolvedValue({
+                ok: true,
+                json: async () => ({ choices: [{ message: { content: '{}' } }] })
+            });
+            await expect(adapter.chat('s', 'u', [], 'req')).resolves.toBe('{}');
         });
     });
 
@@ -93,8 +138,14 @@ describe('UniversalAIAdapter', () => {
             await expect(adapter.chat('s', 'u', [], 'req')).rejects.toThrow('No extraction returned');
         });
 
+        test('ollama: rejects localhost baseUrl (SSRF protection)', () => {
+            expect(() => new UniversalAIAdapter({ apiKey: 'k', provider: 'ollama', baseUrl: 'http://localhost:11434' }))
+                .toThrow('Invalid BYOK Base URL');
+        });
+
         test('ollama: strips response_format and sets stream:false', async () => {
-            const adapter = new UniversalAIAdapter({ apiKey: 'k', provider: 'ollama', baseUrl: 'http://localhost:11434' });
+            // Use a non-blocked HTTPS URL for the behavioral test
+            const adapter = new UniversalAIAdapter({ apiKey: 'k', provider: 'ollama', baseUrl: 'https://my-ollama.example.com' });
             global.fetch.mockResolvedValue({
                 ok: true,
                 json: async () => ({ choices: [{ message: { content: '{}' } }] })

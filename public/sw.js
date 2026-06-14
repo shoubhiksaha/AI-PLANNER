@@ -1,4 +1,4 @@
-// Cache Buster v4
+// Cache Buster v6
 importScripts('./sw-constants.js');
 const { CACHE_NAME, ASSETS_TO_CACHE } = self.SW_CONSTANTS;
 
@@ -6,7 +6,14 @@ self.addEventListener('install', (event) => {
     self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(ASSETS_TO_CACHE);
+            return Promise.all(
+                ASSETS_TO_CACHE.map(url => {
+                    return fetch(url, { cache: 'no-store' }).then(response => {
+                        if (!response.ok) throw new TypeError('Bad response for ' + url);
+                        return cache.put(url, response);
+                    });
+                })
+            );
         })
     );
 });
@@ -14,26 +21,33 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
     const path = url.pathname;
-    // Use network-first for core scripts + app shell to reduce stale-client UI bugs
-    const isAppScript = path.endsWith('/app.js') || path.endsWith('/app-helpers.js');
-    const isAppShell = path === '/' || path.endsWith('/index.html');
+
+    // Only handle same-origin requests
+    if (url.origin !== self.location.origin) return;
+
+    // Network-first for core scripts + app shell
+    const isAppScript = path.endsWith('/app.js') || path.endsWith('/app-helpers.js') || path.endsWith('/sw-register.js');
+    const isAppShell = path === '/' || path.endsWith('.html');
 
     if (isAppScript || isAppShell) {
         event.respondWith(
             caches.open(CACHE_NAME).then((cache) => {
-                return fetch(event.request)
+                // { cache: 'no-store' } ensures we bypass the browser HTTP cache
+                // and always hit the origin server for fresh content.
+                return fetch(event.request, { cache: 'no-store' })
                     .then((networkResponse) => {
-                        // Keep a local fallback copy for offline mode
                         cache.put(event.request, networkResponse.clone());
                         return networkResponse;
                     })
-                    .catch(() => cache.match(event.request).then((cachedResponse) => {
-                        return cachedResponse || fetch(event.request);
-                    }));
+                    .catch(() => {
+                        // Offline fallback — ignoreSearch so app.js?v=16 matches cached /app.js
+                        return cache.match(event.request, { ignoreSearch: true })
+                            .then(r => r || caches.match(event.request));
+                    });
             })
         );
     } else {
-        // Default Cache-First strategy for static assets (HTML, styles.css, manifest, icons)
+        // Cache-first for other same-origin static assets
         event.respondWith(
             caches.match(event.request).then((response) => {
                 return response || fetch(event.request);

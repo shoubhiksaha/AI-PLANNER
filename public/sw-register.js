@@ -1,64 +1,46 @@
+// Service Worker Registration — Cache Buster v6
+//
+// Key design decisions:
+// 1. controllerchange listener is attached SYNCHRONOUSLY (before 'load')
+//    so we never miss an activation event.
+// 2. We only auto-reload when UPDATING from an old SW to a new one.
+//    On first install (no prior controller), the page already has fresh
+//    content from the network, so reloading would be wasteful/harmful.
+
 if ('serviceWorker' in navigator) {
+
+    // Snapshot: was there already a SW controlling this page?
+    const hadPriorController = !!navigator.serviceWorker.controller;
+
+    // 1. Reload listener — only when upgrading from a previous version
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hadPriorController && !refreshing) {
+            refreshing = true;
+            window.location.reload();
+        }
+    });
+
+    // 2. Register + auto-apply updates on load
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then(reg => {
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(reg => {
             console.log('SW registered');
-            
+
+            // If a waiting worker already exists (from a prior visit that left
+            // an unapplied update), tell it to take over right now.
+            if (reg.waiting) {
+                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+
             reg.addEventListener('updatefound', () => {
                 const newWorker = reg.installing;
                 newWorker.addEventListener('statechange', () => {
-                    if (newWorker.state === 'installed') {
-                        if (navigator.serviceWorker.controller) {
-                            // New update available
-                            showUpdateToast();
-                        }
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        // New version ready — activate immediately.
+                        newWorker.postMessage({ type: 'SKIP_WAITING' });
                     }
                 });
             });
-        }).catch(e => console.log('SW failed', e));
-
-        // Track when SW controls the page after a skipWaiting
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (!refreshing) {
-                refreshing = true;
-                window.location.reload();
-            }
-        });
+        }).catch(e => console.log('SW registration failed', e));
     });
-}
-
-function showUpdateToast() {
-    const toast = document.createElement('div');
-    toast.style.position = 'fixed';
-    toast.style.bottom = '20px';
-    toast.style.left = '50%';
-    toast.style.transform = 'translateX(-50%)';
-    toast.style.backgroundColor = '#2563eb'; // blue-600
-    toast.style.color = '#ffffff';
-    toast.style.padding = '12px 24px';
-    toast.style.borderRadius = '9999px';
-    toast.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-    toast.style.zIndex = '9999';
-    toast.style.display = 'flex';
-    toast.style.alignItems = 'center';
-    toast.style.gap = '12px';
-    toast.style.fontSize = '14px';
-    toast.style.fontWeight = '500';
-    toast.style.cursor = 'pointer';
-    toast.innerHTML = `
-        <span>A new version is available!</span>
-        <button style="background: white; color: #2563eb; border: none; padding: 4px 10px; border-radius: 999px; font-weight: bold; cursor: pointer;">Refresh</button>
-    `;
-    
-    toast.addEventListener('click', () => {
-        navigator.serviceWorker.getRegistration().then(reg => {
-            if (reg && reg.waiting) {
-                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-            } else {
-                window.location.reload();
-            }
-        });
-    });
-
-    document.body.appendChild(toast);
 }

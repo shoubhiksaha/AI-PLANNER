@@ -1,6 +1,7 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { logger } = require("firebase-functions/logger");
 const admin = require("firebase-admin");
+const crypto = require("crypto");
 // Import Extracted Services
 const { checkRateLimit } = require('./services/rateLimit');
 const { getPlannerDataFromImages } = require('./services/gemini');
@@ -48,24 +49,7 @@ const {
 } = require('./utils');
 // Crypto logic and Rate Limits have been extracted to services/
 
-async function resolveUserEmailFromGoogleToken(token) {
-    const { validateTokenFormat } = require("./utils");
-    if (!validateTokenFormat(token)) {
-        throw new Error("INVALID_TOKEN_FORMAT");
-    }
-
-    const { google } = require("googleapis");
-    const auth = new google.auth.OAuth2();
-    auth.setCredentials({ access_token: token });
-    const oauth2 = google.oauth2({ version: 'v2', auth });
-    const userInfo = await oauth2.userinfo.get();
-    const email = userInfo?.data?.email;
-
-    if (!email) {
-        throw new Error("TOKEN_USER_LOOKUP_FAILED");
-    }
-    return email.toLowerCase();
-}
+// Google token resolution removed in favor of Firebase ID tokens for authentication.
 
 function checkFeaturesAndCredits(userData, numImages, mode, hasBYOK = false) {
     const tier = userData.tier || 'free';
@@ -90,99 +74,225 @@ function checkFeaturesAndCredits(userData, numImages, mode, hasBYOK = false) {
     return { allowed: true };
 }
 
+/** Calendar-day delta between two YYYY-MM-DD strings (local-date math, DST-safe). */
+function calendarDayDiff(fromDateStr, toDateStr) {
+    const fromParts = fromDateStr.split('-').map(Number);
+    const toParts = toDateStr.split('-').map(Number);
+    const fromDate = new Date(fromParts[0], fromParts[1] - 1, fromParts[2]);
+    const toDate = new Date(toParts[0], toParts[1] - 1, toParts[2]);
+    return Math.round((toDate - fromDate) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Whether tier credits should be replenished. Uses a rolling 30-day window from
+ * lastTierCreditRenewalAt so a Jan-31 payment + Feb-1 sync cannot double-grant.
+ * Legacy YYYY-MM subscriptionRenewalDate is honoured only until migrated.
+ */
+function needsTierCreditRenewal(rawData, todayStr) {
+    const currentMonthStr = todayStr.slice(0, 7);
+    const lastRenewalAt = rawData.lastTierCreditRenewalAt || null;
+
+    if (lastRenewalAt && lastRenewalAt.length >= 10) {
+        return calendarDayDiff(lastRenewalAt, todayStr) >= 30;
+    }
+
+    const legacyMonth = rawData.subscriptionRenewalDate || null;
+    if (legacyMonth && legacyMonth.length === 7) {
+        return legacyMonth !== currentMonthStr;
+    }
+
+    return true;
+}
+
+function stampTierCreditRenewal(rawData, todayStr, updateObj) {
+    rawData.lastTierCreditRenewalAt = todayStr;
+    rawData.subscriptionRenewalDate = todayStr.slice(0, 7);
+    updateObj.lastTierCreditRenewalAt = todayStr;
+    updateObj.subscriptionRenewalDate = todayStr.slice(0, 7);
+}
+
 async function applyGamificationMilestones(userRef) {
-    try {
-        return await admin.firestore().runTransaction(async (t) => {
-            const snap = await t.get(userRef);
-            if (!snap.exists) return null;
-            const userData = snap.data();
+    return await admin.firestore().runTransaction(async (t) => {
+        const snap = await t.get(userRef);
+        if (!snap.exists) return null;
+        const userData = snap.data();
 
-            let currentStreak = userData.currentStreak || 0;
-            let highestStreak = userData.highestStreak || 0;
-            let streakFreezes = userData.streakFreezes || 0;
-            let dailySyncCount = userData.dailySyncCount || 0;
-            let lastSyncDateStr = userData.lastSyncDate;
-            let boosterCredits = userData.boosterCredits || 0;
-            let lastAwardedStreak = userData.lastAwardedStreak || 0;
+        let currentStreak = userData.currentStreak || 0;
+        let highestStreak = userData.highestStreak || 0;
+        let streakFreezes = userData.streakFreezes || 0;
+        let dailySyncCount = userData.dailySyncCount || 0;
+        let lastSyncDateStr = userData.lastSyncDate;
+        let boosterCredits = userData.boosterCredits || 0;
+        let lastAwardedStreak = userData.lastAwardedStreak || 0;
+        const timeZone = userData.timeZone || 'Asia/Kolkata';
 
-            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-            let diffDays = 0;
-            let usedFreeze = false;
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone });
+        let diffDays = 0;
+        let usedFreeze = false;
 
-            if (!lastSyncDateStr) {
-                diffDays = 1;
-                currentStreak = 1;
+        if (!lastSyncDateStr) {
+            diffDays = 1;
+            currentStreak = 1;
+            dailySyncCount = 1;
+        } else {
+            const todayParts = todayStr.split('-').map(Number);
+            const lastParts = lastSyncDateStr.split('-').map(Number);
+            const todayDate = new Date(todayParts[0], todayParts[1]-1, todayParts[2]);
+            const lastDate = new Date(lastParts[0], lastParts[1]-1, lastParts[2]);
+            diffDays = Math.round((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+
+            if (diffDays <= 0) {
+                // Same calendar day, or a non-positive delta caused by clock skew,
+                // DST, or a timezone change where lastSyncDate is "ahead" of today.
+                // Treat as an extra sync today: never advance the streak or mint freezes.
+                dailySyncCount += 1;
+            } else if (diffDays === 1) {
+                currentStreak += 1;
                 dailySyncCount = 1;
             } else {
-                const todayParts = todayStr.split('-').map(Number);
-                const lastParts = lastSyncDateStr.split('-').map(Number);
-                const todayDate = new Date(todayParts[0], todayParts[1]-1, todayParts[2]);
-                const lastDate = new Date(lastParts[0], lastParts[1]-1, lastParts[2]);
-                diffDays = Math.round((todayDate - lastDate) / (1000 * 60 * 60 * 24));
-
-                if (diffDays === 0) {
-                    dailySyncCount += 1;
-                } else if (diffDays === 1) {
+                let daysMissed = diffDays - 1;
+                if (streakFreezes >= daysMissed) {
+                    streakFreezes -= daysMissed;
                     currentStreak += 1;
-                    dailySyncCount = 1;
+                    usedFreeze = true;
                 } else {
-                    let daysMissed = diffDays - 1;
-                    if (streakFreezes >= daysMissed) {
-                        streakFreezes -= daysMissed;
-                        currentStreak += 1;
-                        usedFreeze = true;
-                    } else {
-                        currentStreak = 1;
-                    }
-                    dailySyncCount = 1;
+                    currentStreak = 1;
                 }
+                dailySyncCount = 1;
+            }
+        }
+
+        if (currentStreak > highestStreak) highestStreak = currentStreak;
+
+        let milestoneMsg = null;
+        if (diffDays > 0 && currentStreak > 0) {
+            if (currentStreak >= 90 && lastAwardedStreak < 90) {
+                milestoneMsg = `🎉 Incredible! 90-Day Streak. Awarded +50 Booster Credits & 3 Freezes!`;
+                streakFreezes += 3;
+                boosterCredits += 50;
+                lastAwardedStreak = 90;
+            } else if (currentStreak >= 30 && lastAwardedStreak < 30) {
+                milestoneMsg = `🔥 Amazing! 30-Day Streak. Awarded +20 Booster Credits & 1 Freeze!`;
+                streakFreezes += 1;
+                boosterCredits += 20;
+                lastAwardedStreak = 30;
+            } else if (currentStreak >= 7 && lastAwardedStreak < 7) {
+                milestoneMsg = `🌟 Great work! 7-Day Streak. Awarded +5 Booster Credits!`;
+                boosterCredits += 5;
+                lastAwardedStreak = 7;
+            } else if (usedFreeze) {
+                 milestoneMsg = `❄️ ${currentStreak}-Day Streak sustained using a Freeze!`;
             }
 
-            if (currentStreak > highestStreak) highestStreak = currentStreak;
-
-            let milestoneMsg = null;
-            if (diffDays > 0 && currentStreak > 0) {
-                if (currentStreak >= 90 && lastAwardedStreak < 90) {
-                    milestoneMsg = `🎉 Incredible! 90-Day Streak. Awarded +50 Booster Credits & 3 Freezes!`;
-                    streakFreezes += 3;
-                    boosterCredits += 50;
-                    lastAwardedStreak = 90;
-                } else if (currentStreak >= 30 && lastAwardedStreak < 30) {
-                    milestoneMsg = `🔥 Amazing! 30-Day Streak. Awarded +20 Booster Credits & 1 Freeze!`;
-                    streakFreezes += 1;
-                    boosterCredits += 20;
-                    lastAwardedStreak = 30;
-                } else if (currentStreak >= 7 && lastAwardedStreak < 7) {
-                    milestoneMsg = `🌟 Great work! 7-Day Streak. Awarded +5 Booster Credits!`;
-                    boosterCredits += 5;
-                    lastAwardedStreak = 7;
-                } else if (usedFreeze) {
-                     milestoneMsg = `❄️ ${currentStreak}-Day Streak sustained using a Freeze!`;
-                }
-
-                if (currentStreak === 1 && diffDays > 1) {
-                    lastAwardedStreak = 0;
-                }
+            if (currentStreak === 1 && diffDays > 1) {
+                lastAwardedStreak = 0;
             }
+        }
 
-            const updates = {
-                boosterCredits,
-                currentStreak,
-                highestStreak,
-                streakFreezes,
-                dailySyncCount,
-                lastSyncDate: todayStr,
-                lastAwardedStreak
-            };
+        const updates = {
+            boosterCredits,
+            currentStreak,
+            highestStreak,
+            streakFreezes,
+            dailySyncCount,
+            lastSyncDate: todayStr,
+            lastAwardedStreak
+        };
 
-            t.set(userRef, updates, { merge: true });
-            return milestoneMsg;
-        });
-    } catch (err) {
-        console.warn("Best-effort gamification milestone calculation failed:", err);
-        return null;
-    }
+        t.set(userRef, updates, { merge: true });
+        return milestoneMsg;
+    });
 }
+
+/**
+ * Runs streak/milestone logic after a sync. Skipped on partial failures (refunded
+ * syncs should not advance streak). Retries once on transient Firestore errors
+ * and surfaces a user-visible warning if all attempts fail.
+ */
+async function runGamificationAfterSync(userRef, { skip = false, requestId, authEmail, syncMode, imageCount = 1 } = {}) {
+    if (skip) return { milestoneMsg: null, streakWarning: null };
+
+    const maxAttempts = 2;
+    let lastErr = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            const milestoneMsg = await applyGamificationMilestones(userRef);
+            return { milestoneMsg, streakWarning: null };
+        } catch (err) {
+            lastErr = err;
+            logger.warn("Gamification attempt failed", {
+                attempt,
+                error: err.message,
+                requestId,
+                authEmail,
+                syncMode
+            });
+        }
+    }
+
+    const warning = "⚠️ Streak could not be updated this sync — it will resume counting on your next successful sync.";
+    try {
+        await logSyncHistory(userRef, syncMode || 'unknown', imageCount, 'warning',
+            `Streak update failed after ${maxAttempts} attempts: ${lastErr?.message || 'unknown error'}`);
+    } catch (logErr) {
+        logger.error("Failed to log streak warning to syncHistory", { error: logErr.message, requestId, authEmail });
+    }
+    logger.error("Gamification failed after retries", { error: lastErr?.message, requestId, authEmail, syncMode });
+    return { milestoneMsg: null, streakWarning: warning };
+}
+
+function appendGamificationToMsg(msg, { milestoneMsg, streakWarning }) {
+    if (streakWarning) msg += `\n${streakWarning}`;
+    if (milestoneMsg) msg += `\n${milestoneMsg}`;
+    return msg;
+}
+
+// --- ENDPOINT: updateProfile ---
+// Moves frontend Firestore writes behind secure admin privileges
+exports.updateProfile = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    if (req.method !== 'POST') return res.status(405).send({ error: "Method not allowed" });
+    if (!isJsonRequest(req)) return res.status(415).send({ error: "Content-Type must be application/json" });
+
+    const { idToken, updates } = req.body || {};
+    if (!idToken || typeof updates !== 'object') return res.status(400).send({ error: "Invalid payload" });
+
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userEmail = decodedToken.email.toLowerCase();
+        
+        const rl = await checkRateLimit(userEmail, 'updateProfile', RATE_LIMIT_DEFAULT);
+        if (!rl.allowed) {
+            res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
+            return res.status(429).send({ error: "Too many requests" });
+        }
+
+        const allowedUpdates = {};
+        if (typeof updates.setupComplete === 'boolean') allowedUpdates.setupComplete = updates.setupComplete;
+        if (typeof updates.displayName === 'string') allowedUpdates.displayName = updates.displayName.trim();
+        if (typeof updates.expoPushToken === 'string') allowedUpdates.expoPushToken = updates.expoPushToken.trim();
+        if (typeof updates.dedupCalendar === 'boolean') allowedUpdates.dedupCalendar = updates.dedupCalendar;
+        if (typeof updates.dedupTasks === 'boolean') allowedUpdates.dedupTasks = updates.dedupTasks;
+        if (typeof updates.timeZone === 'string') {
+            try {
+                if (Intl.supportedValuesOf('timeZone').includes(updates.timeZone)) allowedUpdates.timeZone = updates.timeZone;
+            } catch (e) { /* Intl tz list unavailable; skip persisting */ }
+        }
+
+        if (Object.keys(allowedUpdates).length > 0) {
+            await admin.firestore().collection('users').doc(userEmail).set(allowedUpdates, { merge: true });
+            logger.info(`Updated profile fields for ${userEmail}`);
+        }
+        
+        return res.status(200).send({ success: true });
+    } catch (err) {
+        logger.error("Update profile error:", err);
+        return res.status(500).send({ error: "Failed to update profile." });
+    }
+});
 
 // --- SETUP ENDPOINT: setupNotion ---
 exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2] }, async (req, res) => {
@@ -198,16 +308,17 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
     }
 
     const body = req.body || {};
-    const token = body.token;
+    const idToken = body.idToken;
     const notionKey = typeof body.notionKey === 'string' ? body.notionKey.trim() : '';
     const notionDbId = normalizeNotionDbId(body.notionDbId);
 
-    if (!token || !isLikelyNotionKey(notionKey) || !notionDbId) {
+    if (!idToken || !isLikelyNotionKey(notionKey) || !notionDbId) {
         return res.status(400).send({ error: "Invalid setup payload" });
     }
 
     try {
-        const userEmail = await resolveUserEmailFromGoogleToken(token);
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userEmail = decodedToken.email.toLowerCase();
 
         const rl = await checkRateLimit(userEmail, 'setupNotion', RATE_LIMIT_DEFAULT);
         if (!rl.allowed) {
@@ -242,18 +353,20 @@ exports.setupBYOK = onRequest({ cors: false, memory: "256MiB" }, async (req, res
     }
 
     const body = req.body || {};
-    const token = body.token;
+    const idToken = body.idToken;
     const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
     const provider = body.provider || 'openai';
     const modelName = body.modelName || 'gpt-4o';
     const baseUrl = body.baseUrl;
+    const apiVersion = body.apiVersion;
 
-    if (!token || !apiKey) {
+    if (!idToken || !apiKey) {
         return res.status(400).send({ error: "Invalid setup payload" });
     }
 
     try {
-        const userEmail = await resolveUserEmailFromGoogleToken(token);
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userEmail = decodedToken.email.toLowerCase();
 
         const rl = await checkRateLimit(userEmail, 'setupBYOK', RATE_LIMIT_DEFAULT);
         if (!rl.allowed) {
@@ -270,6 +383,7 @@ exports.setupBYOK = onRequest({ cors: false, memory: "256MiB" }, async (req, res
             modelName
         };
         if (baseUrl) byokDataToSave.baseUrl = baseUrl;
+        if (apiVersion) byokDataToSave.apiVersion = apiVersion;
         await userRef.set({ byokKmsData: byokDataToSave }, { merge: true });
 
         logger.info(`Stored wrapped BYOK KMS Data for ${userEmail}`);
@@ -350,8 +464,9 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
                     syncId: doc.id,
                     timestamp: data.timestamp ? data.timestamp.toDate().toISOString() : null,
                     status: data.status,
-                    mode: data.mode,
-                    itemCount: data.itemCount || 0
+                    syncType: data.syncType,
+                    imageCount: data.imageCount || 0,
+                    message: data.message
                 };
             });
         }
@@ -400,25 +515,29 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
         const userRef = db.collection('users').doc(userEmail);
 
         const historySnap = await userRef.collection('syncHistory').get();
-        const batch = db.batch();
-        historySnap.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-
         const rateLimitSnap = await db.collection('rateLimits')
             .where(admin.firestore.FieldPath.documentId(), '>=', `${userEmail}_`)
             .where(admin.firestore.FieldPath.documentId(), '<', `${userEmail}_\uf8ff`)
             .get();
-        rateLimitSnap.forEach(doc => {
-            batch.delete(doc.ref);
-        });
 
-        batch.delete(userRef);
+        // Firestore limits batches to 500 writes. Chunk all references safely.
+        const allRefs = [
+            ...historySnap.docs.map(d => d.ref),
+            ...rateLimitSnap.docs.map(d => d.ref),
+            userRef
+        ];
+
+        const commitPromises = [];
+        for (let i = 0; i < allRefs.length; i += 500) {
+            const batch = db.batch();
+            allRefs.slice(i, i + 500).forEach(ref => batch.delete(ref));
+            commitPromises.push(batch.commit());
+        }
 
         // Execute Firestore deletion and Firebase Auth deletion concurrently.
         // Both must succeed for a complete GDPR Article 17 erasure.
         const [firestoreResult, authResult] = await Promise.allSettled([
-            batch.commit(),
+            Promise.all(commitPromises),
             admin.auth().deleteUser(uid)
         ]);
 
@@ -426,9 +545,7 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
             throw new Error(`Firestore deletion failed: ${firestoreResult.reason?.message}`);
         }
         if (authResult.status === 'rejected') {
-            // Auth deletion failure is logged but does not block the response —
-            // the user's data is gone; the auth record will be cleaned up on next sign-in attempt.
-            logger.error(`Firebase Auth deletion failed for uid ${uid}:`, { error: authResult.reason?.message, requestId, authEmail: userEmail });
+            throw new Error(`Firebase Auth deletion failed: ${authResult.reason?.message}`);
         }
 
         logger.info(`Account fully deleted for ${userEmail} (Firestore + Auth)`, { requestId });
@@ -474,10 +591,11 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         return res.status(413).send({ error: "Payload too large. Max 100MB allowed." });
     }
 
-    const token = body.token;
-    if (!token) {
+    const idToken = body.idToken;
+    const googleToken = body.googleToken;
+    if (!idToken || !googleToken) {
         const durationMs = Date.now() - startTimeMs;
-        logger.warn("Missing auth token", { requestId, durationMs, status: 401 });
+        logger.warn("Missing auth tokens", { requestId, durationMs, status: 401 });
         return res.status(401).send({ error: "Unauthorized" });
     }
 
@@ -492,9 +610,15 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         timeZone = 'Asia/Kolkata';
     }
     let parsedImages = [];
+    let tierCreditsDeducted = 0;
+    let boosterCreditsDeducted = 0;
+    let syncSucceeded = false;
+    let partialFailureRefund = false;
+    let skipCreditRefund = false;
 
     try {
-        email = await resolveUserEmailFromGoogleToken(token);
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        email = decodedToken.email.toLowerCase();
         mode = sanitizeSyncType(body.syncType);
 
         // Support backward compatibility for a single image, but standardize on array
@@ -524,7 +648,16 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
         const { google } = require("googleapis"); // Lazy Load
         const auth = new google.auth.OAuth2();
-        auth.setCredentials({ access_token: token });
+        auth.setCredentials({ access_token: googleToken });
+
+        // Security Check: Ensure googleToken matches Firebase identity
+        const oauth2 = google.oauth2({ version: 'v2', auth });
+        const userInfo = await oauth2.userinfo.get();
+        if (userInfo?.data?.email?.toLowerCase() !== email) {
+            const durationMs = Date.now() - startTimeMs;
+            logger.warn("Token identity mismatch", { requestId, firebaseEmail: email, googleEmail: userInfo?.data?.email, durationMs, status: 403 });
+            return res.status(403).send({ error: "Token identity mismatch" });
+        }
 
         // Load & Initialize User Config from Firestore
         const db = admin.firestore();
@@ -538,6 +671,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         const statelessProvider = req.headers['x-byok-provider'];
         const statelessModel = req.headers['x-byok-model'];
         const statelessBaseUrl = req.headers['x-byok-baseurl'];
+        const statelessApiVersion = req.headers['x-byok-apiversion'];
 
         if (statelessKey) {
             hasBYOK = true;
@@ -554,8 +688,14 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                     hasBYOK = true;
                 }
 
-                // Emulate initializeGamificationProfile
-                const currentMonthStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7);
+                if (!body.timeZone && rawData.timeZone) {
+                    timeZone = rawData.timeZone;
+                }
+
+                // Emulate initializeGamificationProfile.
+                // Use the request's resolved timezone (validated above) so the monthly
+                // renewal boundary matches the user's local month, not a hardcoded default.
+                const todayStr = new Date().toLocaleDateString('en-CA', { timeZone });
                 const defaults = {
                     tier: 'free', tierCredits: 15, boosterCredits: 0,
                     currentStreak: 0, highestStreak: 0, streakFreezes: 0,
@@ -571,15 +711,43 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                     }
                 }
 
-                // Monthly Renewal Logic
-                const storedMonth = rawData.subscriptionRenewalDate || null;
-                if (storedMonth !== currentMonthStr) {
+                // Persist the user's resolved timezone so streak + monthly-renewal day
+                // boundaries use their local time on this and future requests (the separate
+                // gamification transaction reads userData.timeZone and would otherwise
+                // always fall back to the hardcoded default).
+                if (timeZone && rawData.timeZone !== timeZone) {
+                    rawData.timeZone = timeZone;
+                    updateObj.timeZone = timeZone;
+                    needsUpdate = true;
+                }
+
+                // Check Subscription Expiry BEFORE renewing credits
+                if (rawData.tier !== 'free' && rawData.subscriptionExpiryDate) {
+                    const expiry = new Date(rawData.subscriptionExpiryDate);
+                    const now = new Date();
+                    if (expiry < now) {
+                        // Subscription expired! Downgrade to free.
+                        rawData.tier = 'free';
+                        rawData.isPremium = false;
+                        rawData.tierCredits = 15;
+                        updateObj.tier = 'free';
+                        updateObj.isPremium = false;
+                        updateObj.tierCredits = 15;
+                        needsUpdate = true;
+                    }
+                }
+
+                // Monthly Renewal Logic — rolling 30-day window (not calendar month)
+                if (needsTierCreditRenewal(rawData, todayStr)) {
                     const tier = rawData.tier || 'free';
                     let newCredits = tier === 'pro' ? 250 : (tier === 'standard' ? 100 : 15);
                     rawData.tierCredits = newCredits;
-                    rawData.subscriptionRenewalDate = currentMonthStr;
+                    stampTierCreditRenewal(rawData, todayStr, updateObj);
                     updateObj.tierCredits = newCredits;
-                    updateObj.subscriptionRenewalDate = currentMonthStr;
+                    needsUpdate = true;
+                } else if (!rawData.lastTierCreditRenewalAt && rawData.subscriptionRenewalDate) {
+                    // Migrate legacy YYYY-MM stamp to rolling date without re-granting.
+                    stampTierCreditRenewal(rawData, todayStr, updateObj);
                     needsUpdate = true;
                 }
 
@@ -596,10 +764,13 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                     
                     if (tierCredits >= creditsToDeduct) {
                         tierCredits -= creditsToDeduct;
+                        tierCreditsDeducted = creditsToDeduct;
                     } else {
+                        tierCreditsDeducted = tierCredits;
                         creditsToDeduct -= tierCredits;
                         tierCredits = 0;
                         boosterCredits -= creditsToDeduct;
+                        boosterCreditsDeducted = creditsToDeduct;
                     }
                     updateObj.tierCredits = tierCredits;
                     updateObj.boosterCredits = boosterCredits;
@@ -629,7 +800,8 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 provider: statelessProvider || 'openai',
                 modelName: statelessModel || 'gpt-4o'
             };
-            if (statelessBaseUrl) byokConfig.baseUrl = statelessBaseUrl;
+            if (statelessBaseUrl) byokConfig.customUrl = statelessBaseUrl;
+            if (statelessApiVersion) byokConfig.apiVersion = statelessApiVersion;
             logger.info("Traffic Cop: Routing via Stateless X-BYOK-Token header", { requestId, authEmail: email });
         } else if (userData.byokKmsData) {
             try {
@@ -645,7 +817,8 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                     provider: userData.byokKmsData.provider || 'openai',
                     modelName: userData.byokKmsData.modelName || 'gpt-4o'
                 };
-                if (userData.byokKmsData.baseUrl) byokConfig.baseUrl = userData.byokKmsData.baseUrl;
+                if (userData.byokKmsData.baseUrl) byokConfig.customUrl = userData.byokKmsData.baseUrl;
+                if (userData.byokKmsData.apiVersion) byokConfig.apiVersion = userData.byokKmsData.apiVersion;
             } catch (err) {
                 logger.error("KMS Decryption error", { error: err.message, requestId, authEmail: email });
                 throw new Error(JSON.stringify({ code: 500, error: "Failed to decrypt BYOK configuration." }));
@@ -663,6 +836,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             if (!userData.notionKey || !userData.notionDbId) {
                 const durationMs = Date.now() - startTimeMs;
                 logger.warn("Notion not setup for journal sync", { requestId, authEmail: email, syncMode: mode, durationMs, status: 400 });
+                skipCreditRefund = true;
                 return res.status(400).send({ error: "Notion not setup. Please provide keys." });
             }
 
@@ -672,6 +846,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             if (!decryptedNotionKey) {
                 const durationMs = Date.now() - startTimeMs;
                 logger.error("Failed to decrypt Notion key for journal sync", { requestId, authEmail: email, syncMode: mode, durationMs, status: 401 });
+                skipCreditRefund = true;
                 return res.status(401).send({ error: "Invalid or corrupt Notion settings. Please re-setup Notion." });
             }
             const notion = new Client({ auth: decryptedNotionKey });
@@ -716,8 +891,9 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 children: childrenBlocks
             });
             msg = `Journal synced to Notion! Date: ${journalDate}`;
-            const milestoneMsg = await applyGamificationMilestones(userRef);
-            if (milestoneMsg) msg += `\n${milestoneMsg}`;
+            msg = appendGamificationToMsg(msg, await runGamificationAfterSync(userRef, {
+                requestId, authEmail: email, syncMode: mode, imageCount: parsedImages.length
+            }));
             await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
             await incrementUsageCounters(userRef, parsedImages.length);
             const durationMs = Date.now() - startTimeMs;
@@ -729,6 +905,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 status: 200,
                 type: 'latency'
             });
+            syncSucceeded = true;
             return res.status(200).send({ text: msg });
         }
 
@@ -741,25 +918,36 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
+                skipCreditRefund = true;
                 return res.status(400).send({ error: plannerData.error });
             }
 
             logger.info("Starting parallel Morning sync...", { requestId, authEmail: email });
 
             // Parallel: Add Events to Calendar AND Add Tasks to Google Tasks.
-            const [eventResults, taskCount] = await Promise.all([
-                syncCalendarEvents(calendar, plannerData, timeZone),
-                syncGoogleTasks(tasks, plannerData)
+            const dedupCalendar = userData.dedupCalendar !== false; // default: ON
+            const dedupTasks = userData.dedupTasks !== false;       // default: ON
+            const [eventResults, taskResults] = await Promise.all([
+                syncCalendarEvents(calendar, plannerData, timeZone, dedupCalendar),
+                syncGoogleTasks(tasks, plannerData, dedupTasks)
             ]);
 
-            msg = `Morning Sync Complete! Created ${eventResults.events} events, ${eventResults.reminders} reminders, and ${taskCount} tasks.`;
+            msg = `Morning Sync Complete! Created ${eventResults.events} events, ${eventResults.reminders} reminders, and ${taskResults.tasks} tasks.`;
+            if (eventResults.skippedDuplicates > 0 || taskResults.skippedDuplicates > 0) {
+                let skipDetails = [];
+                if (eventResults.skippedDuplicates > 0) skipDetails.push(`${eventResults.skippedDuplicates} events`);
+                if (taskResults.skippedDuplicates > 0) skipDetails.push(`${taskResults.skippedDuplicates} tasks`);
+                msg += ` (Skipped ${skipDetails.join(" and ")} that already existed).`;
+            }
             logger.info(msg, { requestId, authEmail: email });
 
-            const milestoneMsg = await applyGamificationMilestones(userRef);
-            if (milestoneMsg) msg += `\n${milestoneMsg}`;
+            msg = appendGamificationToMsg(msg, await runGamificationAfterSync(userRef, {
+                requestId, authEmail: email, syncMode: mode, imageCount: parsedImages.length
+            }));
 
             await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
             await incrementUsageCounters(userRef, parsedImages.length);
+            syncSucceeded = true;
             return res.status(200).send({ text: msg });
 
         } else if (mode === 'evening') {
@@ -768,6 +956,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             plannerData = await getPlannerDataFromImages(parsedImages, 'evening', byokConfig);
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
+                skipCreditRefund = true;
                 return res.status(400).send({ error: plannerData.error });
             }
 
@@ -830,8 +1019,10 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                             }
                             return syncBrainDumpToNotion(plannerData, decryptedNotionKey, userData.notionDbId, fileId);
                         } catch (err) {
+                            // Re-throw so the orchestrator can detect the failed branch,
+                            // warn the user, and refund the credit (vs. silently charging).
                             logger.error("Notion sync failed:", { error: err.message, requestId, authEmail: email });
-                            return false;
+                            throw err;
                         }
                     };
                     promises.push(brainDumpPromise());
@@ -860,13 +1051,27 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             if (addedHealth > 0) successMessages.push(`Logged Health & Wellness.`);
             if (notionSynced) successMessages.push(`Saved Visual Brain Dump to Notion.`);
 
+            // Detect genuinely failed branches (rejections, not empty/duplicate 0-returns)
+            // so we can tell the user and refund rather than silently charging a credit
+            // for an incomplete sync.
+            const branchNames = ['Expenses', 'Health', 'Notion'];
+            const failedBranches = results
+                .map((r, i) => (r.status === 'rejected' ? branchNames[i] : null))
+                .filter(Boolean);
+            if (failedBranches.length > 0) {
+                partialFailureRefund = true;
+                successMessages.push(`⚠️ Could not sync: ${failedBranches.join(', ')}. Your credit was refunded — please try again.`);
+            }
+
             if (successMessages.length === 0) msg = "Night Sync output: No items found to sync.";
             else msg = "Night Sync Complete: " + successMessages.join(" ");
 
-            const milestoneMsg = await applyGamificationMilestones(userRef);
-            if (milestoneMsg) msg += `\n${milestoneMsg}`;
+            msg = appendGamificationToMsg(msg, await runGamificationAfterSync(userRef, {
+                skip: partialFailureRefund,
+                requestId, authEmail: email, syncMode: mode, imageCount: parsedImages.length
+            }));
 
-            await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg);
+            await logSyncHistory(userRef, mode, parsedImages.length, partialFailureRefund ? 'partial' : 'success', msg);
             await incrementUsageCounters(userRef, parsedImages.length);
         } else {
             await logSyncHistory(userRef, mode, parsedImages.length, 'error', `Invalid syncType: ${mode}`);
@@ -874,18 +1079,25 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         }
 
         logger.info(msg, { requestId, authEmail: email });
+        syncSucceeded = true;
         res.status(200).send({ text: msg });
 
     } catch (error) {
         const errMsg = error?.message || String(error || "Unknown error");
         logger.error("FATAL ERROR:", { error: errMsg, requestId, authEmail: email });
 
+        // Client-caused AI / validation failures: charge the credit (no refund).
+        if (/API_ERROR_4\d\d:/.test(errMsg) || errMsg === 'INVALID_IMAGE_PAYLOAD') {
+            skipCreditRefund = true;
+        }
+
         // Try to log the failure if we have user context
         try {
             const body = req.body || {};
-            const token = body.token;
-            if (token) {
-                const userEmail = await resolveUserEmailFromGoogleToken(token);
+            const idToken = body.idToken;
+            if (idToken) {
+                const decodedToken = await admin.auth().verifyIdToken(idToken);
+                const userEmail = decodedToken.email.toLowerCase();
                 if (userEmail) {
                     const db = admin.firestore();
                     const userRef = db.collection('users').doc(userEmail);
@@ -899,8 +1111,32 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         }
 
         // Security: Don't leak internals to client
-        const safeMessage = errMsg.includes("RATE_LIMIT") ? "AI Service Busy. Please try again." : "Internal Server Error";
-        res.status(500).send({ error: safeMessage });
+        let safeMessage = "Internal Server Error";
+        let statusCode = 500;
+        if (errMsg.includes("RATE_LIMIT")) {
+            safeMessage = "AI Service Busy. Please try again.";
+        } else if (/API_ERROR_4\d\d:/.test(errMsg)) {
+            safeMessage = "Could not process image. Please check your upload and try again.";
+            statusCode = 400;
+        }
+        res.status(statusCode).send({ error: safeMessage });
+    } finally {
+        // Refund on a hard failure (syncSucceeded never set) OR a partial failure where
+        // one or more evening branches errored after the credit was already deducted.
+        // Never refund client-caused errors (bad image, missing setup, AI validation).
+        if (!skipCreditRefund && (!syncSucceeded || partialFailureRefund) && (tierCreditsDeducted > 0 || boosterCreditsDeducted > 0) && email) {
+            try {
+                const db = admin.firestore();
+                const userRef = db.collection('users').doc(email);
+                const updates = {};
+                if (tierCreditsDeducted > 0) updates.tierCredits = admin.firestore.FieldValue.increment(tierCreditsDeducted);
+                if (boosterCreditsDeducted > 0) updates.boosterCredits = admin.firestore.FieldValue.increment(boosterCreditsDeducted);
+                await userRef.update(updates);
+                logger.info(`Refunded tier:${tierCreditsDeducted} booster:${boosterCreditsDeducted} to ${email} due to sync failure.`, { requestId, authEmail: email });
+            } catch (refundErr) {
+                logger.error("Failed to refund credits:", { error: refundErr.message, requestId, authEmail: email });
+            }
+        }
     }
 });
 
@@ -947,11 +1183,31 @@ exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req
 
     const { message, stack, url, line, column, userEmail } = req.body || {};
 
+    if (message && message.length > 1000) return res.status(400).send({ error: "Message too large" });
+    if (stack && stack.length > 5000) return res.status(400).send({ error: "Stack too large" });
+
+    try {
+        const clientIp = req.ip || req.headers['x-forwarded-for'] || 'anonymous';
+        const rl = await checkRateLimit(`ip_${clientIp}`, 'logClientError', 5); // Max 5 errors per window
+        if (!rl.allowed) {
+            return res.status(429).send({ error: "Rate limit exceeded" });
+        }
+    } catch (e) {
+        console.error("RATE LIMIT ERR", e);
+        // Fail CLOSED: if rate limiting infrastructure is down, reject the request
+        return res.status(503).send({ error: "Service temporarily unavailable" });
+    }
+
+    // Sanitize client-supplied fields before logging to prevent log injection
+    const safeEmail = typeof userEmail === 'string' ? userEmail.replace(/[\n\r\t]/g, '').slice(0, 100) : 'Anonymous';
+    const safeMessage = typeof message === 'string' ? message.replace(/[\n\r]/g, ' ') : 'Unknown Error';
+    const safeUrl = typeof url === 'string' ? url.replace(/[\n\r]/g, '').slice(0, 500) : 'Unknown URL';
+
     // Construct a rich error string for GCP
     const errorBody = [
-        `Frontend Error: ${message || 'Unknown Error'}`,
-        `User: ${userEmail || 'Anonymous'}`,
-        `URL: ${url || 'Unknown URL'}${(line && column) ? `:${line}:${column}` : ''}`,
+        `Frontend Error: ${safeMessage}`,
+        `User: ${safeEmail}`,
+        `URL: ${safeUrl}${(line && column) ? `:${line}:${column}` : ''}`,
         `\nStack Trace:\n${stack || 'No stack trace provided'}`
     ].join('\n');
 
@@ -966,4 +1222,211 @@ exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req
 
 if (process.env.NODE_ENV === 'test') {
     exports.applyGamificationMilestones = applyGamificationMilestones;
+    exports.runGamificationAfterSync = runGamificationAfterSync;
+    exports.needsTierCreditRenewal = needsTierCreditRenewal;
+    exports.calendarDayDiff = calendarDayDiff;
 }
+
+// --- CASHFREE PAYMENT INTEGRATION ---
+exports.createCashfreeOrder = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    if (req.method !== 'POST') return res.status(405).send({ error: "Method not allowed" });
+    if (!isJsonRequest(req)) return res.status(415).send({ error: "Content-Type must be application/json" });
+
+    const { idToken, price, phone } = req.body || {};
+    if (!idToken || !price) return res.status(400).send({ error: "Missing required fields" });
+
+    const VALID_PRICES = new Set([19, 29, 49, 79, 129, 290, 490]);
+    if (!VALID_PRICES.has(Number(price))) {
+        return res.status(400).send({ error: 'Invalid price' });
+    }
+
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userEmail = decodedToken.email.toLowerCase();
+        
+        const rl = await checkRateLimit(userEmail, 'createCashfreeOrder', RATE_LIMIT_DEFAULT);
+        if (!rl.allowed) {
+            res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
+            return res.status(429).send({ error: "Too many requests" });
+        }
+
+        const userId = decodedToken.uid;
+        const orderId = `order_${Date.now()}_${userId}`;
+        
+        // Notify URL must be publicly accessible by Cashfree
+        const notifyUrl = 'https://ai-planner-project-467800.web.app/cashfreeWebhook';
+
+        const response = await fetch('https://sandbox.cashfree.com/pg/orders', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-client-id': process.env.CASHFREE_APP_ID,
+                'x-client-secret': process.env.CASHFREE_SECRET_KEY,
+                'x-api-version': '2023-08-01'
+            },
+            body: JSON.stringify({
+                order_id: orderId,
+                order_amount: price,
+                order_currency: "INR",
+                customer_details: {
+                    customer_id: userId,
+                    customer_email: userEmail,
+                    customer_phone: phone || "9999999999" // Use user-provided phone
+                },
+                order_meta: {
+                    notify_url: notifyUrl
+                }
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            logger.error("Cashfree Order Creation Failed", data);
+            return res.status(500).send({ error: "Payment Gateway failure" });
+        }
+
+        // Store pending order in firestore
+        await admin.firestore().collection('cashfree_orders').doc(orderId).set({
+            userId,
+            userEmail,
+            price,
+            status: 'PENDING',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            payment_session_id: data.payment_session_id
+        });
+
+        res.status(200).send({ payment_session_id: data.payment_session_id });
+    } catch (error) {
+        logger.error("Cashfree Route Error:", error);
+        res.status(500).send({ error: "Gateway failure" });
+    }
+});
+
+exports.cashfreeWebhook = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+    // Webhooks are server-to-server POSTs
+    if (req.method !== 'POST') return res.status(405).send({ error: "Method not allowed" });
+    
+    try {
+        const signature = req.headers['x-webhook-signature'] || req.headers['x-cashfree-signature'];
+        const timestamp = req.headers['x-webhook-timestamp'];
+        const secretKey = process.env.CASHFREE_SECRET_KEY;
+        // Fail closed: without a configured secret we cannot verify authenticity,
+        // so never process the webhook (prevents accepting forged empty-key signatures).
+        if (!secretKey) {
+            logger.error("Cashfree webhook secret not configured; rejecting webhook.");
+            return res.status(500).send("Webhook not configured");
+        }
+        const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body);
+        const expectedSig = crypto.createHmac('sha256', secretKey)
+            .update((timestamp || '') + rawBody).digest('base64');
+        if (!signature || signature !== expectedSig) {
+            return res.status(401).send('Invalid webhook signature');
+        }
+
+        const payload = req.body;
+        if (!payload || !payload.data || !payload.data.order) {
+            return res.status(400).send("Invalid payload");
+        }
+
+        const orderId = payload.data.order.order_id;
+        const txStatus = payload.data.payment ? payload.data.payment.payment_status : '';
+        
+        const orderRef = admin.firestore().collection('cashfree_orders').doc(orderId);
+        
+        await admin.firestore().runTransaction(async (t) => {
+            const orderSnap = await t.get(orderRef);
+            if (!orderSnap.exists) {
+                throw new Error("Order not found");
+            }
+
+            const orderData = orderSnap.data();
+            if (orderData.status === 'SUCCESS') {
+                return; // Already processed
+            }
+
+            if (txStatus === 'SUCCESS') {
+                const p = orderData.price;
+                let updates = {};
+                let logMsg = "";
+                
+                const userRef = admin.firestore().collection('users').doc(orderData.userEmail);
+                const userSnap = await t.get(userRef);
+                const userData = userSnap.exists ? userSnap.data() : {};
+                
+                let currentExpiry = userData.subscriptionExpiryDate ? new Date(userData.subscriptionExpiryDate) : new Date();
+                if (currentExpiry < new Date()) {
+                    currentExpiry = new Date();
+                }
+
+                let daysToAdd = 0;
+                if ([29, 49].includes(p)) daysToAdd = 30;
+                else if ([79, 129].includes(p)) daysToAdd = 90;
+                else if ([290, 490].includes(p)) daysToAdd = 365;
+
+                if (daysToAdd > 0) {
+                    currentExpiry.setDate(currentExpiry.getDate() + daysToAdd);
+                }
+                const expiryISO = currentExpiry.toISOString();
+                const paymentRenewalStamp = new Date().toISOString().slice(0, 10);
+                
+                if (p === 19) {
+                    updates = { boosterCredits: admin.firestore.FieldValue.increment(50) };
+                    logMsg = `Cashfree payment success. Granted 50 Booster Credits to ${orderData.userEmail}`;
+                } else if ([29, 79, 290].includes(p)) {
+                    updates = { 
+                        tier: 'standard', 
+                        tierCredits: 100, 
+                        isPremium: true,
+                        subscriptionExpiryDate: expiryISO,
+                        lastTierCreditRenewalAt: paymentRenewalStamp,
+                        subscriptionRenewalDate: paymentRenewalStamp.slice(0, 7)
+                    };
+                    logMsg = `Cashfree payment success. Granted Standard to ${orderData.userEmail}`;
+                } else if ([49, 129, 490].includes(p)) {
+                    updates = { 
+                        tier: 'pro', 
+                        tierCredits: 250, 
+                        isPremium: true,
+                        subscriptionExpiryDate: expiryISO,
+                        lastTierCreditRenewalAt: paymentRenewalStamp,
+                        subscriptionRenewalDate: paymentRenewalStamp.slice(0, 7)
+                    };
+                    logMsg = `Cashfree payment success. Granted Pro to ${orderData.userEmail}`;
+                } else {
+                     logMsg = `Cashfree payment success but unknown price ${p} for ${orderData.userEmail}`;
+                }
+
+                // 1. Mark order successful
+                t.update(orderRef, {
+                    status: 'SUCCESS',
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    paymentDetails: payload.data.payment || {}
+                });
+
+                // 2. Grant appropriate status to user
+                if (Object.keys(updates).length > 0) {
+                    t.set(userRef, updates, { merge: true });
+                }
+                logger.info(logMsg);
+            } else {
+                // FAILED, USER_DROPPED, etc.
+                t.update(orderRef, {
+                    status: txStatus,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+            }
+        });
+
+        res.status(200).send("Webhook received");
+    } catch (error) {
+        if (error.message === "Order not found") {
+            return res.status(404).send("Order not found");
+        }
+        logger.error("Webhook Error:", error);
+        res.status(500).send("Webhook Error");
+    }
+});
