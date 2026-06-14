@@ -146,6 +146,7 @@ Users earn **streak rewards** for consecutive daily syncs (morning, evening, or 
 - `lastAwardedStreak` prevents double-paying the same milestone.
 - **Streak Freezes** cover missed days (`daysMissed = gapDays - 1`); insufficient freezes reset the streak to 1.
 - Same-day re-syncs (`diffDays <= 0`) never advance the streak (guards clock skew / timezone edge cases).
+- **Display vs stored streak:** The UI computes the effective streak from `lastSyncDate` + freezes. If you have not synced for 2+ days without enough freezes, the badge shows **0** even before your next sync. Opening the app calls `refreshStaleStreak` to persist that reset in Firestore.
 - **Partial evening syncs** (Sheets/Notion branch failed, credit refunded) do **not** advance the streak.
 - Streak updates retry once on Firestore errors; if both attempts fail, the sync response includes a warning and a `warning` entry is written to `syncHistory`.
 - Day boundaries use the persisted `timeZone` field (sent by the client, stored on sync).

@@ -46,6 +46,8 @@ const {
     handleOptions,
     RATE_LIMIT_SYNC,
     RATE_LIMIT_DEFAULT,
+    calendarDayDiff,
+    computeDisplayStreak,
 } = require('./utils');
 // Crypto logic and Rate Limits have been extracted to services/
 
@@ -72,15 +74,6 @@ function checkFeaturesAndCredits(userData, numImages, mode, hasBYOK = false) {
         }
     }
     return { allowed: true };
-}
-
-/** Calendar-day delta between two YYYY-MM-DD strings (local-date math, DST-safe). */
-function calendarDayDiff(fromDateStr, toDateStr) {
-    const fromParts = fromDateStr.split('-').map(Number);
-    const toParts = toDateStr.split('-').map(Number);
-    const fromDate = new Date(fromParts[0], fromParts[1] - 1, fromParts[2]);
-    const toDate = new Date(toParts[0], toParts[1] - 1, toParts[2]);
-    return Math.round((toDate - fromDate) / (1000 * 60 * 60 * 24));
 }
 
 /**
@@ -294,6 +287,55 @@ exports.updateProfile = onRequest({ cors: false, memory: "256MiB" }, async (req,
     }
 });
 
+// --- ENDPOINT: refreshStaleStreak ---
+// Persists a lapsed streak (0) when the user opens the app without syncing.
+// Streak advancement/decay logic otherwise only runs inside syncPlanner.
+exports.refreshStaleStreak = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    if (req.method !== 'POST') return res.status(405).send({ error: "Method not allowed" });
+    if (!isJsonRequest(req)) return res.status(415).send({ error: "Content-Type must be application/json" });
+
+    const { idToken } = req.body || {};
+    if (!idToken) return res.status(400).send({ error: "Missing token" });
+
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userEmail = decodedToken.email?.toLowerCase();
+        if (!userEmail) return res.status(401).send({ error: "No email in token" });
+
+        const rl = await checkRateLimit(userEmail, 'refreshStaleStreak', RATE_LIMIT_DEFAULT);
+        if (!rl.allowed) {
+            res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
+            return res.status(429).send({ error: "Too many requests" });
+        }
+
+        const userRef = admin.firestore().collection('users').doc(userEmail);
+        const snap = await userRef.get();
+        if (!snap.exists) return res.status(200).send({ refreshed: false, currentStreak: 0 });
+
+        const raw = snap.data();
+        const displayStreak = computeDisplayStreak(raw);
+        const storedStreak = raw.currentStreak || 0;
+
+        if (displayStreak === 0 && storedStreak > 0) {
+            await userRef.set({
+                currentStreak: 0,
+                lastAwardedStreak: 0
+            }, { merge: true });
+            logger.info(`Reset lapsed streak for ${userEmail} (was ${storedStreak})`);
+            return res.status(200).send({ refreshed: true, currentStreak: 0 });
+        }
+
+        return res.status(200).send({ refreshed: false, currentStreak: displayStreak });
+    } catch (err) {
+        logger.error("refreshStaleStreak error:", err);
+        return res.status(500).send({ error: "Failed to refresh streak state." });
+    }
+});
+
 // --- SETUP ENDPOINT: setupNotion ---
 exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2] }, async (req, res) => {
     setStandardHeaders(res);
@@ -441,7 +483,7 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
                 tier: raw.tier || 'free',
                 tierCredits: raw.tierCredits || 0,
                 boosterCredits: raw.boosterCredits || 0,
-                currentStreak: raw.currentStreak || 0,
+                currentStreak: computeDisplayStreak(raw),
                 highestStreak: raw.highestStreak || 0,
                 streakFreezes: raw.streakFreezes || 0,
                 dailySyncCount: raw.dailySyncCount || 0,

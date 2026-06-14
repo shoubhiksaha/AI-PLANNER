@@ -23,6 +23,7 @@ const {
     MAX_BASE64_LENGTH,
     ALLOWED_ORIGINS,
     ALLOWED_SYNC_TYPES,
+    computeDisplayStreak,
 } = require('../utils');
 
 // Shared test key (32 bytes from hashing a test secret)
@@ -743,5 +744,37 @@ describe('parseDateTime', () => {
     test('rejects inner whitespace " 9 : 30 AM " (colons with spaces)', () => {
         // The regex anchors to ^...$ so inner spaces around colon don't match
         expect(parseDateTime(' 9 : 30 AM ', testDate)).toBeNull();
+    });
+});
+
+describe('computeDisplayStreak', () => {
+    test('returns 0 when no lastSyncDate', () => {
+        expect(computeDisplayStreak({ currentStreak: 3 }, '2026-06-14')).toBe(0);
+    });
+
+    test('returns stored streak when synced today', () => {
+        expect(computeDisplayStreak({ currentStreak: 3, lastSyncDate: '2026-06-14' }, '2026-06-14')).toBe(3);
+    });
+
+    test('returns stored streak when synced yesterday (grace day)', () => {
+        expect(computeDisplayStreak({ currentStreak: 3, lastSyncDate: '2026-06-13' }, '2026-06-14')).toBe(3);
+    });
+
+    test('returns 0 when lapsed with no freezes', () => {
+        expect(computeDisplayStreak({
+            currentStreak: 3, lastSyncDate: '2026-06-10', streakFreezes: 0
+        }, '2026-06-14')).toBe(0);
+    });
+
+    test('returns stored streak when freezes would cover missed days', () => {
+        expect(computeDisplayStreak({
+            currentStreak: 3, lastSyncDate: '2026-06-10', streakFreezes: 3
+        }, '2026-06-14')).toBe(3);
+    });
+
+    test('returns 0 when freezes insufficient', () => {
+        expect(computeDisplayStreak({
+            currentStreak: 3, lastSyncDate: '2026-06-10', streakFreezes: 1
+        }, '2026-06-14')).toBe(0);
     });
 });

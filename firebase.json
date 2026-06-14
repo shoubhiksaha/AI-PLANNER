@@ -96,6 +96,10 @@
         "function": "updateProfile"
       },
       {
+        "source": "/refreshStaleStreak",
+        "function": "refreshStaleStreak"
+      },
+      {
         "source": "/exportUserData",
         "function": "exportUserData"
       },

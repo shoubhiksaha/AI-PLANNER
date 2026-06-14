@@ -1,6 +1,8 @@
 // AI Planner — Main Application Module
 // Extracted from inline <script type="module"> for CSP compliance
 
+import { computeDisplayStreak } from './streak-utils.js?v=1';
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
 
@@ -293,10 +295,15 @@ async function checkUserSetup(user) {
 
         // Setup real-time listener for Gamification & Tier logic
         if (profileUnsubscribe) profileUnsubscribe();
+        let staleStreakRefreshAttempted = false;
         profileUnsubscribe = onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
                 userProfile = docSnap.data();
                 updateGamificationUI(userProfile);
+                if (!staleStreakRefreshAttempted) {
+                    staleStreakRefreshAttempted = true;
+                    refreshStaleStreakIfNeeded(user, userProfile);
+                }
                 // Sync dedup toggles from stored preferences (default: ON)
                 const calToggle = document.getElementById('dedup-calendar');
                 const taskToggle = document.getElementById('dedup-tasks');
@@ -350,10 +357,25 @@ async function checkUserSetup(user) {
     }
 }
 
+async function refreshStaleStreakIfNeeded(user, profileData) {
+    const stored = profileData.currentStreak || 0;
+    const display = computeDisplayStreak(profileData);
+    if (display !== 0 || stored === 0) return;
+    try {
+        const idToken = await user.getIdToken();
+        const { PRIMARY_API_URL } = getApiUrls(window.location.hostname, 'refreshStaleStreak');
+        await fetch(PRIMARY_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken })
+        });
+    } catch (_) { /* best-effort — UI already shows computed 0 */ }
+}
+
 function updateGamificationUI(data) {
     const tierCredits = data.tierCredits || 0;
     const boosterCredits = data.boosterCredits || 0;
-    const currentStreak = data.currentStreak || 0;
+    const currentStreak = computeDisplayStreak(data);
     const highestStreak = data.highestStreak || 0;
     const streakFreezes = data.streakFreezes || 0;
     const hasKmsBYOK = !!data.geminiKey || !!data.byokConfig || !!data.byokKmsData;
