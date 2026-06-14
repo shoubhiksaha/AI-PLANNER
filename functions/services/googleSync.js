@@ -156,7 +156,7 @@ async function syncGoogleTasks(tasks, plannerData, enableDedup = true) {
     }
 
     let existingTasksForDate = [];
-    const cleanTitle = (str) => String(str || '').replace(/^[-\*•]\s*/, '').replace(/\.$/, '').trim().toLowerCase();
+    const cleanTitle = (str) => String(str || '').replace(/^[-*•]\s*/, '').replace(/\.$/, '').trim().toLowerCase();
 
     if (enableDedup && exactDueIso) {
         try {

@@ -1,5 +1,3 @@
-const admin = require('firebase-admin');
-
 // 1. Mock Firebase Admin
 const mockSet = jest.fn();
 const mockGet = jest.fn();
