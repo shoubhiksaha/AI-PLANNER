@@ -393,6 +393,7 @@ function updateGamificationUI(data) {
     // Head HUD
     document.getElementById('streak-badge').textContent = `🔥 ${currentStreak}`;
     document.getElementById('credits-badge').textContent = hasBYOK ? `🪙 ∞` : `🪙 ${tierCredits + boosterCredits}`;
+    document.getElementById('freezes-badge').textContent = `❄️ ${streakFreezes}`;
     
     // Reports Metrics
     document.getElementById('reports-current-streak').textContent = `🔥 ${currentStreak}`;
