@@ -69,12 +69,12 @@ describe('gemini.js — getPlannerDataFromImages', () => {
     });
 
     // ── Input validation ────────────────────────────────────────────────────
-    test('throws INVALID_PAYLOAD_NO_MEDIA when images array is empty', async () => {
-        await expect(getPlannerDataFromImages([], 'morning')).rejects.toThrow('INVALID_PAYLOAD_NO_MEDIA');
+    test('throws INVALID_IMAGE_PAYLOAD when images array is empty', async () => {
+        await expect(getPlannerDataFromImages([], 'morning')).rejects.toThrow('INVALID_IMAGE_PAYLOAD');
     });
 
-    test('throws INVALID_PAYLOAD_NO_MEDIA when images is null', async () => {
-        await expect(getPlannerDataFromImages(null, 'morning')).rejects.toThrow('INVALID_PAYLOAD_NO_MEDIA');
+    test('throws INVALID_IMAGE_PAYLOAD when images is null', async () => {
+        await expect(getPlannerDataFromImages(null, 'morning')).rejects.toThrow('INVALID_IMAGE_PAYLOAD');
     });
 
     // ── Prompt selection by syncType ────────────────────────────────────────
