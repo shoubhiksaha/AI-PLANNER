@@ -3,6 +3,7 @@
  * These are imported by both index.js (for production) and __tests__/ (for testing).
  */
 
+/* global BigInt */
 const crypto = require('crypto');
 const net = require('net');
 

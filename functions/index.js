@@ -109,6 +109,7 @@ function serializeFirestoreValue(value) {
 }
 
 function sanitizeControlCharacters(value, replacement = '') {
+    // eslint-disable-next-line no-control-regex
     return String(value || '').replace(/[\u0000-\u001f\u007f]/g, replacement);
 }
 
