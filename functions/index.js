@@ -791,7 +791,8 @@ exports.syncPlanner = onRequest({
 
     const idToken = body.idToken;
     const googleToken = body.googleToken;
-    if (!idToken || !googleToken) {
+    const syncType = body.syncType;
+    if (!idToken || (!googleToken && syncType !== 'journal' && syncType !== 'voice_note')) {
         const durationMs = Date.now() - startTimeMs;
         logger.warn("Missing auth tokens", { requestId, durationMs, status: 401 });
         return res.status(401).send({ error: "Unauthorized" });
@@ -846,16 +847,19 @@ exports.syncPlanner = onRequest({
         }
 
         const { google } = require("googleapis"); // Lazy Load
-        const auth = new google.auth.OAuth2();
-        auth.setCredentials({ access_token: googleToken });
+        let auth = null;
+        if (googleToken) {
+            auth = new google.auth.OAuth2();
+            auth.setCredentials({ access_token: googleToken });
 
-        // Security Check: Ensure googleToken matches Firebase identity
-        const oauth2 = google.oauth2({ version: 'v2', auth });
-        const userInfo = await oauth2.userinfo.get();
-        if (userInfo?.data?.email?.toLowerCase() !== email) {
-            const durationMs = Date.now() - startTimeMs;
-            logger.warn("Token identity mismatch", { requestId, firebaseEmail: email, googleEmail: userInfo?.data?.email, durationMs, status: 403 });
-            return res.status(403).send({ error: "Token identity mismatch" });
+            // Security Check: Ensure googleToken matches Firebase identity
+            const oauth2 = google.oauth2({ version: 'v2', auth });
+            const userInfo = await oauth2.userinfo.get();
+            if (userInfo?.data?.email?.toLowerCase() !== email) {
+                const durationMs = Date.now() - startTimeMs;
+                logger.warn("Token identity mismatch", { requestId, firebaseEmail: email, googleEmail: userInfo?.data?.email, durationMs, status: 403 });
+                return res.status(403).send({ error: "Token identity mismatch" });
+            }
         }
 
         // Load & Initialize User Config from Firestore

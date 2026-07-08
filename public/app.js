@@ -965,7 +965,7 @@ document.getElementById('btn-voice-note')?.addEventListener('click', async () =>
                 // Stop all tracks to release microphone
                 audioStream.getTracks().forEach(track => track.stop());
 
-                const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/mp4' });
                 
                 // Convert Blob to Base64
                 const reader = new FileReader();
@@ -1027,7 +1027,10 @@ const triggerSync = async (syncType, overrideFiles = null) => {
         let res;
         let data;
         let attempt = 0;
-        let currentToken = await ensureGoogleAccessToken();
+        let currentToken = null;
+        if (syncType !== 'journal' && syncType !== 'voice_note') {
+            currentToken = await ensureGoogleAccessToken();
+        }
         const idToken = await auth.currentUser.getIdToken();
 
         while (attempt < 2) {
@@ -1082,7 +1085,7 @@ const triggerSync = async (syncType, overrideFiles = null) => {
 
             clearTimeout(timeoutId);
 
-            if (res.status === 401 && attempt === 0) {
+            if (res.status === 401 && attempt === 0 && (syncType !== 'journal' && syncType !== 'voice_note')) {
                 console.warn("401 Unauthorized. Expired Google token detected, forcing refresh.");
                 attempt++;
                 try {
