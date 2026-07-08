@@ -1,0 +1,859 @@
+
+> test
+> jest --verbose --testPathIgnorePatterns=firestore.rules.test.js
+
+PASS __tests__/kms.test.js
+  KMS Service Tests
+    ✓ generateAndWrapDEK throws error if KMS_KEY_NAME is missing (9 ms)
+    ✓ generateAndWrapDEK returns valid envelope payload (1 ms)
+    ✓ unwrapAndDecrypt throws error if KMS_KEY_NAME is missing (1 ms)
+    ✓ unwrapAndDecrypt successfully decrypts the payload
+
+PASS __tests__/UniversalAIAdapter.test.js
+  UniversalAIAdapter
+    constructor
+      ✓ throws if apiKey is missing (49 ms)
+      ✓ defaults to openai provider and gpt-4o model (1 ms)
+      ✓ auto-configures google URL with model name
+      ✓ respects custom baseUrl over auto-config (1 ms)
+      ✓ groq gets correct base URL (4 ms)
+      ✓ deepseek gets correct base URL (4 ms)
+    SSRF DNS validation (_validateBaseUrlDns)
+      ✓ blocks private IPv4 addresses (4 ms)
+      ✓ blocks private IPv6 addresses (::1) (2 ms)
+      ✓ allows public IPv4 addresses (2 ms)
+    OpenAI-compatible providers
+      ✓ openai: returns content from choices[0].message.content (1 ms)
+      ✓ openai: includes image_url objects in userContent (1 ms)
+      ✓ openai: throws on non-OK HTTP response (2 ms)
+      ✓ openai: throws "No extraction returned" on empty choices (1 ms)
+      ✓ openai: throws when message.content is not a string
+      ✓ ollama: rejects localhost baseUrl (SSRF protection) (1 ms)
+      ✓ ollama: strips response_format and sets stream:false (1 ms)
+      ✓ azure: builds deployment URL with api-version
+      ✓ azure: sends api-key header not Authorization (1 ms)
+      ✓ openrouter: sends HTTP-Referer and X-Title headers
+      ✓ unknown custom provider falls back to openai-compatible format (1 ms)
+    Google provider (_chatGoogle)
+      ✓ returns text from candidates[0].content.parts[0].text
+      ✓ appends API key to URL as query param (1 ms)
+      ✓ throws "No extraction returned" when candidates array is empty
+      ✓ throws on non-OK HTTP response
+      ✓ sends image as inlineData part (1 ms)
+    Anthropic provider (_chatAnthropic)
+      ✓ returns raw text from content[0].text
+      ✓ strips ```json markdown code fence from Claude response
+      ✓ sends images as base64 source blocks (1 ms)
+      ✓ sends x-api-key header
+      ✓ throws "No extraction returned" when content array is empty (1 ms)
+      ✓ throws on non-OK HTTP response
+    Cohere provider (_chatCohere)
+      ✓ returns text from v2 message.content[0].text (1 ms)
+      ✓ falls back to data.text for v1 format
+      ✓ images are ignored (Cohere does not support vision)
+      ✓ throws on non-OK HTTP response (1 ms)
+    HuggingFace provider (_chatHuggingFace)
+      ✓ returns generated_text from array response (1 ms)
+      ✓ returns JSON stringified data if response is not array
+      ✓ combines systemPrompt and userPrompt into single inputs string
+      ✓ throws on non-OK HTTP response (1 ms)
+
+PASS __tests__/googleSync.test.js
+  syncCalendarEvents
+    ✓ creates events for block items (9 ms)
+    ✓ creates reminders for reminder items (1 ms)
+    ✓ event with both block and reminder increments both counters (1 ms)
+    ✓ skips items where block and reminder are both false (1 ms)
+    ✓ skips items where task string is empty (1 ms)
+    ✓ skips items where parseDateTime returns null (unparseable time) (1 ms)
+    ✓ continues on individual event insert failure without throwing (1 ms)
+    ✓ handles empty schedule gracefully (2 ms)
+    ✓ handles missing schedule key (1 ms)
+    ✓ event dateTime is local ISO (no Z UTC suffix) (2 ms)
+  syncGoogleTasks
+    ✓ creates tasks with due date when date is valid (ISO format) (2 ms)
+    ✓ omits due date when plannerData.date is not a parseable date
+    ✓ sets status "completed" when done is true (1 ms)
+    ✓ sets status "needsAction" when done is false
+    ✓ continues on individual task insert failure without throwing (1 ms)
+    ✓ skips empty task strings and returns 0
+    ✓ handles missing todos key
+  updateCompletedTasks
+    ✓ returns 0 if no completed todos
+    ✓ returns 0 if google tasks list is empty
+    ✓ returns 0 if google tasks list has no items field
+    ✓ patches matching google task to completed (case-insensitive)
+    ✓ skips tasks with no matching google task (1 ms)
+    ✓ patches multiple matching tasks
+  syncExpensesToSheet
+    ✓ returns 0 if no expenses
+    ✓ returns 0 if expenses key missing
+    ✓ appends correct rows [date, item, amount]
+    ✓ returns 0 on API failure without throwing (1 ms)
+  syncHealthToSheet
+    ✓ returns 0 when health is empty object
+    ✓ returns 0 when health key missing
+    ✓ appends [date, exercise, water, sleep, energy] row (1 ms)
+    ✓ uses 0 defaults for missing sub-fields
+    ✓ returns 0 on API failure without throwing
+
+PASS __tests__/utils.test.js
+  Encryption
+    ✓ deriveKey produces a 32-byte Buffer (7 ms)
+    ✓ deriveKey throws on empty/null input (49 ms)
+    ✓ deriveKey is deterministic (same input = same key)
+    ✓ encrypt returns v2 format string (2 ms)
+    ✓ encrypt returns falsy for empty/null input (1 ms)
+    ✓ encrypt produces unique ciphertext each time (random IV) (1 ms)
+    ✓ encrypt → decryptCurrentGcm roundtrip (1 ms)
+    ✓ decryptCurrentGcm rejects wrong key (22 ms)
+    ✓ decryptCurrentGcm returns null for invalid format (1 ms)
+    ✓ decryptCurrentGcm rejects tampered ciphertext (1 ms)
+  decryptStoredNotionKey
+    ✓ decrypts v2 (GCM) encrypted keys
+    ✓ returns plaintext with needsMigration=true for unencrypted keys
+    ✓ returns falsy for null/undefined/empty
+    ✓ returns value=null for corrupted encrypted data (1 ms)
+  sanitizeSyncType
+    ✓ returns valid sync types unchanged
+    ✓ maps "night" to "evening"
+    ✓ lowercases input
+    ✓ defaults to "morning" for non-string inputs (1 ms)
+  parseImageDataUrl
+    ✓ parses valid JPEG data URL
+    ✓ parses valid PNG data URL
+    ✓ returns null for non-string input (1 ms)
+    ✓ returns null for invalid format
+    ✓ parseImageDataUrl returns null if base64 length is > MAX_BASE64_LENGTH
+    ✓ parseImageDataUrl returns null if decoded size is > MAX_IMAGE_BYTES (36 ms)
+  normalizeNotionDbId
+    ✓ accepts valid 32-char hex ID (1 ms)
+    ✓ strips dashes from UUID-format IDs
+    ✓ accepts uppercase hex
+    ✓ returns null for invalid IDs (1 ms)
+    ✓ returns null for non-string input (1 ms)
+  isLikelyNotionKey
+    ✓ accepts valid Notion keys (1 ms)
+    ✓ rejects keys that do not start with "secret_" (1 ms)
+    ✓ rejects keys that are too short
+    ✓ rejects keys that are too long
+    ✓ rejects non-string input (1 ms)
+    ✓ trims whitespace before checking
+  isJsonRequest
+    ✓ returns true for application/json
+    ✓ returns true for application/json with charset
+    ✓ returns true regardless of case
+    ✓ returns false for other content types
+    ✓ returns false when content-type is missing
+  setStandardHeaders
+    ✓ sets Cache-Control and X-Content-Type-Options
+  applyCors
+    ✓ returns true and sets headers for allowed origins (1 ms)
+    ✓ returns true when no origin header (same-origin request)
+    ✓ returns false for disallowed origins
+    ✓ localhost origins are allowed
+    ✓ firebaseapp.com origin is allowed
+    ✓ 127.0.0.1 origin is allowed
+    ✓ rejects localhost on wrong port
+  handleOptions
+    ✓ returns false for non-OPTIONS requests
+    ✓ returns false for GET requests (1 ms)
+    ✓ handles OPTIONS from allowed origin with 204
+    ✓ rejects OPTIONS from disallowed origin with 403 (1 ms)
+  validateTokenFormat
+    ✓ accepts valid token strings
+    ✓ rejects tokens that are too short (1 ms)
+    ✓ rejects tokens that are too long
+    ✓ rejects non-string inputs
+  Constants
+    ✓ MAX_IMAGE_BYTES is 20MB
+    ✓ MAX_BASE64_LENGTH accounts for ~37% base64 overhead
+    ✓ ALLOWED_SYNC_TYPES contains all expected types
+    ✓ ALLOWED_ORIGINS contains production and dev origins
+  Encryption Edge Cases
+    ✓ handles Unicode text (emoji, CJK characters)
+    ✓ handles very long text
+    ✓ handles special characters in keys (1 ms)
+    ✓ legacy CBC encrypt → decrypt roundtrip
+    ✓ decryptLegacyCbc returns null for wrong format
+    ✓ decryptStoredNotionKey detects CBC format and marks for migration (2 ms)
+  parseImageDataUrl - Mime Types
+    ✓ parses HEIC data URL (1 ms)
+    ✓ parses WebP data URL
+    ✓ parses SVG+XML data URL
+    ✓ normalizes uppercase mime type (1 ms)
+    ✓ rejects video mime types
+    ✓ rejects application mime types (1 ms)
+  isLikelyNotionKey - Edge Cases
+    ✓ accepts key at exactly 20 chars
+    ✓ accepts key at exactly 256 chars (1 ms)
+    ✓ rejects key at 257 chars
+  normalizeNotionDbId - Edge Cases
+    ✓ handles IDs with mixed casing
+    ✓ rejects IDs with spaces in the middle
+    ✓ rejects IDs that are 31 chars
+    ✓ rejects IDs that are 33 chars
+  parseDateTime
+    ✓ parses "9 AM" correctly (1 ms)
+    ✓ parses "12 PM" (noon) correctly (1 ms)
+    ✓ parses "12 AM" (midnight) correctly
+    ✓ parses "1 PM" correctly (13:00)
+    ✓ parses "11 PM" correctly (23:00)
+    ✓ parses "9:30 AM" correctly (preserves minutes)
+    ✓ parses "12:45 PM" correctly (preserves minutes)
+    ✓ parses "6:00 PM" correctly
+    ✓ handles lowercase am/pm (1 ms)
+    ✓ handles mixed case Am/Pm
+    ✓ returns null for null/undefined inputs
+    ✓ returns null for invalid time formats
+    ✓ returns null for hour 0 (invalid in 12-hour format)
+    ✓ returns null for hour 13+ (invalid in 12-hour format)
+    ✓ returns null for invalid date strings
+    ✓ trims whitespace from inputs (1 ms)
+    ✓ sets correct date from date string
+    ✓ returns null for invalid minutes (9:60 AM)
+    ✓ parses "9:05 AM" correctly (5 minutes)
+    ✓ rejects single-digit minutes "9:5 AM" (invalid format)
+    ✓ rejects inner whitespace " 9 : 30 AM " (colons with spaces)
+
+  console.warn
+    Model gemini-2.5-flash-lite failed: SERVER_ERROR
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.<anonymous> (__tests__/gemini.rateLimit.test.js:158:24)
+
+  console.warn
+    Model gemini-2.5-flash-lite failed: SERVER_ERROR
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.<anonymous> (__tests__/gemini.rateLimit.test.js:165:9)
+
+  console.warn
+    Model gemini-2.5-flash failed: SERVER_ERROR
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.<anonymous> (__tests__/gemini.rateLimit.test.js:165:9)
+
+  console.warn
+    Model gemini-2.0-flash-lite failed: SERVER_ERROR
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.<anonymous> (__tests__/gemini.rateLimit.test.js:165:9)
+
+  console.warn
+    Model gemini-flash-latest failed: SERVER_ERROR
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.<anonymous> (__tests__/gemini.rateLimit.test.js:165:9)
+
+  console.warn
+    Model gemini-2.5-flash-lite failed: INVALID_RESPONSE
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.<anonymous> (__tests__/gemini.rateLimit.test.js:176:9)
+
+  console.warn
+    Model gemini-2.5-flash failed: INVALID_RESPONSE
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.<anonymous> (__tests__/gemini.rateLimit.test.js:176:9)
+
+  console.warn
+    Model gemini-2.0-flash-lite failed: INVALID_RESPONSE
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.<anonymous> (__tests__/gemini.rateLimit.test.js:176:9)
+
+  console.warn
+    Model gemini-flash-latest failed: INVALID_RESPONSE
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.<anonymous> (__tests__/gemini.rateLimit.test.js:176:9)
+
+PASS __tests__/gemini.rateLimit.test.js
+  gemini.js — getPlannerDataFromImages
+    ✓ throws INVALID_IMAGE_PAYLOAD when images array is empty (44 ms)
+    ✓ throws INVALID_IMAGE_PAYLOAD when images is null (5 ms)
+    ✓ morning sync returns schedule and todos (4 ms)
+    ✓ evening sync returns expenses and brainDump (2 ms)
+    ✓ journal_date_only sync returns just a date (1 ms)
+    ✓ uses BYOK UniversalAIAdapter when byokConfig.apiKey is set (69 ms)
+    ✓ byok path: strips ```json wrapper from Claude-style response (12 ms)
+    ✓ byok path: throws "Invalid final structured output" on non-JSON adapter response (12 ms)
+    ✓ falls back to next Gemini model when primary fails with SERVER_ERROR (29 ms)
+    ✓ throws "All Gemini models failed" when all models fail (4 ms)
+    ✓ throws when candidates text field is missing (INVALID_RESPONSE) (3 ms)
+  rateLimit.js — checkRateLimit
+    ✓ allows first request (no existing doc) and starts new window (1 ms)
+    ✓ allows request within window that is below the limit
+    ✓ blocks request that hits limit exactly within window
+    ✓ resets window when windowStart is outside RATE_LIMIT_WINDOW_MS (1 ms)
+    ✓ retryAfterMs is within expected window range
+
+  console.warn
+    Model gemini-2.5-flash-lite failed: SERVER_ERROR
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:682:13)
+
+  console.warn
+    Model gemini-2.5-flash failed: SERVER_ERROR
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:682:13)
+
+  console.warn
+    Model gemini-2.0-flash-lite failed: SERVER_ERROR
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:682:13)
+
+  console.warn
+    Model gemini-flash-latest failed: SERVER_ERROR
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:682:13)
+
+  console.warn
+    Model gemini-2.5-flash-lite failed: RATE_LIMIT exceeded
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:891:13)
+
+  console.warn
+    Model gemini-2.5-flash failed: RATE_LIMIT exceeded
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:891:13)
+
+  console.warn
+    Model gemini-2.0-flash-lite failed: RATE_LIMIT exceeded
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:891:13)
+
+  console.warn
+    Model gemini-flash-latest failed: RATE_LIMIT exceeded
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:891:13)
+
+  console.warn
+    Model gemini-2.5-flash-lite failed: Gemini unavailable
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+          at async Promise.all (index 1)
+      at Object.syncPlanner (index.js:755:49)
+      at Object.<anonymous> (__tests__/index.test.js:925:13)
+
+  console.warn
+    Model gemini-2.5-flash-lite failed: unexpected string error
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:943:13)
+
+  console.warn
+    Model gemini-2.5-flash failed: unexpected string error
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:943:13)
+
+  console.warn
+    Model gemini-2.0-flash-lite failed: unexpected string error
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:943:13)
+
+  console.warn
+    Model gemini-flash-latest failed: unexpected string error
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:943:13)
+
+  console.warn
+    Rate limit (429) for gemini-2.5-flash-lite. Retrying in 2477ms (Attempt 1/5)...
+
+       97 |                     if (attempt <= maxRetries) {
+       98 |                         const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+    >  99 |                         console.warn(`Rate limit (429) for ${model}. Retrying in ${delay.toFixed(0)}ms (Attempt ${attempt}/${maxRetries})...`);
+          |                                 ^
+      100 |                         await new Promise(resolve => setTimeout(resolve, delay));
+      101 |                         continue;
+      102 |                     }
+
+      at warn (services/gemini.js:99:33)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:1042:13)
+
+(node:85217) MetadataLookupWarning: received unexpected error = All promises were rejected code = UNKNOWN
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS __tests__/gamification.test.js
+  Gamification Milestones
+    ✓ should award 7-day streak +5 credits (50 ms)
+    ✓ should not dual-award a 7-day streak (1 ms)
+    ✓ should award 30-day streak +20 credits +1 freeze
+    ✓ should reset lastAwardedStreak if streak breaks (3 ms)
+
+  console.warn
+    Model gemini-2.5-flash-lite failed: API_ERROR_400: Bad Request: invalid image
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:1056:13)
+
+  console.warn
+    Model gemini-2.5-flash failed: API_ERROR_400: Bad Request: invalid image
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:1056:13)
+
+  console.warn
+    Model gemini-2.0-flash-lite failed: API_ERROR_400: Bad Request: invalid image
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:1056:13)
+
+  console.warn
+    Model gemini-flash-latest failed: API_ERROR_400: Bad Request: invalid image
+
+      118 |             if (attempt > 0 && attempt <= maxRetries && errMsg.includes("RATE_LIMIT")) throw error;
+      119 |
+    > 120 |             console.warn(`Model ${model} failed: ${errMsg}`);
+          |                     ^
+      121 |             throw error;
+      122 |         }
+      123 |     }
+
+      at warn (services/gemini.js:120:21)
+      at getPlannerDataFromImages (services/gemini.js:212:25)
+      at Object.syncPlanner (index.js:810:27)
+      at Object.<anonymous> (__tests__/index.test.js:1056:13)
+
+  console.warn
+    Notion API Key not configured.
+
+      116 |
+      117 |     if (!notionApiKey || notionApiKey.includes("YOUR_")) {
+    > 118 |         console.warn("Notion API Key not configured.");
+          |                 ^
+      119 |         return false;
+      120 |     }
+      121 |
+
+      at warn (services/notion.js:118:17)
+      at syncBrainDumpToNotion (index.js:910:36)
+          at async Promise.allSettled (index 2)
+      at Object.syncPlanner (index.js:925:29)
+      at Object.<anonymous> (__tests__/index.test.js:1068:13)
+
+  console.error
+    RATE LIMIT ERR TypeError: Cannot read properties of undefined (reading 'collection')
+        at collection (/Users/domgeshworld/Desktop/AI_PLANNER/functions/services/rateLimit.js:7:20)
+        at Object.checkRateLimit (/Users/domgeshworld/Desktop/AI_PLANNER/functions/index.js:1050:26)
+        at Object.logClientError (/Users/domgeshworld/Desktop/AI_PLANNER/functions/__tests__/index.test.js:1269:31)
+        at Promise.finally.completed (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)
+        at new Promise (<anonymous>)
+        at callAsyncCircusFn (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)
+        at _callCircusTest (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)
+        at _runTest (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-circus/build/jestAdapterInit.js:947:3)
+        at /Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-circus/build/jestAdapterInit.js:849:7
+        at _runTestsForDescribeBlock (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-circus/build/jestAdapterInit.js:862:11)
+        at _runTestsForDescribeBlock (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+        at _runTestsForDescribeBlock (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-circus/build/jestAdapterInit.js:857:11)
+        at run (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-circus/build/jestAdapterInit.js:761:3)
+        at runAndTransformResultsToJestFormat (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)
+        at jestAdapter (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-circus/build/runner.js:101:19)
+        at runTestInternal (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-runner/build/testWorker.js:275:16)
+        at runTest (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-runner/build/testWorker.js:343:7)
+        at Object.worker (/Users/domgeshworld/Desktop/AI_PLANNER/functions/node_modules/jest-runner/build/testWorker.js:497:12)
+
+      1053 |         }
+      1054 |     } catch (e) {
+    > 1055 |         console.error("RATE LIMIT ERR", e);
+           |                 ^
+      1056 |         // Fail CLOSED: if rate limiting infrastructure is down, reject the request
+      1057 |         return res.status(503).send({ error: "Service temporarily unavailable" });
+      1058 |     }
+
+      at Object.error [as logClientError] (index.js:1055:17)
+      at Object.<anonymous> (__tests__/index.test.js:1269:13)
+
+FAIL __tests__/index.test.js
+  index.js Integration Tests
+    setupNotion
+      ✓ rejects GET requests with 405 (6 ms)
+      ✓ rejects missing or invalid body with 400 (1 ms)
+      ✓ stores encrypted Notion key on success (3 ms)
+      ✓ handles Firebase ID token lookup failure
+      ✓ returns 429 when rate limit exceeded (1 ms)
+    setupBYOK
+      ✓ rejects GET requests with 405
+      ✓ rejects missing or invalid body with 400
+      ✓ stores KMS wrapped BYOK configuration on success (1 ms)
+      ✓ returns 429 when rate limit exceeded
+    exportUserData
+      ✓ rejects missing token (1 ms)
+      ✓ rejects invalid token (1 ms)
+      ✓ exports expected schema for user with data (4 ms)
+      ✓ handles user not found gracefully (1 ms)
+      ✓ returns 429 when rate limit exceeded
+    deleteUserAccount
+      ✓ rejects missing token (1 ms)
+      ✓ successfully deletes user document
+      ✓ returns 429 when rate limit exceeded
+    syncPlanner
+      ✓ returns 413 Payload Too Large when body size exceeds 100MB (10 ms)
+      ✓ returns 429 when rate limit exceeded (1 ms)
+      ✓ bypasses credit deduction for stateless BYOK user (85 ms)
+      ✓ returns 500 when KMS envelope decryption fails (fail closed) (5 ms)
+      ✓ rejects request with invalid token (4 ms)
+      ✓ rejects request with invalid syncType (5 ms)
+      ✓ rejects request with invalid image data (7 ms)
+      ✓ processes journal sync successfully (51 ms)
+      ✓ journal sync fails gracefully if user has no Notion settings (21 ms)
+      ✓ processes morning sync successfully (11 ms)
+      ✓ morning sync does not crash when planner date is invalid (13 ms)
+      ✓ morning sync continues when Google Tasks insert fails (8 ms)
+      ✕ processes evening sync successfully (15 ms)
+      ✓ evening sync creates spreadsheet if missing (10 ms)
+      ✓ returns 500 when Gemini throws an exception (78 ms)
+      ✓ morning sync creates calendar event at 9:30 for "9:30 AM" schedule item (2 ms)
+      ✓ journal sync handles Notion upload failure gracefully (6 ms)
+      ✓ journal sync handles Notion init response missing upload_url (4 ms)
+      ✓ rejects request from unauthorized CORS origin (1 ms)
+      ✓ handles OPTIONS preflight request (1 ms)
+      ✓ handles Google Tasks list with missing items array (3 ms)
+      ✓ handles empty schedule array gracefully in morning sync (1 ms)
+      ✓ handles evening sync with no expenses or health data (6 ms)
+      ✓ returns "AI Service Busy" when Gemini throws RATE_LIMIT (5 ms)
+      ✓ uses today date when Gemini date extraction fails (3 ms)
+      ✓ handles non-Error throw (string) without secondary crash (6 ms)
+      ✓ returns 400 when Gemini returns error object for morning sync (3 ms)
+      ✓ returns 400 when Gemini returns error for evening sync (4 ms)
+      ✓ evening sync handles Notion sync error gracefully (2 ms)
+      ✓ evening sync skips Notion when keys are missing (2 ms)
+      ✓ evening sync handles Sheets API errors gracefully (2 ms)
+      ✓ handles 429 rate limit with retry and eventual success (2484 ms)
+      ✓ handles Gemini 400 API error (9 ms)
+      ✓ evening sync skips Notion when API key is placeholder (6 ms)
+      ✓ evening sync migrates plaintext notionKey to encrypted (1 ms)
+      ✓ evening sync handles corrupted notionKey gracefully (1 ms)
+      ✓ returns error when Firebase ID token has no email (2 ms)
+      ✓ returns 403 when Google Token email does not match Firebase ID email (1 ms)
+      ✓ evening sync processes legacy CBC-encrypted notionKey (1 ms)
+      ✓ evening sync successfully decrypts valid legacy CBC notionKey (4 ms)
+    exportUserData - additional
+      ✓ rejects non-POST request with 405 (1 ms)
+      ✓ returns 401 when token has no email
+    deleteUserAccount - additional
+      ✓ rejects non-POST request with 405
+      ✓ returns 401 when token has no email (1 ms)
+    syncPlanner - request validation branches
+      ✓ rejects non-POST syncPlanner with 405 (1 ms)
+      ✓ rejects non-JSON content-type for syncPlanner with 415
+    deleteUserAccount - error handling
+      ✓ returns 500 when Firestore delete throws (1 ms)
+    content-type validation branches
+      ✓ setupNotion rejects non-JSON content-type with 415
+      ✓ exportUserData rejects non-JSON content-type with 415
+      ✓ deleteUserAccount rejects non-JSON content-type with 415
+    logClientError
+      ✓ rejects GET requests with 405 (1 ms)
+      ✕ accepts valid error payload and logs it (32 ms)
+
+  ● index.js Integration Tests › syncPlanner › processes evening sync successfully
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      652 |             expect(mockTasksPatch).toHaveBeenCalledWith(expect.objectContaining({ task: 'task-123', requestBody: { status: 'completed' } }));
+      653 |             expect(mockSheetsAppend).toHaveBeenCalledTimes(2); // Expenses and Health
+    > 654 |             expect(mockNotionPagesCreate).toHaveBeenCalled();
+          |                                           ^
+      655 |             expect(res.status).toHaveBeenCalledWith(200);
+      656 |             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining("Night Sync Complete") }));
+      657 |         });
+
+      at Object.toHaveBeenCalled (__tests__/index.test.js:654:43)
+
+  ● index.js Integration Tests › logClientError › accepts valid error payload and logs it
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: 200
+    Received: 503
+
+    Number of calls: 1
+
+      1269 |             await myFunctions.logClientError(req, res);
+      1270 |
+    > 1271 |             expect(res.status).toHaveBeenCalledWith(200);
+           |                                ^
+      1272 |             expect(res.send).toHaveBeenCalledWith({ success: true });
+      1273 |         });
+      1274 |     });
+
+      at Object.toHaveBeenCalledWith (__tests__/index.test.js:1271:32)
+
+------------------------|---------|----------|---------|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+File                    | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                                                                                                                                                                       
+------------------------|---------|----------|---------|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+All files               |   79.21 |    69.03 |   83.51 |   82.16 |                                                                                                                                                                                                                                         
+ functions              |   73.05 |    62.51 |   80.48 |    76.3 |                                                                                                                                                                                                                                         
+  index.js              |   68.08 |    55.93 |      68 |   72.15 | 58-62,71,108,115-117,130-133,144,166-167,174-209,268,308-309,378-379,441-442,461,464,526,624-634,652,665-669,684-689,711-717,742-744,758-759,829-832,912-913,930-931,951-952,994,1013,1024,1040,1051-1052,1061-1076,1088-1161,1167-1274 
+  utils.js              |      98 |    95.23 |     100 |     100 | 107-108,188-189,210                                                                                                                                                                                                                     
+ functions/services     |   88.94 |    78.93 |      86 |    91.2 |                                                                                                                                                                                                                                         
+  UniversalAIAdapter.js |      96 |       90 |     100 |   96.55 | 40,54,135,237,372                                                                                                                                                                                                                       
+  gemini.js             |      90 |    80.95 |   92.85 |   95.69 | 103,140,161,197                                                                                                                                                                                                                         
+  googleSync.js         |   83.05 |    67.74 |    64.7 |   83.85 | 43,69,74-76,136-147,164-165,181-182,188,191,200-202,292-293,329-330                                                                                                                                                                     
+  kms.js                |     100 |      100 |     100 |     100 |                                                                                                                                                                                                                                         
+  notion.js             |      80 |    65.85 |     100 |    84.5 | 16,132-167                                                                                                                                                                                                                              
+  rateLimit.js          |     100 |       80 |     100 |     100 | 14-15                                                                                                                                                                                                                                   
+------------------------|---------|----------|---------|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Test Suites: 1 failed, 6 passed, 7 total
+Tests:       2 failed, 262 passed, 264 total
+Snapshots:   0 total
+Time:        4.148 s
+Ran all test suites.

@@ -4,11 +4,23 @@
  */
 
 const crypto = require('crypto');
+const net = require('net');
 
 // --- CONSTANTS ---
+// Cloud Functions gen 2 rejects uncompressed HTTP requests above 32MB before
+// application code runs. The client resizes images before upload; these caps are
+// defense-in-depth for direct API calls and multi-image batches.
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_TOTAL_IMAGE_BYTES = 24 * 1024 * 1024;
+const MAX_REQUEST_BODY_BYTES = 28 * 1024 * 1024;
 const MAX_BASE64_LENGTH = Math.ceil(MAX_IMAGE_BYTES * 1.37);
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const ALLOWED_SYNC_TYPES = new Set(['morning', 'evening', 'night', 'journal']);
+const ALLOWED_BYOK_PROVIDERS = new Set([
+    'openai', 'anthropic', 'google', 'azure', 'cohere', 'huggingface',
+    'groq', 'deepseek', 'mistral', 'perplexity', 'together',
+    'openrouter', 'ollama', 'local'
+]);
 const ALLOWED_ORIGINS = new Set([
     'https://ai-planner-project-467800.web.app',
     'https://ai-planner-project-467800.firebaseapp.com',
@@ -84,22 +96,50 @@ function sanitizeSyncType(value) {
     return syncType === 'night' ? 'evening' : syncType;
 }
 
+function hasExpectedImageSignature(mimeType, bytes) {
+    if (!Buffer.isBuffer(bytes) || bytes.length < 4) return false;
+    if (mimeType === 'image/jpeg') {
+        return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    }
+    if (mimeType === 'image/png') {
+        const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        return bytes.length >= png.length && bytes.subarray(0, png.length).equals(png);
+    }
+    if (mimeType === 'image/webp') {
+        return bytes.length >= 12
+            && bytes.subarray(0, 4).toString('ascii') === 'RIFF'
+            && bytes.subarray(8, 12).toString('ascii') === 'WEBP';
+    }
+    return false;
+}
+
 function parseImageDataUrl(imageData) {
     if (typeof imageData !== 'string') return null;
     if (imageData.length > MAX_BASE64_LENGTH) return null;
 
     const match = imageData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
     if (!match) return null;
+    const mimeType = match[1].toLowerCase();
+    if (!ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) return null;
 
     // Defense-in-depth: verify decoded byte size doesn't exceed limit
     const base64Str = match[2];
     const padding = (base64Str.endsWith('==') ? 2 : base64Str.endsWith('=') ? 1 : 0);
     const decodedBytes = Math.floor((base64Str.length * 3) / 4) - padding;
-    if (decodedBytes > MAX_IMAGE_BYTES) return null;
+    if (decodedBytes <= 0 || decodedBytes > MAX_IMAGE_BYTES) return null;
+
+    let bytes;
+    try {
+        bytes = Buffer.from(base64Str, 'base64');
+    } catch (_) {
+        return null;
+    }
+    if (bytes.length !== decodedBytes || !hasExpectedImageSignature(mimeType, bytes)) return null;
 
     return {
-        mimeType: match[1].toLowerCase(),
-        base64Data: base64Str
+        mimeType,
+        base64Data: base64Str,
+        decodedBytes
     };
 }
 
@@ -108,9 +148,12 @@ function parseImageDataArray(imagesArray) {
     if (imagesArray.length === 0 || imagesArray.length > 5) return null;
 
     const parsedImages = [];
+    let totalDecodedBytes = 0;
     for (const imgStr of imagesArray) {
         const parsed = parseImageDataUrl(imgStr);
         if (!parsed) return null; // If any single image is invalid/too large, reject all
+        totalDecodedBytes += parsed.decodedBytes;
+        if (totalDecodedBytes > MAX_TOTAL_IMAGE_BYTES) return null;
         parsedImages.push(parsed);
     }
     return parsedImages;
@@ -125,8 +168,8 @@ function normalizeNotionDbId(rawDbId) {
 function isLikelyNotionKey(value) {
     if (typeof value !== 'string') return false;
     const trimmed = value.trim();
-    if (trimmed.length < 20 || trimmed.length > 256) return false;
-    return trimmed.startsWith('secret_');
+    // Shape check only; Notion token validity is confirmed via validateNotionCredentials.
+    return trimmed.length >= 20 && trimmed.length <= 256;
 }
 
 function isJsonRequest(req) {
@@ -157,7 +200,7 @@ function handleOptions(req, res) {
         return true;
     }
     res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-byok-token, x-byok-provider, x-byok-model, x-byok-baseurl, x-byok-apiversion');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Firebase-AppCheck, x-byok-token, x-byok-provider, x-byok-model, x-byok-baseurl, x-byok-apiversion');
     res.status(204).send('');
     return true;
 }
@@ -167,6 +210,162 @@ function validateTokenFormat(token) {
     if (token.length < 20) return false;
     if (token.length > 5000) return false;
     return true;
+}
+
+function ipv4ToInt(ip) {
+    const parts = ip.split('.');
+    if (parts.length !== 4) return null;
+    const octets = parts.map(Number);
+    if (octets.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    return (((octets[0] << 24) >>> 0)
+        + (octets[1] << 16)
+        + (octets[2] << 8)
+        + octets[3]) >>> 0;
+}
+
+function ipv4InCidr(ip, network, prefix) {
+    const value = ipv4ToInt(ip);
+    const base = ipv4ToInt(network);
+    if (value === null || base === null) return false;
+    const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+    return (value & mask) === (base & mask);
+}
+
+function parseIpv6ToBigInt(input) {
+    let ip = input.toLowerCase().replace(/^\[|\]$/g, '').split('%')[0];
+    if (ip.includes('.')) {
+        const lastColon = ip.lastIndexOf(':');
+        const ipv4 = ip.slice(lastColon + 1);
+        const value = ipv4ToInt(ipv4);
+        if (value === null) return null;
+        ip = `${ip.slice(0, lastColon)}:${((value >>> 16) & 0xffff).toString(16)}:${(value & 0xffff).toString(16)}`;
+    }
+
+    const halves = ip.split('::');
+    if (halves.length > 2) return null;
+    const left = halves[0] ? halves[0].split(':') : [];
+    const right = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+    const missing = 8 - left.length - right.length;
+    if ((halves.length === 1 && missing !== 0) || missing < 0) return null;
+    const groups = [...left, ...Array(missing).fill('0'), ...right];
+    if (groups.length !== 8 || groups.some(g => !/^[0-9a-f]{1,4}$/.test(g))) return null;
+
+    return groups.reduce((acc, group) => (acc << 16n) + BigInt(parseInt(group, 16)), 0n);
+}
+
+function ipv6InCidr(ip, network, prefix) {
+    const value = parseIpv6ToBigInt(ip);
+    const base = parseIpv6ToBigInt(network);
+    if (value === null || base === null) return false;
+    const shift = 128n - BigInt(prefix);
+    return (value >> shift) === (base >> shift);
+}
+
+function isPrivateOrReservedIp(rawIp) {
+    const ip = String(rawIp || '').replace(/^\[|\]$/g, '').split('%')[0];
+    const family = net.isIP(ip);
+    if (family === 4) {
+        const blocked = [
+            ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10],
+            ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12],
+            ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.168.0.0', 16],
+            ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24],
+            ['224.0.0.0', 4], ['240.0.0.0', 4]
+        ];
+        return blocked.some(([network, prefix]) => ipv4InCidr(ip, network, prefix));
+    }
+    if (family === 6) {
+        const mapped = parseIpv6ToBigInt(ip);
+        const mappedPrefix = parseIpv6ToBigInt('::ffff:0:0');
+        if (mapped !== null && mappedPrefix !== null && (mapped >> 32n) === (mappedPrefix >> 32n)) {
+            const value = Number(mapped & 0xffffffffn);
+            const ipv4 = `${(value >>> 24) & 255}.${(value >>> 16) & 255}.${(value >>> 8) & 255}.${value & 255}`;
+            return isPrivateOrReservedIp(ipv4);
+        }
+        const blocked = [
+            ['::', 128], ['::1', 128], ['64:ff9b::', 96], ['100::', 64],
+            ['2001:db8::', 32], ['2001:10::', 28], ['fc00::', 7],
+            ['fe80::', 10], ['ff00::', 8]
+        ];
+        return blocked.some(([network, prefix]) => ipv6InCidr(ip, network, prefix));
+    }
+    return true;
+}
+
+function validateBYOKBaseUrl(value) {
+    if (typeof value !== 'string' || value.length < 8 || value.length > 2048) {
+        return { valid: false, error: 'Base URL must be between 8 and 2048 characters.' };
+    }
+    try {
+        const parsed = new URL(value);
+        if (parsed.protocol !== 'https:') return { valid: false, error: 'Base URL must use HTTPS.' };
+        if (parsed.username || parsed.password) return { valid: false, error: 'Base URL credentials are not allowed.' };
+        if (parsed.hash) return { valid: false, error: 'Base URL fragments are not allowed.' };
+        if (parsed.port && parsed.port !== '443') return { valid: false, error: 'Only HTTPS port 443 is allowed.' };
+        const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+        if (
+            !hostname
+            || hostname === 'localhost'
+            || hostname === 'metadata.google.internal'
+            || hostname.endsWith('.localhost')
+            || hostname.endsWith('.local')
+            || hostname.endsWith('.internal')
+        ) {
+            return { valid: false, error: 'Internal or reserved hostnames are not allowed.' };
+        }
+        if (net.isIP(hostname) && isPrivateOrReservedIp(hostname)) {
+            return { valid: false, error: 'Private or reserved IP addresses are not allowed.' };
+        }
+        parsed.port = '';
+        return { valid: true, url: parsed.toString() };
+    } catch (_) {
+        return { valid: false, error: 'Base URL is invalid.' };
+    }
+}
+
+function validateBYOKConfig({ apiKey, provider, modelName, baseUrl, apiVersion } = {}, { allowCustomUrl = false } = {}) {
+    const normalizedApiKey = typeof apiKey === 'string' ? apiKey.trim() : apiKey;
+    if (!validateTokenFormat(normalizedApiKey)) return { valid: false, error: 'API key format is invalid.' };
+
+    const normalizedProvider = typeof provider === 'string' ? provider.trim().toLowerCase() : 'openai';
+    if (!ALLOWED_BYOK_PROVIDERS.has(normalizedProvider)) {
+        return { valid: false, error: 'AI provider is not supported.' };
+    }
+
+    const normalizedModel = typeof modelName === 'string' ? modelName.trim() : '';
+    if (!normalizedModel || normalizedModel.length > 200 || !/^[a-zA-Z0-9._:/-]+$/.test(normalizedModel)) {
+        return { valid: false, error: 'Model name format is invalid.' };
+    }
+
+    let normalizedBaseUrl;
+    if (baseUrl) {
+        if (!allowCustomUrl) return { valid: false, error: 'Custom BYOK URLs are disabled.' };
+        const urlCheck = validateBYOKBaseUrl(String(baseUrl).trim());
+        if (!urlCheck.valid) return urlCheck;
+        normalizedBaseUrl = urlCheck.url;
+    }
+    if (!normalizedBaseUrl && ['azure', 'ollama', 'local'].includes(normalizedProvider)) {
+        return { valid: false, error: 'This provider requires a custom BYOK base URL.' };
+    }
+
+    let normalizedApiVersion;
+    if (apiVersion) {
+        normalizedApiVersion = String(apiVersion).trim();
+        if (normalizedApiVersion.length > 64 || !/^[a-zA-Z0-9.-]+$/.test(normalizedApiVersion)) {
+            return { valid: false, error: 'API version format is invalid.' };
+        }
+    }
+
+    return {
+        valid: true,
+        config: {
+            apiKey: normalizedApiKey,
+            provider: normalizedProvider,
+            modelName: normalizedModel,
+            ...(normalizedBaseUrl ? { baseUrl: normalizedBaseUrl } : {}),
+            ...(normalizedApiVersion ? { apiVersion: normalizedApiVersion } : {})
+        }
+    };
 }
 
 function parseDateTime(timeString, dateString) {
@@ -285,8 +484,12 @@ function computeDisplayStreak(userData, todayStr) {
 module.exports = {
     // Constants
     MAX_IMAGE_BYTES,
+    MAX_TOTAL_IMAGE_BYTES,
+    MAX_REQUEST_BODY_BYTES,
     MAX_BASE64_LENGTH,
+    ALLOWED_IMAGE_MIME_TYPES,
     ALLOWED_SYNC_TYPES,
+    ALLOWED_BYOK_PROVIDERS,
     ALLOWED_ORIGINS,
     ALGORITHM,
     LEGACY_ALGORITHM,
@@ -308,6 +511,9 @@ module.exports = {
     isJsonRequest,
     parseDateTime,
     validateTokenFormat,
+    validateBYOKBaseUrl,
+    validateBYOKConfig,
+    isPrivateOrReservedIp,
     calendarDayDiff,
     normalizeSyncDateStr,
     computeDisplayStreak,

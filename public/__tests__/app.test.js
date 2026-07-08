@@ -11,6 +11,8 @@
 
 const {
     parseJsonResponse,
+    readApiError,
+    showActionableError,
     getApiUrls,
     applyTheme,
     switchView,
@@ -78,6 +80,83 @@ describe('parseJsonResponse', () => {
             expect(match[1].length).toBeLessThanOrEqual(120);
         }
     });
+});
+
+describe('readApiError', () => {
+    const mockResponse = (body, status = 400, statusText = '', contentType = 'application/json') => ({
+        status,
+        statusText,
+        text: async () => body,
+        headers: {
+            get: (name) => name === 'content-type' ? contentType : null
+        }
+    });
+
+    test('extracts JSON error message and details', async () => {
+        const res = mockResponse(JSON.stringify({ error: 'Notion rejected the integration token.' }), 400, 'Bad Request');
+        const result = await readApiError(res);
+        expect(result.message).toBe('Notion rejected the integration token.');
+        expect(result.details).toContain('HTTP 400 Bad Request');
+        expect(result.details).toContain('Notion rejected the integration token.');
+    });
+
+    test('handles non-JSON error responses', async () => {
+        const res = mockResponse('<html>502 Bad Gateway</html>', 502, 'Bad Gateway', 'text/html');
+        const result = await readApiError(res);
+        expect(result.details).toContain('HTTP 502 Bad Gateway');
+        expect(result.details).toContain('Response body:');
+    });
+
+    test('handles empty response bodies', async () => {
+        const res = mockResponse('', 500, 'Internal Server Error', 'text/plain');
+        const result = await readApiError(res);
+        expect(result.details).toContain('HTTP 500 Internal Server Error');
+        expect(result.details).toContain('Empty response body');
+    });
+});
+
+describe('showActionableError', () => {
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <div id="actionable-error-modal" class="hidden">
+        <h3 id="actionable-error-title"></h3>
+        <p id="actionable-error-summary"></p>
+        <div id="actionable-error-details" class="hidden">
+          <pre id="actionable-error-details-text"></pre>
+        </div>
+        <button id="actionable-error-know-more">Know more</button>
+        <button id="actionable-error-close">Close</button>
+      </div>
+    `;
+  });
+
+  test('shows modal with summary and hidden details', () => {
+    showActionableError({
+      title: 'Notion setup failed',
+      summary: 'Could not save Notion keys securely. Please try again.',
+      details: 'HTTP 400\n\nMessage: Invalid setup payload',
+    });
+
+    const modal = document.getElementById('actionable-error-modal');
+    expect(modal.classList.contains('flex')).toBe(true);
+    expect(document.getElementById('actionable-error-title').textContent).toBe('Notion setup failed');
+    expect(document.getElementById('actionable-error-summary').textContent)
+      .toBe('Could not save Notion keys securely. Please try again.');
+    expect(document.getElementById('actionable-error-details').classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('actionable-error-details-text').textContent)
+      .toContain('Invalid setup payload');
+  });
+
+  test('reveals details when Know more is clicked', () => {
+    showActionableError({
+      summary: 'Something failed.',
+      details: 'Exact backend error',
+    });
+
+    document.getElementById('actionable-error-know-more').click();
+    expect(document.getElementById('actionable-error-details').classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('actionable-error-know-more').textContent).toBe('Hide details');
+  });
 });
 
 describe('API URL Resolution', () => {

@@ -44,6 +44,7 @@ export default function App() {
   const [appTheme, setAppTheme] = useState('light'); // Tracks website's dark/light mode
   const [expoPushToken, setExpoPushToken] = useState(null);
   const webviewRef = useRef(null);
+  const tokenIssuedAtRef = useRef(0);
 
   // Memoize the base URL so state changes (like theme) don't trigger a full web reload
   const nocacheUrl = useMemo(() => 'https://planner.analogdigital.tech/?nocache=' + Date.now(), []);
@@ -56,6 +57,7 @@ export default function App() {
 
   const resetNativeSession = async () => {
     await clearStoredLogin();
+    tokenIssuedAtRef.current = 0;
     setTokens(null);
     setIsAuthenticated(false);
     setWebBridgeStatus('idle');
@@ -83,11 +85,9 @@ export default function App() {
 
       if (idToken && accessToken) {
         setWebBridgeStatus('authenticating');
+        tokenIssuedAtRef.current = Date.now();
         setTokens({ idToken, accessToken });
         setIsAuthenticated(true);
-        await SecureStore.setItemAsync('idToken', idToken);
-        await SecureStore.setItemAsync('accessToken', accessToken);
-        await SecureStore.setItemAsync('tokenTime', Date.now().toString());
       } else {
         throw new Error('Google Sign-In did not return usable tokens.');
       }
@@ -135,47 +135,28 @@ export default function App() {
     }
     requestCameraPermission();
 
-    // 2. Load Saved Credentials
+    // 2. Clear legacy app-managed token storage and attempt native silent sign-in.
+    // OAuth tokens stay in React memory only; the native Google SDK manages its own
+    // account session and we request fresh short-lived tokens when needed.
     async function loadSavedTokens() {
       try {
-        const savedIdToken = await SecureStore.getItemAsync('idToken');
-        const savedAccessToken = await SecureStore.getItemAsync('accessToken');
-        const savedTime = await SecureStore.getItemAsync('tokenTime');
-        
-        // Tokens expire in 1 hour. Check if it's older than 50 minutes.
-        const isExpired = !savedTime || (Date.now() - parseInt(savedTime)) > 50 * 60 * 1000;
+        await clearStoredLogin();
+        await GoogleSignin.hasPlayServices();
+        const userInfo = await GoogleSignin.signInSilently();
+        const userTokens = await GoogleSignin.getTokens();
 
-        if (savedIdToken && savedAccessToken && !isExpired) {
+        const idToken = userInfo.data?.idToken || userInfo.idToken || userTokens.idToken;
+        const accessToken = userTokens.accessToken;
+
+        if (idToken && accessToken) {
           setWebBridgeStatus('authenticating');
-          setTokens({ idToken: savedIdToken, accessToken: savedAccessToken });
+          tokenIssuedAtRef.current = Date.now();
+          setTokens({ idToken, accessToken });
           setIsAuthenticated(true);
-        } else if (savedIdToken && isExpired) {
-          // Token is expired, but user was logged in previously.
-          // Silently refresh the token so they never get logged out.
-          try {
-            await GoogleSignin.hasPlayServices();
-            const userInfo = await GoogleSignin.signInSilently();
-            const userTokens = await GoogleSignin.getTokens();
-            
-            const idToken = userInfo.data?.idToken || userInfo.idToken || userTokens.idToken;
-            const accessToken = userTokens.accessToken;
-
-            if (idToken && accessToken) {
-              setWebBridgeStatus('authenticating');
-              setTokens({ idToken, accessToken });
-              setIsAuthenticated(true);
-              await SecureStore.setItemAsync('idToken', idToken);
-              await SecureStore.setItemAsync('accessToken', accessToken);
-              await SecureStore.setItemAsync('tokenTime', Date.now().toString());
-            } else {
-              await clearStoredLogin();
-            }
-          } catch (e) {
-            console.warn('Silent login refresh failed on startup:', e);
-            await clearStoredLogin();
-          }
         }
-      } catch (e) {}
+      } catch (e) {
+        await clearStoredLogin();
+      }
       setIsCheckingLogin(false);
     }
     loadSavedTokens();
@@ -185,8 +166,7 @@ export default function App() {
   useEffect(() => {
     if (!isAuthenticated) return;
     const interval = setInterval(async () => {
-      const savedTime = await SecureStore.getItemAsync('tokenTime');
-      if (savedTime && (Date.now() - parseInt(savedTime)) > 50 * 60 * 1000) {
+      if (tokenIssuedAtRef.current && (Date.now() - tokenIssuedAtRef.current) > 50 * 60 * 1000) {
         // Token expired while using the app. Refresh it silently instead of logging out!
         try {
           const userInfo = await GoogleSignin.signInSilently();
@@ -195,10 +175,8 @@ export default function App() {
           const accessToken = userTokens.accessToken;
 
           if (idToken && accessToken) {
+            tokenIssuedAtRef.current = Date.now();
             setTokens({ idToken, accessToken });
-            await SecureStore.setItemAsync('idToken', idToken);
-            await SecureStore.setItemAsync('accessToken', accessToken);
-            await SecureStore.setItemAsync('tokenTime', Date.now().toString());
             
             // Re-inject the fresh token into the WebView
             webviewRef.current?.injectJavaScript(`

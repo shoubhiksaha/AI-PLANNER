@@ -297,7 +297,7 @@
                         Key</label>
                     <input type="password" id="notion-key-input"
                         class="w-full rounded-xl border border-theme-border bg-theme-bg p-3.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-theme-text font-mono placeholder:font-sans"
-                        placeholder="secret_...">
+                        placeholder="ntn_... or secret_...">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-theme-muted uppercase mb-1.5 tracking-wider">Database
@@ -587,19 +587,19 @@
                 class="block w-full h-40 border-2 border-dashed border-theme-border rounded-xl flex items-center justify-center transition-all bg-theme-bg relative group overflow-hidden">
                 <div id="upload-ui" class="w-full h-full flex items-center justify-center gap-4 sm:gap-6 relative z-10">
                     <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
-                        <input type="file" accept="image/*" capture="environment" class="upload-input hidden">
+                        <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" class="upload-input hidden">
                         <span class="text-3xl mb-1.5 pointer-events-none">📷</span>
                         <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Camera</span>
                     </label>
                     <div class="w-px h-14 bg-theme-border/60"></div>
                     <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
-                        <input type="file" accept="image/*" class="upload-input hidden">
+                        <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" class="upload-input hidden">
                         <span class="text-3xl mb-1.5 pointer-events-none">🖼️</span>
                         <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Gallery</span>
                     </label>
                     <div class="w-px h-14 bg-theme-border/60"></div>
                     <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
-                        <input type="file" accept="*/*" class="upload-input hidden">
+                        <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" class="upload-input hidden">
                         <span class="text-3xl mb-1.5 pointer-events-none">📁</span>
                         <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Files</span>
                     </label>
@@ -788,6 +788,29 @@
         </div>
     </div>
 
+    <!-- ACTIONABLE ERROR MODAL -->
+    <div id="actionable-error-modal"
+        class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-[60]"
+        role="alertdialog" aria-labelledby="actionable-error-title" aria-modal="true">
+        <div
+            class="bg-theme-bg border border-theme-border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <h3 id="actionable-error-title" class="font-bold text-lg text-theme-text">Something went wrong</h3>
+            <p id="actionable-error-summary" class="text-sm text-theme-muted"></p>
+            <div id="actionable-error-details" class="hidden">
+                <p class="text-xs font-bold text-theme-muted uppercase tracking-wider mb-1.5">Error details</p>
+                <pre id="actionable-error-details-text"
+                    class="text-xs font-mono bg-theme-bg border border-theme-border rounded-xl p-3 overflow-x-auto whitespace-pre-wrap break-words text-theme-text max-h-48 overflow-y-auto"></pre>
+            </div>
+            <div class="flex gap-2">
+                <button type="button" id="actionable-error-know-more"
+                    class="flex-1 text-sm font-semibold text-blue-600 hover:text-blue-700 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800/40 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                    aria-expanded="false">Know more</button>
+                <button type="button" id="actionable-error-close"
+                    class="flex-1 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 py-2.5 rounded-xl transition-colors">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- GUIDE MODAL -->
     <div id="guide-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[80vh]">
@@ -796,13 +819,14 @@
             <div class="space-y-4 text-sm text-gray-600">
 
                 <section>
-                    <h4 class="font-bold text-gray-800">Step 1: Get Access Key</h4>
+                    <h4 class="font-bold text-gray-800">Step 1: Get Access Token</h4>
                     <ol class="list-decimal list-inside space-y-1 ml-2">
                         <li>Go to <a href="https://www.notion.so/my-integrations" target="_blank"
                                 class="text-blue-600 underline hover:text-blue-800">notion.so/my-integrations</a>.</li>
-                        <li>Click <strong>+ New integration</strong>.</li>
+                        <li>Click <strong>+ New integration</strong> (or open your existing <strong>AI Planner</strong> connection).</li>
                         <li>Name it <strong>"AI Planner"</strong> and submit.</li>
-                        <li>Copy the <strong>"Internal Integration Secret"</strong> (Key).</li>
+                        <li>Open <strong>Manage connection</strong> and copy the <strong>Access token</strong>
+                            (<code>ntn_...</code> on new connections, or legacy <code>secret_...</code>).</li>
                     </ol>
                 </section>
 
@@ -829,11 +853,10 @@
                     <h4 class="font-bold text-gray-800">Step 4: Get Database ID</h4>
                     <ul class="list-disc list-inside space-y-1 ml-2 text-xs bg-gray-50 p-2 rounded border">
                         <li>Look at the URL of your database page:</li>
-                        <li class="font-mono text-xs break-all text-gray-500">https://notion.so/myworkspace/<span
-                                class="bg-yellow-200 text-black px-1 font-bold">18b3...4d92</span>?v=...</li>
-                        <li>Copy the <strong>32-character code</strong> between the slash <code>/</code> and the
-                            question mark <code>?</code>.</li>
-                        <li>If there is no question mark, copy the ID at the end.</li>
+                        <li class="font-mono text-xs break-all text-gray-500">https://app.notion.com/p/<span
+                                class="bg-yellow-200 text-black px-1 font-bold">395c...38ab</span>?v=...</li>
+                        <li>Copy the <strong>32-character database ID</strong> after <code>/p/</code> and before
+                            <code>?</code> (do not paste the full URL or the <code>?v=</code> view ID).</li>
                     </ul>
                 </section>
 
@@ -1110,8 +1133,8 @@
         </div>
     </div>
 
-    <script src="app-helpers.js?v=10"></script>
-    <script type="module" src="app.js?v=19"></script>
+    <script src="app-helpers.js?v=11"></script>
+    <script type="module" src="app.js?v=22"></script>
 </body>
 
 </html>

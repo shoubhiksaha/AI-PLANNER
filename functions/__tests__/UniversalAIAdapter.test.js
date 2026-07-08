@@ -44,7 +44,7 @@ describe('UniversalAIAdapter', () => {
 
         test('respects custom baseUrl over auto-config', () => {
             const a = new UniversalAIAdapter({ apiKey: 'k', provider: 'openai', baseUrl: 'https://custom.api.com' });
-            expect(a.baseUrl).toBe('https://custom.api.com');
+            expect(a.baseUrl).toBe('https://custom.api.com/');
         });
 
         test('groq gets correct base URL', () => {

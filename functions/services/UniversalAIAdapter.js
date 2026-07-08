@@ -1,4 +1,12 @@
 const { logger } = require('firebase-functions/logger');
+const https = require('https');
+const {
+    isPrivateOrReservedIp,
+    validateBYOKBaseUrl
+} = require('../utils');
+
+const MAX_AI_RESPONSE_BYTES = 2 * 1024 * 1024;
+const AI_REQUEST_TIMEOUT_MS = 120000;
 
 class UniversalAIAdapter {
     /**
@@ -16,34 +24,18 @@ class UniversalAIAdapter {
         this.apiKey = config.apiKey;
         this.provider = (config.provider || 'openai').toLowerCase();
         this.modelName = config.modelName || 'gpt-4o';
+        // node-fetch v2 supports a custom HTTPS agent, which lets custom BYOK
+        // requests connect to the exact public address validated below.
+        this._fetchImpl = config.fetchImpl
+            || (process.env.NODE_ENV === 'test' ? global.fetch : require('node-fetch'));
         if (config.baseUrl) {
             try {
-                const parsedUrl = new URL(config.baseUrl);
-                if (parsedUrl.protocol !== 'https:') {
-                    throw new Error("Protocol must be https");
-                }
-                const host = parsedUrl.hostname;
-                // Block Cloud Metadata and internal network SSRF attacks
-                const is172LinkLocal = host.startsWith('172.') && parseInt(host.split('.')[1], 10) >= 16 && parseInt(host.split('.')[1], 10) <= 31;
-                if (
-                    host === '169.254.169.254' || 
-                    host === 'localhost' || 
-                    host === '127.0.0.1' || 
-                    host === '0.0.0.0' ||
-                    host === '[::1]' ||
-                    host.startsWith('10.') || 
-                    host.startsWith('192.168.') || 
-                    is172LinkLocal ||
-                    host.endsWith('.internal') ||
-                    host.endsWith('.local')
-                ) {
-                    throw new Error("Internal or reserved hostnames are strictly prohibited");
-                }
-
-                // DNS rebinding check deferred to _validateBaseUrlDns() (async, custom URLs only)
+                const result = validateBYOKBaseUrl(config.baseUrl);
+                if (!result.valid) throw new Error(result.error);
                 this._customBaseUrl = true;
                 this._dnsValidated = false;
-                this.baseUrl = config.baseUrl;
+                this._validatedAddresses = [];
+                this.baseUrl = result.url;
             } catch (err) {
                 throw new Error("Invalid BYOK Base URL: " + err.message);
             }
@@ -62,7 +54,7 @@ class UniversalAIAdapter {
             const urlMap = {
                 openai: 'https://api.openai.com/v1/chat/completions',
                 anthropic: 'https://api.anthropic.com/v1/messages',
-                google: `https://generativelanguage.googleapis.com/v1beta/models/${this.modelName}:generateContent`,
+                google: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.modelName)}:generateContent`,
                 cohere: 'https://api.cohere.ai/v2/chat',
                 huggingface: `https://api-inference.huggingface.co/models/${this.modelName}`,
                 groq: 'https://api.groq.com/openai/v1/chat/completions',
@@ -86,26 +78,19 @@ class UniversalAIAdapter {
         if (this._dnsValidated || !this._customBaseUrl) return;
 
         try {
-            const host = new URL(this.baseUrl).hostname;
+            const host = new URL(this.baseUrl).hostname.replace(/^\[|\]$/g, '');
             const dns = require('dns').promises;
-            let resolvedAny = false;
+            const validatedAddresses = [];
 
             // Check IPv4 resolved addresses
             try {
                 const v4 = await dns.resolve4(host);
                 for (const ip of v4) {
-                    const octets = ip.split('.').map(Number);
-                    if (
-                        ip === '127.0.0.1' || ip === '0.0.0.0' ||
-                        ip.startsWith('169.254.') ||
-                        octets[0] === 10 ||
-                        (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
-                        (octets[0] === 192 && octets[1] === 168)
-                    ) {
+                    if (isPrivateOrReservedIp(ip)) {
                         throw new Error(`SSRF blocked: DNS resolved to private IPv4 ${ip}`);
                     }
+                    validatedAddresses.push({ address: ip, family: 4 });
                 }
-                if (v4.length > 0) resolvedAny = true;
             } catch (e) {
                 if (e && e.message && e.message.includes('SSRF blocked')) throw e;
                 // NODATA/NXDOMAIN for IPv4 is ok if IPv6 exists; handled below
@@ -115,34 +100,66 @@ class UniversalAIAdapter {
             try {
                 const v6 = await dns.resolve6(host);
                 for (const ip of v6) {
-                    const lower = ip.toLowerCase();
-                    if (
-                        lower === '::1' || lower === '::' ||
-                        lower.startsWith('fe80:') ||
-                        lower.startsWith('fc') || lower.startsWith('fd') ||
-                        lower.startsWith('::ffff:127.') ||
-                        lower.startsWith('::ffff:10.') ||
-                        lower.startsWith('::ffff:192.168.')
-                    ) {
+                    if (isPrivateOrReservedIp(ip)) {
                         throw new Error(`SSRF blocked: DNS resolved to private IPv6 ${ip}`);
                     }
+                    validatedAddresses.push({ address: ip, family: 6 });
                 }
-                if (v6.length > 0) resolvedAny = true;
             } catch (e) {
                 if (e && e.message && e.message.includes('SSRF blocked')) throw e;
                 // NODATA/NXDOMAIN for IPv6 is ok
             }
 
-            if (!resolvedAny) {
+            if (validatedAddresses.length === 0) {
                 throw new Error('SSRF blocked: Could not validate DNS for custom URL');
             }
 
             // Only mark validated after successful checks
+            this._validatedAddresses = validatedAddresses;
             this._dnsValidated = true;
         } catch (dnsErr) {
             if (dnsErr && dnsErr.message && dnsErr.message.includes('SSRF blocked')) throw dnsErr;
             // Fail CLOSED: if DNS resolution completely fails, block the request
             throw new Error('SSRF blocked: Could not validate DNS for custom URL');
+        }
+    }
+
+    _getPinnedHttpsAgent() {
+        if (!this._customBaseUrl || this._validatedAddresses.length === 0) return undefined;
+        const expectedHost = new URL(this.baseUrl).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+        const pinned = this._validatedAddresses[0];
+        return new https.Agent({
+            keepAlive: false,
+            lookup: (hostname, _options, callback) => {
+                if (String(hostname).toLowerCase() !== expectedHost) {
+                    return callback(new Error('SSRF blocked: unexpected outbound hostname'));
+                }
+                callback(null, pinned.address, pinned.family);
+            }
+        });
+    }
+
+    async _fetch(url, options) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
+        try {
+            const fetchOptions = {
+                ...options,
+                redirect: 'error',
+                signal: controller.signal,
+                size: MAX_AI_RESPONSE_BYTES
+            };
+            if (this._customBaseUrl) {
+                fetchOptions.agent = this._getPinnedHttpsAgent();
+            }
+            const response = await this._fetchImpl(url, fetchOptions);
+            const contentLength = Number(response?.headers?.get?.('content-length') || 0);
+            if (contentLength > MAX_AI_RESPONSE_BYTES) {
+                throw new Error('AI response exceeded maximum allowed size');
+            }
+            return response;
+        } finally {
+            clearTimeout(timeout);
         }
     }
 
@@ -184,7 +201,7 @@ class UniversalAIAdapter {
 
     async _chatOpenAICompatible(systemPrompt, userPrompt, images, requestId) {
         const url = this.provider === 'azure' 
-            ? `${this.baseUrl}/openai/deployments/${this.modelName}/chat/completions?api-version=${this.apiVersion || '2023-05-15'}`
+            ? `${this.baseUrl.replace(/\/$/, '')}/openai/deployments/${encodeURIComponent(this.modelName)}/chat/completions?api-version=${encodeURIComponent(this.apiVersion || '2023-05-15')}`
             : this.baseUrl;
 
         const headers = { "Content-Type": "application/json" };
@@ -223,7 +240,7 @@ class UniversalAIAdapter {
             payload.stream = false;
         }
 
-        const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+        const response = await this._fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             logger.error(`${this.provider} API Error: ${response.status}`, { requestId });
             throw new Error(`${this.provider} API Error: ${response.status}`);
@@ -261,7 +278,7 @@ class UniversalAIAdapter {
             }
         };
 
-        const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+        const response = await this._fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             logger.error(`Google API Error: ${response.status}`, { requestId });
             throw new Error(`Google API Error: ${response.status}`);
@@ -302,7 +319,7 @@ class UniversalAIAdapter {
             temperature: 0.1
         };
 
-        const response = await fetch(this.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
+        const response = await this._fetch(this.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             logger.error(`Anthropic API Error: ${response.status}`, { requestId });
             throw new Error(`Anthropic API Error: ${response.status}`);
@@ -342,7 +359,7 @@ class UniversalAIAdapter {
             logger.warn("Cohere does not support vision/image inputs. Images will be ignored.", { requestId });
         }
 
-        const response = await fetch(this.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
+        const response = await this._fetch(this.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             logger.error(`Cohere API Error: ${response.status}`, { requestId });
             throw new Error(`Cohere API Error: ${response.status}`);
@@ -382,7 +399,7 @@ class UniversalAIAdapter {
             logger.warn("HuggingFace Inference API does not support vision/image inputs. Images will be ignored.", { requestId });
         }
 
-        const response = await fetch(this.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
+        const response = await this._fetch(this.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             logger.error(`HuggingFace API Error: ${response.status}`, { requestId });
             throw new Error(`HuggingFace API Error: ${response.status}`);
