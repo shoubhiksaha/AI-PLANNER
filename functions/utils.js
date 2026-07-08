@@ -114,6 +114,9 @@ function hasExpectedImageSignature(mimeType, bytes) {
             && bytes.subarray(0, 4).toString('ascii') === 'RIFF'
             && bytes.subarray(8, 12).toString('ascii') === 'WEBP';
     }
+    if (mimeType.startsWith('audio/')) {
+        return true; // Defer audio signature validation to Gemini / parsing logic
+    }
     return false;
 }
 
