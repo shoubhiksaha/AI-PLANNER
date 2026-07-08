@@ -1004,13 +1004,34 @@ const triggerSync = async (syncType, overrideFiles = null) => {
     updateDashButtons(false);
 
     // Granular Progress Timer (Simulated for UX)
-    const steps = [
-        { t: 1000, msg: "Uploading to Secure Cloud..." },
-        { t: 5000, msg: "AI is Reading Handwriting..." },
-        { t: 15000, msg: "Extracting Tasks & Events..." },
-        { t: 25000, msg: "Syncing with Notion & Google..." },
-        { t: 40000, msg: "Almost there..." }
-    ];
+    let steps = [];
+    if (syncType === 'voice_note') {
+        statusArea.textContent = "Processing Audio...";
+        steps = [
+            { t: 1000, msg: "Uploading to Secure Cloud..." },
+            { t: 5000, msg: "AI is Transcribing Audio..." },
+            { t: 15000, msg: "Extracting Insights..." },
+            { t: 25000, msg: "Syncing with Notion..." },
+            { t: 40000, msg: "Almost there..." }
+        ];
+    } else if (syncType === 'journal') {
+        statusArea.textContent = "Processing Image...";
+        steps = [
+            { t: 1000, msg: "Uploading to Secure Cloud..." },
+            { t: 5000, msg: "AI is Reading Handwriting..." },
+            { t: 15000, msg: "Extracting Journal Entries..." },
+            { t: 25000, msg: "Syncing with Notion..." },
+            { t: 40000, msg: "Almost there..." }
+        ];
+    } else {
+        steps = [
+            { t: 1000, msg: "Uploading to Secure Cloud..." },
+            { t: 5000, msg: "AI is Reading Handwriting..." },
+            { t: 15000, msg: "Extracting Tasks & Events..." },
+            { t: 25000, msg: "Syncing with Notion & Google..." },
+            { t: 40000, msg: "Almost there..." }
+        ];
+    }
 
     let timers = [];
     steps.forEach(step => {

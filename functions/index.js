@@ -115,6 +115,10 @@ function sanitizeControlCharacters(value, replacement = '') {
 
 function checkFeaturesAndCredits(userData, numImages, mode, hasBYOK = false) {
     const tier = userData.tier || 'free';
+    if (tier !== 'pro' && mode === 'voice_note') {
+        return { allowed: false, error: "AI Voice Transcribing is a Pro feature. Upgrade to Pro to use Voice Notes! 🚀", code: 403 };
+    }
+    
     if (tier === 'free') {
         if (numImages > 1) return { allowed: false, error: "Free tier is limited to 1 page per sync. Upgrade to Standard/Pro for multi-page batch processing 🚀", code: 403 };
     } else if (tier === 'standard') {
@@ -832,9 +836,10 @@ exports.syncPlanner = onRequest({
             logger.warn("Invalid syncType", { requestId, authEmail: email, syncMode: mode, durationMs, status: 400 });
             return res.status(400).send({ error: "Invalid syncType" });
         }
-        if (!parsedImages || parsedImages.length === 0) {
+        if (!parsedImages || parsedImages.length === 0 || parsedImages.length > 5) {
             const durationMs = Date.now() - startTimeMs;
-            logger.warn("Invalid image data", { requestId, authEmail: email, syncMode: mode, durationMs, status: 400 });
+            const sampleData = (rawImages && rawImages.length > 0) ? String(rawImages[0]).substring(0, 100) : 'none';
+            logger.warn("Invalid image data", { requestId, authEmail: email, syncMode: mode, durationMs, status: 400, sampleData });
             return res.status(400).send({ error: "Invalid image data format, size, or too many images (max 5)." });
         }
 
@@ -1083,9 +1088,19 @@ exports.syncPlanner = onRequest({
             // PARALLEL EXECUTION: Upload Limitless Image(s) to Notion Directly (Zero Storage) & Extract Date
             logger.info(`Starting parallel ${mode} processing (Zero Storage)...`, { requestId, authEmail: email, syncMode: mode });
 
-            const fileUploadPromises = parsedImages.map(img =>
-                uploadFileToNotion(decryptedNotionKey, Buffer.from(img.base64Data, 'base64'), img.mimeType)
-            );
+            const fileUploadPromises = parsedImages.map((img, i) => {
+                let ext = 'jpg';
+                if (img.mimeType.includes('png')) ext = 'png';
+                if (img.mimeType.includes('webp')) ext = 'webp';
+                if (img.mimeType.includes('mp4')) ext = 'mp4';
+                if (img.mimeType.includes('webm')) ext = 'webm';
+                if (img.mimeType.includes('mpeg') || img.mimeType.includes('mp3')) ext = 'mp3';
+                if (img.mimeType.includes('wav')) ext = 'wav';
+                if (img.mimeType.includes('ogg')) ext = 'ogg';
+                
+                const filename = `${mode}_${i + 1}.${ext}`;
+                return uploadFileToNotion(decryptedNotionKey, Buffer.from(img.base64Data, 'base64'), img.mimeType, filename);
+            });
 
             // Determine prompt type based on mode and tier
             let geminiSyncType = mode;
@@ -1301,7 +1316,11 @@ exports.syncPlanner = onRequest({
                         let fileId = null;
                         if (hasImage) {
                             const buffer = Buffer.from(firstImage.base64Data, 'base64');
-                            fileId = await uploadFileToNotion(decryptedNotionKey, buffer, firstImage.mimeType);
+                            let ext = 'jpg';
+                            if (firstImage.mimeType.includes('png')) ext = 'png';
+                            if (firstImage.mimeType.includes('webp')) ext = 'webp';
+                            const filename = `${mode}_planner.${ext}`;
+                            fileId = await uploadFileToNotion(decryptedNotionKey, buffer, firstImage.mimeType, filename);
                         }
 
                         return syncBrainDumpToNotion(
