@@ -822,18 +822,23 @@ exports.syncPlanner = onRequest({
         // Support backward compatibility for a single image, but standardize on array
         const rawImages = body.images || (body.imageData ? [body.imageData] : []);
         parsedImages = parseImageDataArray(rawImages);
+        
+        let audioData = null;
+        if (body.audioBase64) {
+            audioData = { base64Data: body.audioBase64, mimeType: body.audioMimeType || 'audio/webm' };
+        }
 
-        logger.info("Processing sync payload", { requestId, authEmail: email, syncMode: mode, imageCount: parsedImages ? parsedImages.length : 0 });
+        logger.info("Processing sync payload", { requestId, authEmail: email, syncMode: mode, imageCount: parsedImages ? parsedImages.length : 0, hasAudio: !!audioData });
 
         if (!ALLOWED_SYNC_TYPES.has(mode)) {
             const durationMs = Date.now() - startTimeMs;
             logger.warn("Invalid syncType", { requestId, authEmail: email, syncMode: mode, durationMs, status: 400 });
             return res.status(400).send({ error: "Invalid syncType" });
         }
-        if (!parsedImages || parsedImages.length === 0) {
+        if ((!parsedImages || parsedImages.length === 0) && !audioData) {
             const durationMs = Date.now() - startTimeMs;
-            logger.warn("Invalid image data", { requestId, authEmail: email, syncMode: mode, durationMs, status: 400 });
-            return res.status(400).send({ error: "Invalid image data format, size, or too many images (max 5)." });
+            logger.warn("Invalid media data", { requestId, authEmail: email, syncMode: mode, durationMs, status: 400 });
+            return res.status(400).send({ error: "Invalid image or audio data." });
         }
 
         const rl = await checkRateLimit(email, 'syncPlanner', RATE_LIMIT_SYNC);
@@ -1084,7 +1089,7 @@ exports.syncPlanner = onRequest({
 
             const [fileUploadIds, extraction] = await Promise.all([
                 Promise.all(journalUploadPromises),
-                getPlannerDataFromImages(parsedImages, 'journal_date_only', byokConfig).catch(err => {
+                getPlannerDataFromImages(parsedImages, 'journal_date_only', byokConfig, audioData).catch(err => {
                     logger.warn("Date extraction failed for journal:", { requestId, authEmail: email, syncMode: mode, error: err.message });
                     return { date: null };
                 })
@@ -1137,7 +1142,7 @@ exports.syncPlanner = onRequest({
 
         if (mode === 'morning') {
             logger.info("Parsing planner images for morning sync...", { requestId, authEmail: email });
-            plannerData = await getPlannerDataFromImages(parsedImages, 'morning', byokConfig);
+            plannerData = await getPlannerDataFromImages(parsedImages, 'morning', byokConfig, audioData);
 
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
@@ -1176,7 +1181,7 @@ exports.syncPlanner = onRequest({
         } else if (mode === 'evening') {
             // Re-scan images specifically looking for evening data (expenses, mood, etc).
             logger.info("Parsing planner images for evening sync...", { requestId, authEmail: email });
-            plannerData = await getPlannerDataFromImages(parsedImages, 'evening', byokConfig);
+            plannerData = await getPlannerDataFromImages(parsedImages, 'evening', byokConfig, audioData);
             if (plannerData.error) {
                 await logSyncHistory(userRef, mode, parsedImages.length, 'error', plannerData.error);
                 skipCreditRefund = true;
@@ -1249,10 +1254,11 @@ exports.syncPlanner = onRequest({
 
                         const firstImage = parsedImages[0];
                         const hasImage = !!(firstImage && firstImage.base64Data);
-                        if (!brainDumpText && !hasImage) {
+                        const hasAudio = !!(audioData && audioData.base64Data);
+                        if (!brainDumpText && !hasImage && !hasAudio) {
                             return {
                                 ok: false,
-                                reason: 'No Brain Dump text found on the planner page and no image to attach.',
+                                reason: 'No Brain Dump text found on the planner page and no image or audio to attach.',
                             };
                         }
 
@@ -1261,19 +1267,29 @@ exports.syncPlanner = onRequest({
                             authEmail: email,
                             hasBrainDumpText: !!brainDumpText,
                             hasImage,
+                            hasAudio
                         });
 
-                        let fileId = null;
+                        let imageFileId = null;
                         if (hasImage) {
                             const buffer = Buffer.from(firstImage.base64Data, 'base64');
-                            fileId = await uploadFileToNotion(decryptedNotionKey, buffer, firstImage.mimeType);
+                            imageFileId = await uploadFileToNotion(decryptedNotionKey, buffer, firstImage.mimeType);
+                        }
+                        
+                        let audioFileId = null;
+                        if (hasAudio) {
+                            const audioBuffer = Buffer.from(audioData.base64Data, 'base64');
+                            // We determine extension based on mimeType heuristically or default to webm since frontend uses webm
+                            const extension = audioData.mimeType.includes('mp4') ? 'm4a' : 'webm';
+                            audioFileId = await uploadFileToNotion(decryptedNotionKey, audioBuffer, audioData.mimeType, `meeting-note.${extension}`);
                         }
 
                         return syncBrainDumpToNotion(
                             { ...plannerData, brainDump: brainDumpText },
                             decryptedNotionKey,
                             userData.notionDbId,
-                            fileId
+                            imageFileId,
+                            audioFileId
                         );
                     };
                     promises.push(brainDumpPromise());

@@ -168,12 +168,12 @@ async function createPageInDatabase(notion, databaseId, { properties, children }
 /**
  * @returns {{ ok: true, status: 'created' | 'duplicate' } | { ok: false, reason: string }}
  */
-async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, fileId) {
+async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, imageFileId, audioFileId) {
     const brainDumpText = normalizeBrainDumpText(plannerData?.brainDump);
     const hasText = brainDumpText.length > 0;
 
-    if (!hasText && !fileId) {
-        return { ok: false, reason: 'Nothing to save (no Brain Dump text and no image uploaded).' };
+    if (!hasText && !imageFileId && !audioFileId) {
+        return { ok: false, reason: 'Nothing to save (no text, image, or audio uploaded).' };
     }
 
     if (!notionApiKey || notionApiKey.includes("YOUR_")) {
@@ -207,13 +207,24 @@ async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, file
             });
         }
 
-        if (fileId) {
+        if (imageFileId) {
             children.push({
                 object: 'block',
                 type: 'image',
                 image: {
                     type: 'file_upload',
-                    file_upload: { id: fileId }
+                    file_upload: { id: imageFileId }
+                }
+            });
+        }
+
+        if (audioFileId) {
+            children.push({
+                object: 'block',
+                type: 'file',
+                file: {
+                    type: 'file_upload',
+                    file_upload: { id: audioFileId }
                 }
             });
         }

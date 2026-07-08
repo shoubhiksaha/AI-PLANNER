@@ -95,6 +95,11 @@ if (window.location.hostname === "localhost" && window.location.search.includes(
 // STATE
 let currentUser = null;
 let filesAsBase64 = []; // Array to store multiple images (max 5)
+let voiceNoteAsBase64 = null;
+let voiceNoteMimeType = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
 // Keep OAuth token only in memory (not session/local storage)
 let googleAccessToken = null;
 let profileUnsubscribe = null;
@@ -720,6 +725,11 @@ const defaultUploadUI = `
             <span class="text-3xl mb-1.5 pointer-events-none">📁</span>
             <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Files</span>
         </label>
+        <div class="w-px h-14 bg-theme-border/60"></div>
+        <label id="voice-note-btn" class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer select-none">
+            <span id="voice-note-icon" class="text-3xl mb-1.5 pointer-events-none">🎤</span>
+            <span id="voice-note-label" class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Voice Note</span>
+        </label>
     </div>
 `;
 
@@ -730,8 +740,69 @@ dropZone.addEventListener('change', (e) => {
     }
 });
 
+const startRecording = async () => {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = () => {
+                const result = reader.result;
+                const [prefix, base64] = result.split(',');
+                voiceNoteAsBase64 = base64;
+                voiceNoteMimeType = prefix.match(/:(.*?);/)[1];
+                renderThumbnails();
+            };
+            stream.getTracks().forEach(track => track.stop());
+        };
+        
+        mediaRecorder.start();
+        isRecording = true;
+        renderThumbnails();
+    } catch (err) {
+        console.error("Error accessing microphone:", err);
+        alert("Microphone access is required to record voice notes.");
+    }
+};
+
+const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        isRecording = false;
+        renderThumbnails();
+    }
+};
+
 const renderThumbnails = () => {
-    if (filesAsBase64.length > 0) {
+    if (filesAsBase64.length > 0 || voiceNoteAsBase64 || isRecording) {
+        let voiceNoteHtml = '';
+        if (isRecording) {
+            voiceNoteHtml = `
+                <div class="relative group h-24 w-auto shrink-0 flex items-center justify-center bg-red-50 border border-red-200 rounded p-4 shadow-sm cursor-pointer" id="stop-recording-btn" title="Tap to stop recording">
+                    <span class="text-3xl animate-pulse">🔴</span>
+                    <span class="ml-2 text-red-600 font-bold text-sm">Recording...</span>
+                </div>
+            `;
+        } else if (voiceNoteAsBase64) {
+            voiceNoteHtml = `
+                <div class="relative group h-24 w-auto shrink-0 flex items-center justify-center bg-indigo-50 border border-indigo-200 rounded p-4 shadow-sm">
+                    <span class="text-3xl">🎵</span>
+                    <span class="ml-2 text-indigo-700 font-bold text-sm">Voice Note</span>
+                    <button class="delete-voice-btn absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow hover:bg-red-600 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 cursor-pointer z-10" title="Remove voice note">
+                        ✕
+                    </button>
+                </div>
+            `;
+        }
+
         dropZone.innerHTML = `
             <div class="flex flex-wrap gap-2 justify-center p-2 items-center h-full w-full overflow-y-auto">
                 ${filesAsBase64.map((b64, idx) => `
@@ -742,6 +813,7 @@ const renderThumbnails = () => {
                         </button>
                     </div>
                 `).join('')}
+                ${voiceNoteHtml}
                 ${filesAsBase64.length < 5 ? `
                     <div class="flex flex-col gap-1">
                         <label class="h-11 w-11 shrink-0 border-2 border-dashed border-theme-border flex items-center justify-center text-theme-muted hover:text-theme-text hover:border-theme-text transition-colors rounded-lg bg-theme-bg/50 cursor-pointer" title="Take Photo">
@@ -752,11 +824,16 @@ const renderThumbnails = () => {
                             <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" class="upload-input hidden">
                             <span class="text-lg pointer-events-none">🖼️</span>
                         </label>
+                        ${(!voiceNoteAsBase64 && !isRecording) ? `
+                        <label id="voice-note-add-btn" class="h-11 w-11 shrink-0 border-2 border-dashed border-theme-border flex items-center justify-center text-theme-muted hover:text-theme-text hover:border-theme-text transition-colors rounded-lg bg-theme-bg/50 cursor-pointer" title="Add Voice Note">
+                            <span class="text-lg pointer-events-none">🎤</span>
+                        </label>
+                        ` : ''}
                     </div>
                 ` : ''}
             </div>
             <div class="absolute bottom-2 right-2 bg-emerald-500/90 text-white text-xs px-2 py-1 rounded-full font-medium pointer-events-none shadow-sm z-20">
-                ${filesAsBase64.length}/5 Page${filesAsBase64.length > 1 ? 's' : ''}
+                ${filesAsBase64.length}/5 Page${filesAsBase64.length !== 1 ? 's' : ''}
             </div>
         `;
 
@@ -771,12 +848,49 @@ const renderThumbnails = () => {
             });
         });
 
+        const deleteVoiceBtn = dropZone.querySelector('.delete-voice-btn');
+        if (deleteVoiceBtn) {
+            deleteVoiceBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                voiceNoteAsBase64 = null;
+                voiceNoteMimeType = null;
+                renderThumbnails();
+            });
+        }
+
+        const stopRecordingBtn = dropZone.querySelector('#stop-recording-btn');
+        if (stopRecordingBtn) {
+            stopRecordingBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                stopRecording();
+            });
+        }
+        
+        const addVoiceBtn = dropZone.querySelector('#voice-note-add-btn');
+        if (addVoiceBtn) {
+            addVoiceBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                startRecording();
+            });
+        }
+
         updateDashButtons(true);
     } else {
         dropZone.innerHTML = defaultUploadUI;
         updateDashButtons(false);
     }
 };
+
+// Listen to Voice Note btn in default UI
+dropZone.addEventListener('click', (e) => {
+    const target = e.target.closest('#voice-note-btn');
+    if (target) {
+        startRecording();
+    }
+});
 
 // File Handler with Compression & HEIC Support
 const handleFiles = async (files) => {
@@ -967,6 +1081,8 @@ const triggerSync = async (syncType) => {
                 idToken,
                 googleToken: currentToken,
                 images: filesAsBase64,
+                audioBase64: voiceNoteAsBase64,
+                audioMimeType: voiceNoteMimeType,
                 syncType,
                 timeZone: clientTimeZone
             };

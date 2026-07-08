@@ -36,7 +36,7 @@ describe('notion service', () => {
         const result = await syncBrainDumpToNotion({ date: '2025-01-01', brainDump: '   ' }, 'ntn_test_token_1234567890', 'db-id', null);
         expect(result).toEqual({
             ok: false,
-            reason: 'Nothing to save (no Brain Dump text and no image uploaded).',
+            reason: 'Nothing to save (no text, image, or audio uploaded).',
         });
     });
 

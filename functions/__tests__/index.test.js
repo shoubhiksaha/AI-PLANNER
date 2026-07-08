@@ -594,7 +594,7 @@ describe('index.js Integration Tests', () => {
             req.body.images = ['not-a-data-url'];
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(400);
-            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid image data format, size, or too many images (max 5)." }));
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Invalid image or audio data." }));
         });
 
         test('processes journal sync successfully', async () => {

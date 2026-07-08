@@ -68,11 +68,14 @@ async function fetchWithTimeout(url, options, timeout = 60000) {
 }
 
 // Helper to call Gemini with a specific model
-async function callGeminiModel(model, apiKey, prompt, imagesArr) {
+async function callGeminiModel(model, apiKey, prompt, imagesArr, audioData = null) {
     logger.info(`Attempting Gemini model: ${model}...`);
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const parts = imagesArr.map(img => ({ inlineData: { mimeType: img.mimeType, data: img.base64Data } }));
+    if (audioData) {
+        parts.push({ inlineData: { mimeType: audioData.mimeType, data: audioData.base64Data } });
+    }
     parts.push({ text: prompt });
 
     const payload = {
@@ -124,15 +127,18 @@ async function callGeminiModel(model, apiKey, prompt, imagesArr) {
 }
 
 
-async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = null) {
-    if (!parsedImages || parsedImages.length === 0) {
-        throw new Error("INVALID_IMAGE_PAYLOAD");
+async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = null, audioData = null) {
+    if ((!parsedImages || parsedImages.length === 0) && !audioData) {
+        throw new Error("INVALID_PAYLOAD_NO_MEDIA");
     }
 
-    const prompt =
+    const basePrompt =
         syncType === 'evening' ? getEveningPrompt() :
             syncType === 'journal_date_only' ? getJournalDatePrompt() :
                 getMorningPrompt();
+                
+    const audioPrompt = audioData ? "\n\nAdditionally, listen to the provided voice note. Accurately transcribe or summarize the audio and include it in the 'brainDump' field." : "";
+    const prompt = basePrompt + audioPrompt;
 
     // Schema validation to prevent malformed AI output from crashing downstream sync
     function validateAIOutput(data, type) {
@@ -149,6 +155,8 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
             // Sanitize each schedule item
             data.schedule = data.schedule.filter(item => item && typeof item.task === 'string');
             data.todos = data.todos.filter(item => item && typeof item.task === 'string');
+            
+            if (audioData && !data.brainDump) data.brainDump = "";
         } else if (type === 'evening') {
             if (typeof data.date !== 'string') data.date = new Date().toISOString().slice(0, 10);
             if (!Array.isArray(data.todos)) data.todos = [];
@@ -209,7 +217,7 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
 
     for (const model of models) {
         try {
-            const raw = await callGeminiModel(model, geminiApiKey, prompt, parsedImages);
+            const raw = await callGeminiModel(model, geminiApiKey, prompt, parsedImages, audioData);
             return validateAIOutput(raw, syncType);
         } catch (error) {
             lastError = error;
