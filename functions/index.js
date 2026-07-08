@@ -372,8 +372,6 @@ exports.updateProfile = onRequest({ cors: false, memory: "256MiB", maxInstances:
             try {
                 if (Intl.supportedValuesOf('timeZone').includes(updates.timeZone)) allowedUpdates.timeZone = updates.timeZone;
             } catch (e) { /* Intl tz list unavailable; skip persisting */ }
-        }
-
         if (Object.keys(allowedUpdates).length > 0) {
             await admin.firestore().collection('users').doc(userEmail).set(allowedUpdates, { merge: true });
             logger.info(`Updated profile fields for ${userEmail}`);
