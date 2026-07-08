@@ -14,8 +14,11 @@ const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES = 24 * 1024 * 1024;
 const MAX_REQUEST_BODY_BYTES = 28 * 1024 * 1024;
 const MAX_BASE64_LENGTH = Math.ceil(MAX_IMAGE_BYTES * 1.37);
-const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const ALLOWED_SYNC_TYPES = new Set(['morning', 'evening', 'night', 'journal']);
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+    'image/jpeg', 'image/png', 'image/webp',
+    'audio/webm', 'audio/mp4', 'audio/m4a', 'audio/ogg', 'audio/mp3', 'audio/aac', 'audio/wav', 'audio/mpeg'
+]);
+const ALLOWED_SYNC_TYPES = new Set(['morning', 'evening', 'night', 'journal', 'voice_note']);
 const ALLOWED_BYOK_PROVIDERS = new Set([
     'openai', 'anthropic', 'google', 'azure', 'cohere', 'huggingface',
     'groq', 'deepseek', 'mistral', 'perplexity', 'together',
@@ -117,7 +120,7 @@ function parseImageDataUrl(imageData) {
     if (typeof imageData !== 'string') return null;
     if (imageData.length > MAX_BASE64_LENGTH) return null;
 
-    const match = imageData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
+    const match = imageData.match(/^data:((?:image|audio)\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
     if (!match) return null;
     const mimeType = match[1].toLowerCase();
     if (!ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) return null;

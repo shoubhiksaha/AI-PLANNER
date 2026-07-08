@@ -517,7 +517,8 @@ describe('Constants', () => {
         expect(ALLOWED_SYNC_TYPES.has('evening')).toBe(true);
         expect(ALLOWED_SYNC_TYPES.has('night')).toBe(true);
         expect(ALLOWED_SYNC_TYPES.has('journal')).toBe(true);
-        expect(ALLOWED_SYNC_TYPES.size).toBe(4);
+        expect(ALLOWED_SYNC_TYPES.has('voice_note')).toBe(true);
+        expect(ALLOWED_SYNC_TYPES.size).toBe(5);
     });
 
     test('ALLOWED_ORIGINS contains production and dev origins', () => {

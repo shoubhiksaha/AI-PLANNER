@@ -1055,12 +1055,12 @@ exports.syncPlanner = onRequest({
         const tasks = google.tasks({ version: 'v1', auth });
         const sheets = google.sheets({ version: 'v4', auth });
 
-        // --- 1. HANDLE JOURNAL SYNC SEPARATELY ---
+        // --- 1. HANDLE JOURNAL & VOICE NOTE SYNC SEPARATELY ---
         let msg = "";
-        if (mode === 'journal') {
+        if (mode === 'journal' || mode === 'voice_note') {
             if (!userData.notionKey || !userData.notionDbId) {
                 const durationMs = Date.now() - startTimeMs;
-                logger.warn("Notion not setup for journal sync", { requestId, authEmail: email, syncMode: mode, durationMs, status: 400 });
+                logger.warn(`Notion not setup for ${mode} sync`, { requestId, authEmail: email, syncMode: mode, durationMs, status: 400 });
                 skipCreditRefund = true;
                 return res.status(400).send({ error: "Notion not setup. Please provide keys." });
             }
@@ -1069,43 +1069,54 @@ exports.syncPlanner = onRequest({
             const decryptedNotionKey = await getDecryptedNotionKeyAndMigrate(userRef, userData);
             if (!decryptedNotionKey) {
                 const durationMs = Date.now() - startTimeMs;
-                logger.error("Failed to decrypt Notion key for journal sync", { requestId, authEmail: email, syncMode: mode, durationMs, status: 401 });
+                logger.error(`Failed to decrypt Notion key for ${mode} sync`, { requestId, authEmail: email, syncMode: mode, durationMs, status: 401 });
                 skipCreditRefund = true;
                 return res.status(401).send({ error: "Invalid or corrupt Notion settings. Please re-setup Notion." });
             }
             const notion = createNotionClient(decryptedNotionKey);
 
             // PARALLEL EXECUTION: Upload Limitless Image(s) to Notion Directly (Zero Storage) & Extract Date
-            logger.info("Starting parallel Journal processing (Zero Storage)...", { requestId, authEmail: email, syncMode: mode });
+            logger.info(`Starting parallel ${mode} processing (Zero Storage)...`, { requestId, authEmail: email, syncMode: mode });
 
-            const journalUploadPromises = parsedImages.map(img =>
+            const fileUploadPromises = parsedImages.map(img =>
                 uploadFileToNotion(decryptedNotionKey, Buffer.from(img.base64Data, 'base64'), img.mimeType)
             );
 
+            // Determine prompt type based on mode and tier
+            let geminiSyncType = mode;
+            if (mode === 'journal') {
+                 geminiSyncType = userData.tier === 'pro' ? 'journal_transcribe' : 'journal_date_only';
+            }
+
             const [fileUploadIds, extraction] = await Promise.all([
-                Promise.all(journalUploadPromises),
-                getPlannerDataFromImages(parsedImages, userData.tier === 'pro' ? 'journal_transcribe' : 'journal_date_only', byokConfig).catch(err => {
-                    logger.warn("Extraction failed for journal:", { requestId, authEmail: email, syncMode: mode, error: err.message });
+                Promise.all(fileUploadPromises),
+                getPlannerDataFromImages(parsedImages, geminiSyncType, byokConfig).catch(err => {
+                    logger.warn(`Extraction failed for ${mode}:`, { requestId, authEmail: email, syncMode: mode, error: err.message });
                     return { date: null, transcription: "" };
                 })
             ]);
 
-            let journalDate = new Date().toLocaleDateString('en-US', { timeZone });
+            let itemDate = new Date().toLocaleDateString('en-US', { timeZone });
             if (extraction && extraction.date) {
-                journalDate = extraction.date;
-                logger.info(`Extracted Journal Date: ${journalDate}`, { requestId, authEmail: email, syncMode: mode, journalDate });
+                itemDate = extraction.date;
+                logger.info(`Extracted ${mode} Date: ${itemDate}`, { requestId, authEmail: email, syncMode: mode, itemDate });
             }
 
             // Create Notion Page with File Attachments
             const dbId = userData.notionDbId;
-            const childrenBlocks = fileUploadIds.map(id => ({
-                object: 'block',
-                type: 'image',
-                image: {
-                    type: 'file_upload',
-                    file_upload: { id: id }
-                }
-            }));
+            const childrenBlocks = fileUploadIds.map((id, index) => {
+                const mimeType = parsedImages[index].mimeType;
+                const blockType = mimeType.startsWith('audio/') ? 'file' : 'image';
+                
+                return {
+                    object: 'block',
+                    type: blockType,
+                    [blockType]: {
+                        type: 'file_upload',
+                        file_upload: { id: id }
+                    }
+                };
+            });
 
             if (extraction && extraction.transcription) {
                 const paragraphs = extraction.transcription.split('\n').filter(p => p.trim() !== '');
@@ -1124,13 +1135,15 @@ exports.syncPlanner = onRequest({
                 }
             }
 
+            const pageTitle = mode === 'voice_note' ? `Voice Note - ${itemDate}` : `Journal - ${itemDate}`;
+
             await createPageInDatabase(notion, dbId, {
                 properties: {
-                    "Name": { title: [{ text: { content: `Journal - ${journalDate}` } }] }
+                    "Name": { title: [{ text: { content: pageTitle } }] }
                 },
                 children: childrenBlocks,
             });
-            msg = `Journal synced to Notion! Date: ${journalDate}`;
+            msg = `${mode === 'voice_note' ? 'Voice Note' : 'Journal'} synced to Notion! Date: ${itemDate}`;
             msg = appendGamificationToMsg(msg, await runGamificationAfterSync(userRef, {
                 requestId, authEmail: email, syncMode: mode, imageCount: parsedImages.length
             }));
