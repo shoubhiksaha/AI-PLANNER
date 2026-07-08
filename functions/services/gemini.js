@@ -1,6 +1,6 @@
 const { logger } = require("firebase-functions/logger");
-const { defineString } = require('firebase-functions/params');
-const GEMINI_API_KEY = defineString('GEMINI_API_KEY');
+const { defineSecret } = require('firebase-functions/params');
+const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 
 function getMorningPrompt() {
     return `Analyze the attached image of a daily planner.
@@ -223,5 +223,6 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
 }
 
 module.exports = {
-    getPlannerDataFromImages
+    getPlannerDataFromImages,
+    GEMINI_API_KEY
 };

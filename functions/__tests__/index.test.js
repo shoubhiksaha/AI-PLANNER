@@ -37,7 +37,13 @@ const mockCollection = jest.fn((name) => {
         where: jest.fn().mockReturnThis(),
         get: jest.fn().mockResolvedValue({ docs: [], forEach: jest.fn() })
     };
-    return { doc: mockDoc };
+    return {
+        doc: mockDoc,
+        where: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue({ docs: [], forEach: jest.fn() })
+    };
 });
 
 const mockVerifyIdToken = jest.fn();
@@ -124,11 +130,16 @@ jest.mock('@google/generative-ai', () => ({
     }))
 }));
 
-const mockNotionDbQuery = jest.fn().mockResolvedValue({ results: [] });
+const mockNotionDatabasesRetrieve = jest.fn().mockResolvedValue({ data_sources: [{ id: 'mock-data-source-id' }] });
+const mockNotionDataSourcesQuery = jest.fn().mockResolvedValue({ results: [] });
 const mockNotionPagesCreate = jest.fn();
+jest.mock('notion-multipart-uploader', () => ({
+    uploadToNotion: jest.fn().mockResolvedValue('file-upload-123')
+}));
 jest.mock('@notionhq/client', () => ({
     Client: jest.fn(() => ({
-        databases: { query: mockNotionDbQuery },
+        databases: { retrieve: mockNotionDatabasesRetrieve },
+        dataSources: { query: mockNotionDataSourcesQuery },
         pages: { create: mockNotionPagesCreate }
     }))
 }));
@@ -170,6 +181,10 @@ describe('index.js Integration Tests', () => {
 
         // Default successful token verification
         mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com', uid: '123' });
+        global.fetch.mockResolvedValue({
+            ok: true,
+            json: async () => ({})
+        });
     });
 
     describe('setupNotion', () => {
@@ -209,6 +224,24 @@ describe('index.js Integration Tests', () => {
             // Ensure the stored key is NOT the plaintext
             const setArg = mockSet.mock.calls[0][0];
             expect(setArg.notionKey).not.toBe('secret_1234567890abcdef1234');
+        });
+
+        test('stores encrypted modern ntn_ Notion token on success', async () => {
+            const notionKey = 'ntn_dummy1234567890abcdefghijklmnopqrstuvwxyzA';
+            req.body = {
+                notionKey,
+                notionDbId: '395cd42c5cd5809e8d8ae8c4456b38ab',
+                idToken: 'valid-firebase-id-token'
+            };
+            mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com' });
+
+            await myFunctions.setupNotion(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            const setArg = mockSet.mock.calls[0][0];
+            expect(setArg.notionKey).toMatch(/^v2:/);
+            expect(setArg.notionKey).not.toBe(notionKey);
+            expect(setArg.notionDbId).toBe('395cd42c5cd5809e8d8ae8c4456b38ab');
         });
 
         test('handles Firebase ID token lookup failure', async () => {
@@ -252,7 +285,7 @@ describe('index.js Integration Tests', () => {
 
         test('stores KMS wrapped BYOK configuration on success', async () => {
             req.body = {
-                apiKey: 'sk-abcdefg1234567',
+                apiKey: 'sk-abcdefg123456789012345',
                 provider: 'openai',
                 modelName: 'gpt-4o',
                 idToken: 'valid-firebase-id-token'
@@ -372,7 +405,7 @@ describe('index.js Integration Tests', () => {
     });
 
     describe('syncPlanner', () => {
-        const validImageData = 'data:image/jpeg;base64,' + Buffer.from('fake-image').toString('base64');
+        const validImageData = 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]).toString('base64');
         const { deriveKey, encrypt } = require('../utils');
         const testKey = deriveKey('test-encryption-key-for-jest');
         const validEncryptedKey = encrypt('secret_fake_notion_key_value', testKey);
@@ -457,14 +490,14 @@ describe('index.js Integration Tests', () => {
                 return { ok: true, json: async () => ({}) };
             });
         });
-        test('returns 413 Payload Too Large when body size exceeds 100MB', async () => {
+        test('returns 413 Payload Too Large when body size exceeds 28MB', async () => {
             req.body.syncType = 'morning';
             req.body.token = 'valid-token';
-            req.body = { data: "A".repeat(101_000_000) };
-            req.rawBody = Buffer.alloc(101_000_001); // Mock Firebase's raw bytes buffer
+            req.body = { data: "A".repeat(30_000_000) };
+            req.rawBody = Buffer.alloc(30_000_000); // Mock Firebase's raw bytes buffer
             await myFunctions.syncPlanner(req, res);
             expect(res.status).toHaveBeenCalledWith(413);
-            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Payload too large. Max 100MB allowed." }));
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Payload too large. Max 28MB allowed." }));
         });
 
         test('returns 429 when rate limit exceeded', async () => {
@@ -476,7 +509,7 @@ describe('index.js Integration Tests', () => {
 
         test('bypasses credit deduction for stateless BYOK user', async () => {
             req.body.syncType = 'morning';
-            req.headers['x-byok-token'] = 'sk-mock-123';
+            req.headers['x-byok-token'] = 'sk-mock-12345678901234567890';
             // Re-mock to assert transaction doesn't throw on 0 credits
             const currentMonth = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7);
             const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
@@ -748,26 +781,10 @@ describe('index.js Integration Tests', () => {
         test('journal sync handles Notion upload failure gracefully', async () => {
             req.body.syncType = 'journal';
             global.__geminiMockText = JSON.stringify({ date: "15-January-2025" });
-            // Make Notion fetch fail with realistic error
-            global.fetch.mockImplementation(async (url) => {
-                if (url.includes('generativelanguage')) {
-                    return {
-                        ok: true,
-                        json: async () => ({
-                            candidates: [{
-                                content: { parts: [{ text: global.__geminiMockText }] }
-                            }]
-                        })
-                    };
-                }
-                // Notion upload returns 500 (init step fails)
-                return {
-                    ok: false,
-                    status: 500,
-                    text: async () => 'Internal Server Error: rate limited',
-                    json: async () => ({ message: 'Upload failed' })
-                };
-            });
+            
+            // Make the package throw an error to simulate upload failure
+            const { uploadToNotion } = require('notion-multipart-uploader');
+            uploadToNotion.mockRejectedValueOnce(new Error('Internal Server Error: rate limited'));
 
             await myFunctions.syncPlanner(req, res);
 
@@ -779,28 +796,10 @@ describe('index.js Integration Tests', () => {
         test('journal sync handles Notion init response missing upload_url', async () => {
             req.body.syncType = 'journal';
             global.__geminiMockText = JSON.stringify({ date: "15-January-2025" });
-            // Notion returns OK but with missing upload_url (contract violation)
-            global.fetch.mockImplementation(async (url) => {
-                if (url.includes('generativelanguage')) {
-                    return {
-                        ok: true,
-                        json: async () => ({
-                            candidates: [{
-                                content: { parts: [{ text: global.__geminiMockText }] }
-                            }]
-                        })
-                    };
-                }
-                if (url.includes('notion')) {
-                    // Init succeeds but returns incomplete shape
-                    return {
-                        ok: true,
-                        text: async () => JSON.stringify({ id: 'file-123' }),
-                        json: async () => ({ id: 'file-123' }) // missing upload_url
-                    };
-                }
-                return { ok: true, json: async () => ({}) };
-            });
+            
+            // Make the package throw an error to simulate missing URL or other invalid upload shapes
+            const { uploadToNotion } = require('notion-multipart-uploader');
+            uploadToNotion.mockRejectedValueOnce(new Error('Notion Init Upload Failed'));
 
             await myFunctions.syncPlanner(req, res);
 
@@ -1007,6 +1006,25 @@ describe('index.js Integration Tests', () => {
             expect(res.status).toHaveBeenCalledWith(200);
             const responseText = res.send.mock.calls[0][0].text;
             expect(responseText).toContain("Night Sync");
+            expect(responseText).toContain("(Notion not saved:");
+            expect(responseText).toContain("Notion API Rate Limited");
+        });
+
+        test('evening sync reports observable Notion message when brainDump text is missing', async () => {
+            req.body.syncType = 'evening';
+            global.__geminiMockText = JSON.stringify({
+                date: "2025-01-01",
+                todos: [],
+                expenses: [{ item: "Coffee", amount: 5 }],
+                health: { exercise: "Walk", water: 4, sleep: 7, energy: 3 },
+            });
+            _mockTasksList.mockResolvedValue({ data: { items: [] } });
+
+            await myFunctions.syncPlanner(req, res);
+
+            const responseText = res.send.mock.calls[0][0].text;
+            expect(responseText).toContain("Night Sync Complete");
+            expect(responseText).toMatch(/Saved Visual Brain Dump to Notion|Notion: Brain Dump page already exists|\(Notion not saved:/);
         });
 
         // --- Branch coverage: missing Notion keys (line 424) ---
@@ -1149,7 +1167,7 @@ describe('index.js Integration Tests', () => {
         test('returns error when Firebase ID token has no email', async () => {
             mockVerifyIdToken.mockResolvedValue({}); // No email field
             await myFunctions.syncPlanner(req, res);
-            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.status).toHaveBeenCalledWith(401);
         });
 
         // --- Branch coverage: Google Token identity mismatch ---

@@ -85,7 +85,7 @@
     <ul>
         <li><strong>Encryption in Transit:</strong> All communications between your browser, our application, and Google/Notion servers are fully encrypted using modern TLS/HTTPS protocols.</li>
         <li><strong>Encryption at Rest:</strong> Your account integrations (like Notion API keys) and Cloud-saved BYOK keys are encrypted with AES-256-GCM before storage. The encryption key is managed via Google Cloud Secret Manager / Cloud KMS and is never exposed in plaintext.</li>
-        <li><strong>Secure Access:</strong> We utilize secure OAuth 2.0 token-based authentication. We never see, process, or store your Google account password. On the web application, OAuth tokens are kept in memory only and are never saved to browser storage. On the mobile application, tokens are safely stored in the device's native encrypted Keychain/Keystore (SecureStore) and are cleared upon logout.</li>
+        <li><strong>Secure Access:</strong> We utilize secure OAuth 2.0 token-based authentication. We never see, process, or store your Google account password. On both the web and mobile applications, app-managed OAuth tokens are kept in memory only and are not saved to browser storage or app-managed persistent storage. The native mobile Google SDK may keep its own account session according to the device platform's security model.</li>
     </ul>
 
     <h2>7. Third-Party Processors</h2>

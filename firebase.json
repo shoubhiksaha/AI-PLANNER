@@ -120,6 +120,10 @@
         "function": "cashfreeWebhook"
       },
       {
+        "source": "/adminGrantCredits",
+        "function": "adminGrantCredits"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

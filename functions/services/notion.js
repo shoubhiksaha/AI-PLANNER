@@ -1,5 +1,7 @@
 const { logger } = require("firebase-functions/logger");
+const { Client } = require("@notionhq/client");
 const { defineSecret } = require('firebase-functions/params');
+const { uploadToNotion } = require("notion-multipart-uploader");
 const {
     deriveKey,
     encrypt: _encryptWithKey,
@@ -65,83 +67,142 @@ async function getDecryptedNotionKeyAndMigrate(userRef, userData) {
     return value;
 }
 
-// Helper to upload file to Notion (Direct Upload - Corrected 2-Step Flow)
-async function uploadFileToNotion(apiKey, fileBuffer, mimeType) {
+async function validateNotionCredentials(apiKey, databaseId) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     try {
-        logger.info("Step 1: Init Notion Upload...");
-        const createRes = await fetch("https://api.notion.com/v1/file_uploads", {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-                "Notion-Version": "2022-06-28"
-            },
-            body: JSON.stringify({
-                filename: "journal.jpg",
-                content_type: mimeType
+        const headers = {
+            "Authorization": `Bearer ${apiKey}`,
+            "Notion-Version": "2022-06-28"
+        };
+        const [identityResponse, databaseResponse] = await Promise.all([
+            fetch("https://api.notion.com/v1/users/me", {
+                method: "GET",
+                headers,
+                redirect: "error",
+                signal: controller.signal
+            }),
+            fetch(`https://api.notion.com/v1/databases/${encodeURIComponent(databaseId)}`, {
+                method: "GET",
+                headers,
+                redirect: "error",
+                signal: controller.signal
             })
-        });
+        ]);
 
-        if (!createRes.ok) throw new Error(`Notion Init Upload Failed: ${await createRes.text()}`);
-        const uploadObj = await createRes.json();
-        const { id, upload_url } = uploadObj;
+        if (!identityResponse.ok) {
+            return { valid: false, error: "Notion rejected the integration token." };
+        }
+        if (!databaseResponse.ok) {
+            return { valid: false, error: "The Notion database is unavailable to this integration." };
+        }
+        return { valid: true };
+    } catch (error) {
+        if (error?.name === 'AbortError') {
+            return { valid: false, error: "Notion validation timed out." };
+        }
+        return { valid: false, error: "Could not validate Notion settings." };
+    } finally {
+        clearTimeout(timeout);
+    }
+}
 
-        logger.info(`Step 1 Success. ID: ${id}. Step 2: Uploading Binary...`);
-
-        const form = new FormData();
-        const blob = new Blob([fileBuffer], { type: mimeType });
-        form.append("file", blob, "journal.jpg");
-
-        const uploadRes = await fetch(upload_url, {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Notion-Version": "2022-06-28"
-            },
-            body: form
-        });
-
-        if (!uploadRes.ok) throw new Error(`Notion Binary Upload Failed: ${await uploadRes.text()}`);
-
-        logger.info(`Notion File Uploaded Successfully: ${id}`);
-        return id;
+// Helper to upload file to Notion (using custom multipart uploader package)
+async function uploadFileToNotion(apiKey, fileBuffer, mimeType, filename = "journal.jpg") {
+    try {
+        logger.info(`Uploading ${filename} to Notion using notion-multipart-uploader...`);
+        const fileId = await uploadToNotion(
+            apiKey,
+            fileBuffer,
+            mimeType,
+            filename,
+            { retries: 3, timeoutMs: 60000 }
+        );
+        logger.info(`Notion File Uploaded Successfully: ${fileId}`);
+        return fileId;
     } catch (e) {
         logger.error("Notion Direct Upload Error:", { error: e.message });
         throw e;
     }
 }
 
+function normalizeBrainDumpText(value) {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+const NOTION_SDK_VERSION = '2025-09-03';
+
+function createNotionClient(notionApiKey) {
+    return new Client({
+        auth: notionApiKey,
+        notionVersion: NOTION_SDK_VERSION,
+    });
+}
+
+async function resolveDataSourceId(notion, databaseId) {
+    const database = await notion.databases.retrieve({ database_id: databaseId });
+    const dataSourceId = database?.data_sources?.[0]?.id;
+    if (!dataSourceId) {
+        throw new Error('No data source found for this Notion database.');
+    }
+    return dataSourceId;
+}
+
+async function queryDatabasePages(notion, databaseId, filter) {
+    const dataSourceId = await resolveDataSourceId(notion, databaseId);
+    return notion.dataSources.query({
+        data_source_id: dataSourceId,
+        filter,
+    });
+}
+
+async function createPageInDatabase(notion, databaseId, { properties, children }) {
+    const dataSourceId = await resolveDataSourceId(notion, databaseId);
+    return notion.pages.create({
+        parent: { type: 'data_source_id', data_source_id: dataSourceId },
+        properties,
+        children,
+    });
+}
+
+/**
+ * @returns {{ ok: true, status: 'created' | 'duplicate' } | { ok: false, reason: string }}
+ */
 async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, fileId) {
-    if ((!plannerData.brainDump || plannerData.brainDump.trim() === '') && !fileId) return false;
+    const brainDumpText = normalizeBrainDumpText(plannerData?.brainDump);
+    const hasText = brainDumpText.length > 0;
+
+    if (!hasText && !fileId) {
+        return { ok: false, reason: 'Nothing to save (no Brain Dump text and no image uploaded).' };
+    }
 
     if (!notionApiKey || notionApiKey.includes("YOUR_")) {
         logger.warn("Notion API Key not configured.");
-        return false;
+        return { ok: false, reason: 'Notion API key is not configured.' };
     }
 
-    const { Client } = require("@notionhq/client");
-    const notion = new Client({ auth: notionApiKey });
+    const notion = createNotionClient(notionApiKey);
     const pageTitle = `Brain Dump - ${plannerData.date}`;
 
     try {
-        const existingPages = await notion.databases.query({
-            database_id: databaseId,
-            filter: { property: "Name", title: { equals: pageTitle } }
+        const existingPages = await queryDatabasePages(notion, databaseId, {
+            property: "Name",
+            title: { equals: pageTitle },
         });
 
         if (existingPages.results.length > 0) {
             logger.info("Notion page already exists for this date, skipping duplicate creation.");
-            return true; // Treat as success to not break the flow
+            return { ok: true, status: 'duplicate' };
         }
 
         const children = [];
 
-        if (plannerData.brainDump) {
+        if (hasText) {
             children.push({
                 object: 'block',
                 type: 'paragraph',
                 paragraph: {
-                    rich_text: [{ type: 'text', text: { content: plannerData.brainDump } }]
+                    rich_text: [{ type: 'text', text: { content: brainDumpText } }]
                 }
             });
         }
@@ -157,23 +218,27 @@ async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, file
             });
         }
 
-        await notion.pages.create({
-            parent: { database_id: databaseId },
+        await createPageInDatabase(notion, databaseId, {
             properties: {
                 "Name": { title: [{ text: { content: pageTitle } }] }
             },
-            children: children
+            children,
         });
-        return true;
+        return { ok: true, status: 'created' };
     } catch (err) {
         logger.error("Notion Sync Error:", { error: err.message });
-        return false;
+        return { ok: false, reason: err.message || 'Notion page creation failed.' };
     }
 }
 
 module.exports = {
     encrypt,
     getDecryptedNotionKeyAndMigrate,
+    validateNotionCredentials,
     uploadFileToNotion,
-    syncBrainDumpToNotion
+    syncBrainDumpToNotion,
+    normalizeBrainDumpText,
+    createNotionClient,
+    createPageInDatabase,
+    resolveDataSourceId,
 };

@@ -4,8 +4,10 @@ const crypto = require('crypto');
 const mockTxUpdate = jest.fn();
 const mockTxSet = jest.fn();
 const mockOrderDocSet = jest.fn();
+const mockOrderDocUpdate = jest.fn();
 const mockVerifyIdToken = jest.fn();
 let mockStore = {};
+let mockParamValues;
 
 const mockRunTransaction = jest.fn(async (cb) => {
     const t = {
@@ -21,6 +23,7 @@ function mockCollection(name) {
         doc: (id) => ({
             _key: `${name}/${id}`,
             set: mockOrderDocSet,
+            update: mockOrderDocUpdate,
             get: async () => mockStore[`${name}/${id}`] || { exists: false, data: () => undefined }
         })
     };
@@ -40,11 +43,16 @@ jest.mock('firebase-admin', () => {
 });
 
 jest.mock('firebase-functions/v2/https', () => ({
-    onRequest: (opts, handler) => handler
+    onRequest: (_opts, handler) => handler
 }));
+
 jest.mock('firebase-functions/params', () => ({
-    defineString: jest.fn(() => ({ value: () => 'x' })),
-    defineSecret: jest.fn(() => ({ value: () => 'x' }))
+    defineString: jest.fn((name, options = {}) => ({
+        value: () => mockParamValues[name] ?? options.default ?? 'x'
+    })),
+    defineSecret: jest.fn((name) => ({
+        value: () => mockParamValues[name] ?? 'x'
+    }))
 }));
 
 process.env.NODE_ENV = 'test';
@@ -62,92 +70,219 @@ function sign(secret, ts, raw) {
     return crypto.createHmac('sha256', secret).update(ts + raw).digest('base64');
 }
 
-function webhookReq(secret, { orderId = 'order_1', paymentStatus = 'SUCCESS', tamperSig = null, tsOverride = null } = {}) {
-    const bodyObj = { data: { order: { order_id: orderId }, payment: { payment_status: paymentStatus } } };
+function webhookReq({
+    secret = 'live_secret_abc',
+    orderId = 'order_1',
+    paymentStatus = 'SUCCESS',
+    type = 'PAYMENT_SUCCESS_WEBHOOK',
+    tamperSig = null,
+    tsOverride = null,
+    amount = 49
+} = {}) {
+    const bodyObj = {
+        type,
+        data: {
+            order: {
+                order_id: orderId,
+                order_amount: amount,
+                order_currency: 'INR'
+            },
+            payment: {
+                payment_status: paymentStatus,
+                payment_amount: amount,
+                payment_currency: 'INR',
+                cf_payment_id: 'cf_payment_1',
+                payment_time: '2026-06-21T10:00:00+05:30'
+            }
+        }
+    };
     const raw = JSON.stringify(bodyObj);
     const ts = tsOverride || '1700000000';
     const sig = tamperSig !== null ? tamperSig : sign(secret, ts, raw);
-    return { method: 'POST', headers: { 'x-webhook-signature': sig, 'x-webhook-timestamp': ts }, rawBody: Buffer.from(raw), body: bodyObj };
+    const req = {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json',
+            'x-webhook-signature': sig,
+            'x-webhook-timestamp': ts,
+            'x-webhook-version': '2023-08-01'
+        },
+        rawBody: Buffer.from(raw),
+        body: bodyObj
+    };
+    req.get = (h) => req.headers[String(h || '').toLowerCase()];
+    return req;
 }
 
 describe('Cashfree webhook + order creation probe', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockStore = {};
-        global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: async () => ({ payment_session_id: 'sess_x' }) }));
+        mockParamValues = {
+            PAYMENTS_ENABLED: 'true',
+            CASHFREE_ENVIRONMENT: 'sandbox',
+            CASHFREE_NOTIFY_URL: 'https://ai-planner-project-467800.web.app/cashfreeWebhook',
+            CASHFREE_APP_ID: 'app_x',
+            CASHFREE_SECRET_KEY: 'live_secret_abc',
+            REQUIRE_APP_CHECK: 'false',
+            ALLOW_CUSTOM_BYOK_URLS: 'false'
+        };
+        mockVerifyIdToken.mockResolvedValue({ email: 'u@e.com', uid: 'u1' });
+        global.fetch = jest.fn(async (url) => {
+            if (String(url).includes('/pg/orders/order_1')) {
+                return {
+                    ok: true,
+                    headers: { get: () => null },
+                    json: async () => ({
+                        order_id: 'order_1',
+                        order_status: 'PAID',
+                        order_amount: 49,
+                        order_currency: 'INR',
+                        customer_details: { customer_id: 'u1' }
+                    })
+                };
+            }
+            return {
+                ok: true,
+                headers: { get: () => null },
+                json: async () => ({ payment_session_id: 'sess_x' })
+            };
+        });
     });
 
-    // P1: valid signature → correct fulfillment
     it('P1: valid signature grants Pro tier for price 49', async () => {
-        const secret = 'live_secret_abc';
-        process.env.CASHFREE_SECRET_KEY = secret;
-        mockStore['cashfree_orders/order_1'] = { exists: true, data: () => ({ status: 'PENDING', price: 49, userEmail: 'u@e.com' }) };
-        mockStore['users/u@e.com'] = { exists: true, data: () => ({}) };
+        mockStore['cashfree_orders/order_1'] = {
+            exists: true,
+            data: () => ({
+                status: 'PENDING',
+                price: 49,
+                amountPaise: 4900,
+                currency: 'INR',
+                environment: 'sandbox',
+                userEmail: 'u@e.com',
+                userId: 'u1'
+            })
+        };
 
         const res = makeRes();
-        await fns.cashfreeWebhook(webhookReq(secret), res);
+        await fns.cashfreeWebhook(webhookReq(), res);
 
         const userGrant = mockTxSet.mock.calls.find(c => c[0]._key === 'users/u@e.com');
-        console.log('PROBE_RESULT ' + JSON.stringify({ scenario: 'P1_valid_pro', status: res.status.mock.calls.flat(), grant: userGrant ? userGrant[1] : null }));
         expect(res.status).toHaveBeenCalledWith(200);
-        expect(userGrant[1]).toMatchObject({ tier: 'pro', tierCredits: 250, isPremium: true, lastTierCreditRenewalAt: expect.any(String) });
+        expect(userGrant[1]).toMatchObject({
+            tier: 'pro',
+            tierCredits: 250,
+            isPremium: true,
+            lastTierCreditRenewalAt: expect.any(String)
+        });
     });
 
-    // P2: duplicate delivery is idempotent
     it('P2: duplicate SUCCESS delivery does not double-grant', async () => {
-        const secret = 'live_secret_abc';
-        process.env.CASHFREE_SECRET_KEY = secret;
-        mockStore['cashfree_orders/order_1'] = { exists: true, data: () => ({ status: 'SUCCESS', price: 49, userEmail: 'u@e.com' }) };
-        mockStore['users/u@e.com'] = { exists: true, data: () => ({}) };
+        mockStore['cashfree_orders/order_1'] = {
+            exists: true,
+            data: () => ({
+                status: 'SUCCESS',
+                price: 49,
+                amountPaise: 4900,
+                currency: 'INR',
+                environment: 'sandbox',
+                userEmail: 'u@e.com',
+                userId: 'u1'
+            })
+        };
 
         const res = makeRes();
-        await fns.cashfreeWebhook(webhookReq(secret), res);
+        await fns.cashfreeWebhook(webhookReq(), res);
 
         const userGrant = mockTxSet.mock.calls.find(c => c[0]._key === 'users/u@e.com');
-        console.log('PROBE_RESULT ' + JSON.stringify({ scenario: 'P2_idempotent', status: res.status.mock.calls.flat(), userGrantCalled: !!userGrant }));
         expect(res.status).toHaveBeenCalledWith(200);
-        expect(userGrant).toBeUndefined(); // no second grant
+        expect(userGrant).toBeUndefined();
     });
 
-    // P3: invalid signature → 401, no transaction
     it('P3: invalid signature is rejected with 401 and never runs fulfillment', async () => {
-        const secret = 'live_secret_abc';
-        process.env.CASHFREE_SECRET_KEY = secret;
-        mockStore['cashfree_orders/order_1'] = { exists: true, data: () => ({ status: 'PENDING', price: 49, userEmail: 'u@e.com' }) };
+        mockStore['cashfree_orders/order_1'] = {
+            exists: true,
+            data: () => ({
+                status: 'PENDING',
+                price: 49,
+                amountPaise: 4900,
+                currency: 'INR',
+                environment: 'sandbox',
+                userEmail: 'u@e.com',
+                userId: 'u1'
+            })
+        };
 
         const res = makeRes();
-        await fns.cashfreeWebhook(webhookReq(secret, { tamperSig: 'totally-wrong' }), res);
+        await fns.cashfreeWebhook(webhookReq({ tamperSig: 'totally-wrong' }), res);
 
-        console.log('PROBE_RESULT ' + JSON.stringify({ scenario: 'P3_bad_sig', status: res.status.mock.calls.flat(), txRan: mockRunTransaction.mock.calls.length }));
         expect(res.status).toHaveBeenCalledWith(401);
         expect(mockRunTransaction).not.toHaveBeenCalled();
     });
 
-    // P4: with empty secret the webhook must fail CLOSED (no grant)
-    it('P4: empty secret rejects the webhook and never grants', async () => {
-        process.env.CASHFREE_SECRET_KEY = '';
-        mockStore['cashfree_orders/order_1'] = { exists: true, data: () => ({ status: 'PENDING', price: 49, userEmail: 'u@e.com' }) };
-        mockStore['users/u@e.com'] = { exists: true, data: () => ({}) };
+    it('P4: empty configured secret fails closed and never grants', async () => {
+        mockParamValues.CASHFREE_SECRET_KEY = '';
+        mockStore['cashfree_orders/order_1'] = {
+            exists: true,
+            data: () => ({
+                status: 'PENDING',
+                price: 49,
+                amountPaise: 4900,
+                currency: 'INR',
+                environment: 'sandbox',
+                userEmail: 'u@e.com',
+                userId: 'u1'
+            })
+        };
 
-        // Attacker computes HMAC with empty key (the old documented fallback)
         const res = makeRes();
-        await fns.cashfreeWebhook(webhookReq('', {}), res);
+        await fns.cashfreeWebhook(webhookReq({ secret: '' }), res);
 
-        const statuses = res.status.mock.calls.flat();
         const grantCalled = mockTxSet.mock.calls.some(c => c[0]._key === 'users/u@e.com');
-        console.log('PROBE_RESULT ' + JSON.stringify({ scenario: 'P4_empty_secret', status: statuses, forgedAccepted: statuses.includes(200), grantCalled }));
-        expect(statuses).not.toContain(200);
+        expect(res.status).toHaveBeenCalledWith(503);
         expect(grantCalled).toBe(false);
     });
 
-    // P5: order creation rejects non-allowlisted price
     it('P5: createCashfreeOrder rejects invalid price before contacting gateway', async () => {
         const res = makeRes();
-        const req = { method: 'POST', headers: { 'content-type': 'application/json' }, get: (h) => req.headers[h.toLowerCase()], body: { idToken: 'tok', price: 999 } };
+        const req = {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            get: (h) => req.headers[h.toLowerCase()],
+            body: { idToken: 'tok', price: 999, phone: '9876543210' }
+        };
         await fns.createCashfreeOrder(req, res);
 
-        console.log('PROBE_RESULT ' + JSON.stringify({ scenario: 'P5_bad_price', status: res.status.mock.calls.flat(), fetchCalled: global.fetch.mock.calls.length, verifyCalled: mockVerifyIdToken.mock.calls.length }));
         expect(res.status).toHaveBeenCalledWith(400);
         expect(global.fetch).not.toHaveBeenCalled();
+        expect(mockVerifyIdToken).not.toHaveBeenCalled();
+    });
+
+    it('P6: createCashfreeOrder stores normalized sandbox order', async () => {
+        const res = makeRes();
+        const req = {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            get: (h) => req.headers[h.toLowerCase()],
+            body: { idToken: 'tok', price: '49', phone: '9876543210' }
+        };
+
+        await fns.createCashfreeOrder(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.send).toHaveBeenCalledWith({
+            payment_session_id: 'sess_x',
+            payment_environment: 'sandbox'
+        });
+        expect(mockOrderDocSet).toHaveBeenCalledWith(expect.objectContaining({
+            userId: 'u1',
+            userEmail: 'u@e.com',
+            price: 49,
+            amountPaise: 4900,
+            currency: 'INR',
+            environment: 'sandbox',
+            status: 'PENDING',
+            payment_session_id: 'sess_x'
+        }));
     });
 });

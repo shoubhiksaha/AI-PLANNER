@@ -36,6 +36,9 @@ describe('Critical DOM Elements', () => {
             'notion-db-input',
             'save-notion-btn',
             'skip-notion-btn',
+            'actionable-error-modal',
+            'actionable-error-know-more',
+            'actionable-error-close',
             // Advanced Settings
             'save-setup-btn',
             'adv-notion-status',

@@ -4,7 +4,7 @@ const admin = require("firebase-admin");
 const crypto = require("crypto");
 // Import Extracted Services
 const { checkRateLimit } = require('./services/rateLimit');
-const { getPlannerDataFromImages } = require('./services/gemini');
+const { getPlannerDataFromImages, GEMINI_API_KEY } = require('./services/gemini');
 const { 
     syncCalendarEvents, 
     syncGoogleTasks, 
@@ -15,13 +15,26 @@ const {
 const { 
     encrypt, 
     getDecryptedNotionKeyAndMigrate, 
+    validateNotionCredentials,
     uploadFileToNotion, 
-    syncBrainDumpToNotion 
+    syncBrainDumpToNotion,
+    normalizeBrainDumpText,
+    createNotionClient,
+    createPageInDatabase,
 } = require('./services/notion');
 const {
     generateAndWrapDEK,
     unwrapAndDecrypt
 } = require('./services/kms');
+const { grantBoosterCreditsToAllUsers } = require('./services/creditGrant');
+const {
+    CASHFREE_APP_ID,
+    CASHFREE_SECRET_KEY,
+    normalizePrice,
+    getCashfreeConfig,
+    createCashfreeOrder: createCashfreeGatewayOrder,
+    getCashfreeOrder
+} = require('./services/cashfree');
 
 // Initialize Firebase Admin with explicit bucket
 admin.initializeApp({
@@ -29,9 +42,12 @@ admin.initializeApp({
 });
 
 // --- CONFIGURATION ---
-const { defineSecret } = require('firebase-functions/params');
+const { defineSecret, defineString } = require('firebase-functions/params');
 const NOTION_ENCRYPTION_KEY = defineSecret('NOTION_ENCRYPTION_KEY');
 const NOTION_ENCRYPTION_KEY_V2 = defineSecret('NOTION_ENCRYPTION_KEY_V2');
+const ALLOW_CUSTOM_BYOK_URLS = defineString('ALLOW_CUSTOM_BYOK_URLS', { default: 'false' });
+const CREDITS_GRANT_TOKEN = defineString('CREDITS_GRANT_TOKEN', { default: '' });
+const REQUIRE_APP_CHECK = defineString('REQUIRE_APP_CHECK', { default: 'false' });
 
 // --- UTILITIES (shared with tests) ---
 const {
@@ -46,12 +62,55 @@ const {
     handleOptions,
     RATE_LIMIT_SYNC,
     RATE_LIMIT_DEFAULT,
+    MAX_REQUEST_BODY_BYTES,
+    validateBYOKConfig,
     calendarDayDiff,
     computeDisplayStreak,
 } = require('./utils');
 // Crypto logic and Rate Limits have been extracted to services/
 
 // Google token resolution removed in favor of Firebase ID tokens for authentication.
+
+function getVerifiedEmail(decodedToken) {
+    return typeof decodedToken?.email === 'string' && decodedToken.email.trim()
+        ? decodedToken.email.trim().toLowerCase()
+        : null;
+}
+
+function customBYOKUrlsEnabled() {
+    return String(ALLOW_CUSTOM_BYOK_URLS.value()).toLowerCase() === 'true';
+}
+
+async function enforceAppCheck(req, res) {
+    if (String(REQUIRE_APP_CHECK.value()).toLowerCase() !== 'true') return true;
+    const appCheckToken = req.headers['x-firebase-appcheck'];
+    if (!appCheckToken || typeof appCheckToken !== 'string') {
+        res.status(401).send({ error: "App Check token required" });
+        return false;
+    }
+    try {
+        await admin.appCheck().verifyToken(appCheckToken);
+        return true;
+    } catch (_) {
+        res.status(401).send({ error: "Invalid App Check token" });
+        return false;
+    }
+}
+
+function serializeFirestoreValue(value) {
+    if (value == null) return value;
+    if (typeof value.toDate === 'function') return value.toDate().toISOString();
+    if (value instanceof Date) return value.toISOString();
+    if (Array.isArray(value)) return value.map(serializeFirestoreValue);
+    if (typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([key, val]) => [key, serializeFirestoreValue(val)]));
+    }
+    return value;
+}
+
+function sanitizeControlCharacters(value, replacement = '') {
+    return String(value || '').replace(/[\u0000-\u001f\u007f]/g, replacement);
+}
 
 function checkFeaturesAndCredits(userData, numImages, mode, hasBYOK = false) {
     const tier = userData.tier || 'free';
@@ -74,6 +133,19 @@ function checkFeaturesAndCredits(userData, numImages, mode, hasBYOK = false) {
         }
     }
     return { allowed: true };
+}
+
+function appendEveningNotionOutcomeMessage(successMessages, outcome) {
+    if (!outcome) return;
+    if (outcome.ok) {
+        if (outcome.status === 'duplicate') {
+            successMessages.push('Notion: Brain Dump page already exists for this date.');
+            return;
+        }
+        successMessages.push('Saved Visual Brain Dump to Notion.');
+        return;
+    }
+    successMessages.push(`(Notion not saved: ${outcome.reason})`);
 }
 
 /**
@@ -242,20 +314,24 @@ function appendGamificationToMsg(msg, { milestoneMsg, streakWarning }) {
 
 // --- ENDPOINT: updateProfile ---
 // Moves frontend Firestore writes behind secure admin privileges
-exports.updateProfile = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+exports.updateProfile = onRequest({ cors: false, memory: "256MiB", maxInstances: 20 }, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
 
     if (req.method !== 'POST') return res.status(405).send({ error: "Method not allowed" });
     if (!isJsonRequest(req)) return res.status(415).send({ error: "Content-Type must be application/json" });
+    if (!(await enforceAppCheck(req, res))) return;
 
     const { idToken, updates } = req.body || {};
-    if (!idToken || typeof updates !== 'object') return res.status(400).send({ error: "Invalid payload" });
+    if (!idToken || !updates || typeof updates !== 'object' || Array.isArray(updates)) {
+        return res.status(400).send({ error: "Invalid payload" });
+    }
 
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
-        const userEmail = decodedToken.email.toLowerCase();
+        const userEmail = getVerifiedEmail(decodedToken);
+        if (!userEmail) return res.status(401).send({ error: "Verified email required" });
         
         const rl = await checkRateLimit(userEmail, 'updateProfile', RATE_LIMIT_DEFAULT);
         if (!rl.allowed) {
@@ -265,8 +341,26 @@ exports.updateProfile = onRequest({ cors: false, memory: "256MiB" }, async (req,
 
         const allowedUpdates = {};
         if (typeof updates.setupComplete === 'boolean') allowedUpdates.setupComplete = updates.setupComplete;
-        if (typeof updates.displayName === 'string') allowedUpdates.displayName = updates.displayName.trim();
-        if (typeof updates.expoPushToken === 'string') allowedUpdates.expoPushToken = updates.expoPushToken.trim();
+        if (updates.displayName !== undefined) {
+            if (typeof updates.displayName !== 'string') {
+                return res.status(400).send({ error: "Display name must be text" });
+            }
+            const displayName = sanitizeControlCharacters(updates.displayName.normalize('NFKC'), ' ').trim();
+            if (displayName.length < 1 || displayName.length > 100) {
+                return res.status(400).send({ error: "Display name must be between 1 and 100 characters" });
+            }
+            allowedUpdates.displayName = displayName;
+        }
+        if (updates.expoPushToken !== undefined) {
+            if (typeof updates.expoPushToken !== 'string') {
+                return res.status(400).send({ error: "Push token must be text" });
+            }
+            const pushToken = sanitizeControlCharacters(updates.expoPushToken).trim();
+            if (pushToken && (pushToken.length > 512 || !/^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/.test(pushToken))) {
+                return res.status(400).send({ error: "Push token format is invalid" });
+            }
+            allowedUpdates.expoPushToken = pushToken;
+        }
         if (typeof updates.dedupCalendar === 'boolean') allowedUpdates.dedupCalendar = updates.dedupCalendar;
         if (typeof updates.dedupTasks === 'boolean') allowedUpdates.dedupTasks = updates.dedupTasks;
         if (typeof updates.timeZone === 'string') {
@@ -290,20 +384,21 @@ exports.updateProfile = onRequest({ cors: false, memory: "256MiB" }, async (req,
 // --- ENDPOINT: refreshStaleStreak ---
 // Persists a lapsed streak (0) when the user opens the app without syncing.
 // Streak advancement/decay logic otherwise only runs inside syncPlanner.
-exports.refreshStaleStreak = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+exports.refreshStaleStreak = onRequest({ cors: false, memory: "256MiB", maxInstances: 20 }, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
 
     if (req.method !== 'POST') return res.status(405).send({ error: "Method not allowed" });
     if (!isJsonRequest(req)) return res.status(415).send({ error: "Content-Type must be application/json" });
+    if (!(await enforceAppCheck(req, res))) return;
 
     const { idToken } = req.body || {};
     if (!idToken) return res.status(400).send({ error: "Missing token" });
 
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
-        const userEmail = decodedToken.email?.toLowerCase();
+        const userEmail = getVerifiedEmail(decodedToken);
         if (!userEmail) return res.status(401).send({ error: "No email in token" });
 
         const rl = await checkRateLimit(userEmail, 'refreshStaleStreak', RATE_LIMIT_DEFAULT);
@@ -337,7 +432,12 @@ exports.refreshStaleStreak = onRequest({ cors: false, memory: "256MiB" }, async 
 });
 
 // --- SETUP ENDPOINT: setupNotion ---
-exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2] }, async (req, res) => {
+exports.setupNotion = onRequest({
+    cors: false,
+    memory: "256MiB",
+    maxInstances: 20,
+    secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2]
+}, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
@@ -348,6 +448,7 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
     if (!isJsonRequest(req)) {
         return res.status(415).send({ error: "Content-Type must be application/json" });
     }
+    if (!(await enforceAppCheck(req, res))) return;
 
     const body = req.body || {};
     const idToken = body.idToken;
@@ -360,12 +461,18 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
 
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
-        const userEmail = decodedToken.email.toLowerCase();
+        const userEmail = getVerifiedEmail(decodedToken);
+        if (!userEmail) return res.status(401).send({ error: "Verified email required" });
 
         const rl = await checkRateLimit(userEmail, 'setupNotion', RATE_LIMIT_DEFAULT);
         if (!rl.allowed) {
             res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
             return res.status(429).send({ error: "Too many requests. Please try again later." });
+        }
+
+        const notionValidation = await validateNotionCredentials(notionKey, notionDbId);
+        if (!notionValidation.valid) {
+            return res.status(400).send({ error: notionValidation.error });
         }
 
         const encryptedKey = encrypt(notionKey);
@@ -382,7 +489,7 @@ exports.setupNotion = onRequest({ cors: false, memory: "256MiB", secrets: [NOTIO
 });
 
 // --- SETUP ENDPOINT: setupBYOK ---
-exports.setupBYOK = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+exports.setupBYOK = onRequest({ cors: false, memory: "256MiB", maxInstances: 20 }, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
@@ -393,6 +500,7 @@ exports.setupBYOK = onRequest({ cors: false, memory: "256MiB" }, async (req, res
     if (!isJsonRequest(req)) {
         return res.status(415).send({ error: "Content-Type must be application/json" });
     }
+    if (!(await enforceAppCheck(req, res))) return;
 
     const body = req.body || {};
     const idToken = body.idToken;
@@ -408,7 +516,8 @@ exports.setupBYOK = onRequest({ cors: false, memory: "256MiB" }, async (req, res
 
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
-        const userEmail = decodedToken.email.toLowerCase();
+        const userEmail = getVerifiedEmail(decodedToken);
+        if (!userEmail) return res.status(401).send({ error: "Verified email required" });
 
         const rl = await checkRateLimit(userEmail, 'setupBYOK', RATE_LIMIT_DEFAULT);
         if (!rl.allowed) {
@@ -416,16 +525,25 @@ exports.setupBYOK = onRequest({ cors: false, memory: "256MiB" }, async (req, res
             return res.status(429).send({ error: "Too many requests. Please try again later." });
         }
 
-        const kmsPayload = await generateAndWrapDEK(apiKey);
+        const byokValidation = validateBYOKConfig(
+            { apiKey, provider, modelName, baseUrl, apiVersion },
+            { allowCustomUrl: customBYOKUrlsEnabled() }
+        );
+        if (!byokValidation.valid) {
+            return res.status(400).send({ error: byokValidation.error });
+        }
+        const normalizedConfig = byokValidation.config;
+
+        const kmsPayload = await generateAndWrapDEK(normalizedConfig.apiKey);
         const db = admin.firestore();
         const userRef = db.collection('users').doc(userEmail);
         const byokDataToSave = {
             ...kmsPayload,
-            provider,
-            modelName
+            provider: normalizedConfig.provider,
+            modelName: normalizedConfig.modelName
         };
-        if (baseUrl) byokDataToSave.baseUrl = baseUrl;
-        if (apiVersion) byokDataToSave.apiVersion = apiVersion;
+        if (normalizedConfig.baseUrl) byokDataToSave.baseUrl = normalizedConfig.baseUrl;
+        if (normalizedConfig.apiVersion) byokDataToSave.apiVersion = normalizedConfig.apiVersion;
         await userRef.set({ byokKmsData: byokDataToSave }, { merge: true });
 
         logger.info(`Stored wrapped BYOK KMS Data for ${userEmail}`);
@@ -437,7 +555,7 @@ exports.setupBYOK = onRequest({ cors: false, memory: "256MiB" }, async (req, res
 });
 
 // --- GDPR: Export User Data ---
-exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+exports.exportUserData = onRequest({ cors: false, memory: "512MiB", maxInstances: 10 }, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
@@ -448,6 +566,7 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
     if (!isJsonRequest(req)) {
         return res.status(415).send({ error: "Content-Type must be application/json" });
     }
+    if (!(await enforceAppCheck(req, res))) return;
 
     const body = req.body || {};
     const token = body.token;
@@ -457,8 +576,8 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
     let userEmail = "unknown";
 
     try {
-        const decodedToken = await admin.auth().verifyIdToken(token);
-        userEmail = decodedToken.email?.toLowerCase();
+        const decodedToken = await admin.auth().verifyIdToken(token, true);
+        userEmail = getVerifiedEmail(decodedToken);
         if (!userEmail) return res.status(401).send({ error: "No email in token" });
 
         const rl = await checkRateLimit(userEmail, 'exportUserData', RATE_LIMIT_DEFAULT);
@@ -469,47 +588,83 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
         const db = admin.firestore();
         const userRef = db.collection('users').doc(userEmail);
         const snap = await userRef.get();
+        const paymentSnap = await db.collection('cashfree_orders')
+            .where('userEmail', '==', userEmail)
+            .get();
 
         const exportData = {
             exportedAt: new Date().toISOString(),
             email: userEmail,
+            uid: decodedToken.uid,
             accountExists: snap.exists,
-            data: {}
+            data: {},
+            payments: paymentSnap.docs.map(doc => {
+                const payment = doc.data();
+                return serializeFirestoreValue({
+                    orderId: doc.id,
+                    price: payment.price ?? null,
+                    amountPaise: payment.amountPaise ?? null,
+                    currency: payment.currency || 'INR',
+                    environment: payment.environment || null,
+                    status: payment.status || null,
+                    createdAt: payment.createdAt || null,
+                    updatedAt: payment.updatedAt || null,
+                    cashfreePaymentId: payment.cashfreePaymentId || null,
+                    paymentStatus: payment.paymentStatus || null,
+                    paymentAmount: payment.paymentAmount ?? null,
+                    paymentCurrency: payment.paymentCurrency || null
+                });
+            })
         };
 
         if (snap.exists) {
             const raw = snap.data();
-            exportData.data = {
+            exportData.data = serializeFirestoreValue({
+                displayName: raw.displayName || null,
+                expoPushToken: raw.expoPushToken || null,
+                setupComplete: !!raw.setupComplete,
+                timeZone: raw.timeZone || null,
+                dedupCalendar: raw.dedupCalendar ?? null,
+                dedupTasks: raw.dedupTasks ?? null,
                 tier: raw.tier || 'free',
                 tierCredits: raw.tierCredits || 0,
                 boosterCredits: raw.boosterCredits || 0,
+                isPremium: !!raw.isPremium,
+                subscriptionExpiryDate: raw.subscriptionExpiryDate || null,
                 currentStreak: computeDisplayStreak(raw),
                 highestStreak: raw.highestStreak || 0,
                 streakFreezes: raw.streakFreezes || 0,
                 dailySyncCount: raw.dailySyncCount || 0,
                 lastSyncDate: raw.lastSyncDate || null,
                 subscriptionRenewalDate: raw.subscriptionRenewalDate || null,
+                lastTierCreditRenewalAt: raw.lastTierCreditRenewalAt || null,
                 lastAwardedStreak: raw.lastAwardedStreak || 0,
+                totalSyncs: raw.totalSyncs || 0,
+                totalImagesProcessed: raw.totalImagesProcessed || 0,
                 notionConfigured: !!raw.notionKey,
                 notionDbId: raw.notionDbId || null,
-                // Google Drive Spreadsheet ID — non-sensitive identifier for the
-                // "AI Planner Data" tracking sheet. Included for full GDPR export completeness.
-                spreadsheetId: raw.spreadsheetId || null
-                // Note: Encrypted BYOK/Notion keys intentionally excluded for security
-            };
+                byokConfigured: !!(raw.byokKmsData || raw.byokConfig || raw.geminiKey),
+                byokProvider: raw.byokKmsData?.provider || raw.byokConfig?.provider || null,
+                byokModelName: raw.byokKmsData?.modelName || raw.byokConfig?.modelName || null,
+                byokCustomUrlConfigured: !!(raw.byokKmsData?.baseUrl || raw.byokConfig?.customUrl),
+                spreadsheetId: raw.spreadsheetId || null,
+                createdAt: raw.createdAt || null,
+                updatedAt: raw.updatedAt || null
+                // Encrypted and plaintext secret material is intentionally excluded.
+            });
 
             const historySnap = await userRef.collection('syncHistory')
-                .orderBy('timestamp', 'desc').limit(50).get();
+                .orderBy('timestamp', 'desc').get();
             exportData.data.syncHistory = historySnap.docs.map(doc => {
                 const data = doc.data();
-                return {
+                return serializeFirestoreValue({
                     syncId: doc.id,
-                    timestamp: data.timestamp ? data.timestamp.toDate().toISOString() : null,
+                    timestamp: data.timestamp || null,
                     status: data.status,
                     syncType: data.syncType,
                     imageCount: data.imageCount || 0,
                     message: data.message
-                };
+                });
             });
         }
 
@@ -522,7 +677,7 @@ exports.exportUserData = onRequest({ cors: false, memory: "256MiB" }, async (req
 });
 
 // --- GDPR: Delete User Account ---
-exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+exports.deleteUserAccount = onRequest({ cors: false, memory: "512MiB", maxInstances: 10 }, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
@@ -533,6 +688,7 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
     if (!isJsonRequest(req)) {
         return res.status(415).send({ error: "Content-Type must be application/json" });
     }
+    if (!(await enforceAppCheck(req, res))) return;
 
     const body = req.body || {};
     const token = body.token;
@@ -542,8 +698,8 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
     let userEmail = "unknown";
 
     try {
-        const decodedToken = await admin.auth().verifyIdToken(token);
-        userEmail = decodedToken.email?.toLowerCase();
+        const decodedToken = await admin.auth().verifyIdToken(token, true);
+        userEmail = getVerifiedEmail(decodedToken);
         const uid = decodedToken.uid;
         if (!userEmail) return res.status(401).send({ error: "No email in token" });
 
@@ -561,34 +717,26 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
             .where(admin.firestore.FieldPath.documentId(), '>=', `${userEmail}_`)
             .where(admin.firestore.FieldPath.documentId(), '<', `${userEmail}_\uf8ff`)
             .get();
+        const paymentSnap = await db.collection('cashfree_orders')
+            .where('userEmail', '==', userEmail)
+            .get();
 
         // Firestore limits batches to 500 writes. Chunk all references safely.
         const allRefs = [
             ...historySnap.docs.map(d => d.ref),
             ...rateLimitSnap.docs.map(d => d.ref),
+            ...paymentSnap.docs.map(d => d.ref),
             userRef
         ];
 
-        const commitPromises = [];
+        // Delete Firestore data first. Only remove the Auth account after every
+        // database batch succeeds, so a retry remains possible after a failure.
         for (let i = 0; i < allRefs.length; i += 500) {
             const batch = db.batch();
             allRefs.slice(i, i + 500).forEach(ref => batch.delete(ref));
-            commitPromises.push(batch.commit());
+            await batch.commit();
         }
-
-        // Execute Firestore deletion and Firebase Auth deletion concurrently.
-        // Both must succeed for a complete GDPR Article 17 erasure.
-        const [firestoreResult, authResult] = await Promise.allSettled([
-            Promise.all(commitPromises),
-            admin.auth().deleteUser(uid)
-        ]);
-
-        if (firestoreResult.status === 'rejected') {
-            throw new Error(`Firestore deletion failed: ${firestoreResult.reason?.message}`);
-        }
-        if (authResult.status === 'rejected') {
-            throw new Error(`Firebase Auth deletion failed: ${authResult.reason?.message}`);
-        }
+        await admin.auth().deleteUser(uid);
 
         logger.info(`Account fully deleted for ${userEmail} (Firestore + Auth)`, { requestId });
         return res.status(200).send({ success: true, text: "Your account data has been permanently deleted." });
@@ -600,7 +748,14 @@ exports.deleteUserAccount = onRequest({ cors: false, memory: "256MiB" }, async (
 
 // --- MAIN ENDPOINT: syncPlanner ---
 // Handles the image upload from the frontend, uses Gemini to parse, and syncs
-exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 300, secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2] }, async (req, res) => {
+exports.syncPlanner = onRequest({
+    cors: false,
+    memory: "1GiB",
+    timeoutSeconds: 300,
+    maxInstances: 20,
+    concurrency: 10,
+    secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2, GEMINI_API_KEY]
+}, async (req, res) => {
     // Generate Request ID for structured logging and trace tying
     const requestId = require('crypto').randomUUID();
     const startTimeMs = Date.now();
@@ -622,15 +777,15 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         logger.warn("Invalid Content-Type", { requestId, durationMs, status: 415 });
         return res.status(415).send({ error: "Unsupported Media Type. Expected application/json" });
     }
+    if (!(await enforceAppCheck(req, res))) return;
 
     const body = req.body || {};
 
     // Validation: enforce body limit via header rather than heavy stringify
-    const MAX_BODY_SIZE = 100_000_000;
-    if (req.rawBody && req.rawBody.length > MAX_BODY_SIZE) {
+    if (req.rawBody && req.rawBody.length > MAX_REQUEST_BODY_BYTES) {
         const durationMs = Date.now() - startTimeMs;
         logger.warn("Payload size validation failed", { requestId, durationMs, size: req.rawBody.length, status: 413 });
-        return res.status(413).send({ error: "Payload too large. Max 100MB allowed." });
+        return res.status(413).send({ error: "Payload too large. Max 28MB allowed." });
     }
 
     const idToken = body.idToken;
@@ -660,7 +815,8 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
-        email = decodedToken.email.toLowerCase();
+        email = getVerifiedEmail(decodedToken);
+        if (!email) return res.status(401).send({ error: "Verified email required" });
         mode = sanitizeSyncType(body.syncType);
 
         // Support backward compatibility for a single image, but standardize on array
@@ -716,6 +872,24 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         const statelessApiVersion = req.headers['x-byok-apiversion'];
 
         if (statelessKey) {
+            const statelessValidation = validateBYOKConfig({
+                apiKey: statelessKey,
+                provider: statelessProvider || 'openai',
+                modelName: statelessModel || 'gpt-4o',
+                baseUrl: statelessBaseUrl,
+                apiVersion: statelessApiVersion
+            }, { allowCustomUrl: customBYOKUrlsEnabled() });
+            if (!statelessValidation.valid) {
+                return res.status(400).send({ error: statelessValidation.error });
+            }
+            const normalized = statelessValidation.config;
+            byokConfig = {
+                apiKey: normalized.apiKey,
+                provider: normalized.provider,
+                modelName: normalized.modelName
+            };
+            if (normalized.baseUrl) byokConfig.customUrl = normalized.baseUrl;
+            if (normalized.apiVersion) byokConfig.apiVersion = normalized.apiVersion;
             hasBYOK = true;
         }
 
@@ -837,13 +1011,6 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
         }
 
         if (statelessKey) {
-            byokConfig = {
-                apiKey: statelessKey,
-                provider: statelessProvider || 'openai',
-                modelName: statelessModel || 'gpt-4o'
-            };
-            if (statelessBaseUrl) byokConfig.customUrl = statelessBaseUrl;
-            if (statelessApiVersion) byokConfig.apiVersion = statelessApiVersion;
             logger.info("Traffic Cop: Routing via Stateless X-BYOK-Token header", { requestId, authEmail: email });
         } else if (userData.byokKmsData) {
             try {
@@ -854,13 +1021,29 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                     userData.byokKmsData.iv, 
                     userData.byokKmsData.authTag
                 );
-                byokConfig = {
+                const storedValidation = validateBYOKConfig({
                     apiKey: decryptedKey,
                     provider: userData.byokKmsData.provider || 'openai',
-                    modelName: userData.byokKmsData.modelName || 'gpt-4o'
+                    modelName: userData.byokKmsData.modelName || 'gpt-4o',
+                    baseUrl: userData.byokKmsData.baseUrl,
+                    apiVersion: userData.byokKmsData.apiVersion
+                }, { allowCustomUrl: customBYOKUrlsEnabled() });
+                if (!storedValidation.valid) {
+                    logger.warn("Stored BYOK configuration rejected by current policy", {
+                        requestId,
+                        authEmail: email,
+                        reason: storedValidation.error
+                    });
+                    return res.status(400).send({ error: storedValidation.error });
+                }
+                const normalizedStoredByok = storedValidation.config;
+                byokConfig = {
+                    apiKey: normalizedStoredByok.apiKey,
+                    provider: normalizedStoredByok.provider,
+                    modelName: normalizedStoredByok.modelName
                 };
-                if (userData.byokKmsData.baseUrl) byokConfig.customUrl = userData.byokKmsData.baseUrl;
-                if (userData.byokKmsData.apiVersion) byokConfig.apiVersion = userData.byokKmsData.apiVersion;
+                if (normalizedStoredByok.baseUrl) byokConfig.customUrl = normalizedStoredByok.baseUrl;
+                if (normalizedStoredByok.apiVersion) byokConfig.apiVersion = normalizedStoredByok.apiVersion;
             } catch (err) {
                 logger.error("KMS Decryption error", { error: err.message, requestId, authEmail: email });
                 throw new Error(JSON.stringify({ code: 500, error: "Failed to decrypt BYOK configuration." }));
@@ -883,7 +1066,6 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             }
 
             // Create Notion Client (Lazy Load)
-            const { Client } = require("@notionhq/client");
             const decryptedNotionKey = await getDecryptedNotionKeyAndMigrate(userRef, userData);
             if (!decryptedNotionKey) {
                 const durationMs = Date.now() - startTimeMs;
@@ -891,7 +1073,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 skipCreditRefund = true;
                 return res.status(401).send({ error: "Invalid or corrupt Notion settings. Please re-setup Notion." });
             }
-            const notion = new Client({ auth: decryptedNotionKey });
+            const notion = createNotionClient(decryptedNotionKey);
 
             // PARALLEL EXECUTION: Upload Limitless Image(s) to Notion Directly (Zero Storage) & Extract Date
             logger.info("Starting parallel Journal processing (Zero Storage)...", { requestId, authEmail: email, syncMode: mode });
@@ -925,12 +1107,11 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 }
             }));
 
-            await notion.pages.create({
-                parent: { database_id: dbId },
+            await createPageInDatabase(notion, dbId, {
                 properties: {
                     "Name": { title: [{ text: { content: `Journal - ${journalDate}` } }] }
                 },
-                children: childrenBlocks
+                children: childrenBlocks,
             });
             msg = `Journal synced to Notion! Date: ${journalDate}`;
             msg = appendGamificationToMsg(msg, await runGamificationAfterSync(userRef, {
@@ -1002,6 +1183,14 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
                 return res.status(400).send({ error: plannerData.error });
             }
 
+            logger.info("Evening planner extraction summary", {
+                requestId,
+                authEmail: email,
+                hasBrainDumpText: !!normalizeBrainDumpText(plannerData.brainDump),
+                brainDumpType: plannerData.brainDump == null ? 'missing' : typeof plannerData.brainDump,
+                expenseCount: Array.isArray(plannerData.expenses) ? plannerData.expenses.length : 0,
+            });
+
             let successMessages = [];
 
             // 1. Mark tasks as completed in Google Tasks based on checkmarks in image.
@@ -1050,22 +1239,42 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
 
                 if (decryptedNotionKey) {
                     const brainDumpPromise = async () => {
-                        try {
-                            if (!plannerData.brainDump) return false;
-                            logger.info("Starting parallel Brain Dump to Notion (Zero Storage)...", { requestId, authEmail: email });
-                            let fileId = null;
-                            const firstImage = parsedImages[0];
-                            if (firstImage && firstImage.base64Data) {
-                                const buffer = Buffer.from(firstImage.base64Data, 'base64');
-                                fileId = await uploadFileToNotion(decryptedNotionKey, buffer, firstImage.mimeType);
-                            }
-                            return syncBrainDumpToNotion(plannerData, decryptedNotionKey, userData.notionDbId, fileId);
-                        } catch (err) {
-                            // Re-throw so the orchestrator can detect the failed branch,
-                            // warn the user, and refund the credit (vs. silently charging).
-                            logger.error("Notion sync failed:", { error: err.message, requestId, authEmail: email });
-                            throw err;
+                        const brainDumpText = normalizeBrainDumpText(plannerData.brainDump);
+                        if (plannerData.brainDump != null && typeof plannerData.brainDump !== 'string') {
+                            return {
+                                ok: false,
+                                reason: `AI returned brainDump as ${typeof plannerData.brainDump}; expected handwritten text.`,
+                            };
                         }
+
+                        const firstImage = parsedImages[0];
+                        const hasImage = !!(firstImage && firstImage.base64Data);
+                        if (!brainDumpText && !hasImage) {
+                            return {
+                                ok: false,
+                                reason: 'No Brain Dump text found on the planner page and no image to attach.',
+                            };
+                        }
+
+                        logger.info("Starting Brain Dump to Notion sync...", {
+                            requestId,
+                            authEmail: email,
+                            hasBrainDumpText: !!brainDumpText,
+                            hasImage,
+                        });
+
+                        let fileId = null;
+                        if (hasImage) {
+                            const buffer = Buffer.from(firstImage.base64Data, 'base64');
+                            fileId = await uploadFileToNotion(decryptedNotionKey, buffer, firstImage.mimeType);
+                        }
+
+                        return syncBrainDumpToNotion(
+                            { ...plannerData, brainDump: brainDumpText },
+                            decryptedNotionKey,
+                            userData.notionDbId,
+                            fileId
+                        );
                     };
                     promises.push(brainDumpPromise());
                 } else {
@@ -1082,16 +1291,24 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             const getResult = (result, name) => {
                 if (result.status === 'fulfilled') return result.value;
                 logger.error(`${name} Sync Failed:`, { error: result.reason?.message || result.reason, requestId, authEmail: email });
-                return (name === 'Notion') ? false : 0;
+                return (name === 'Notion') ? null : 0;
             };
 
             const addedExpenses = getResult(results[0], 'Expenses');
             const addedHealth = getResult(results[1], 'Health');
-            const notionSynced = results.length > 2 ? getResult(results[2], 'Notion') : false;
+            const notionBranch = results.length > 2 ? results[2] : null;
 
             if (addedExpenses > 0) successMessages.push(`Added ${addedExpenses} expenses to Sheet.`);
             if (addedHealth > 0) successMessages.push(`Logged Health & Wellness.`);
-            if (notionSynced) successMessages.push(`Saved Visual Brain Dump to Notion.`);
+
+            if (notionBranch) {
+                if (notionBranch.status === 'rejected') {
+                    const detail = notionBranch.reason?.message || String(notionBranch.reason);
+                    successMessages.push(`(Notion not saved: ${detail})`);
+                } else {
+                    appendEveningNotionOutcomeMessage(successMessages, notionBranch.value);
+                }
+            }
 
             // Detect genuinely failed branches (rejections, not empty/duplicate 0-returns)
             // so we can tell the user and refund rather than silently charging a credit
@@ -1139,7 +1356,7 @@ exports.syncPlanner = onRequest({ cors: false, memory: "1GiB", timeoutSeconds: 3
             const idToken = body.idToken;
             if (idToken) {
                 const decodedToken = await admin.auth().verifyIdToken(idToken);
-                const userEmail = decodedToken.email.toLowerCase();
+                const userEmail = getVerifiedEmail(decodedToken);
                 if (userEmail) {
                     const db = admin.firestore();
                     const userRef = db.collection('users').doc(userEmail);
@@ -1211,7 +1428,7 @@ async function incrementUsageCounters(userRef, imageCount) {
 // Logic delegated to GoogleSync and Notion services
 
 // --- GCP Error Reporting: Frontend Ingestion Endpoint ---
-exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req, res) => {
+exports.logClientError = onRequest({ cors: false, memory: "128MiB", maxInstances: 10 }, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
@@ -1222,15 +1439,33 @@ exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req
     if (!isJsonRequest(req)) {
         return res.status(415).send({ error: "Content-Type must be application/json" });
     }
+    if (!(await enforceAppCheck(req, res))) return;
+    if (req.rawBody && req.rawBody.length > 16 * 1024) {
+        return res.status(413).send({ error: "Error report too large" });
+    }
 
-    const { message, stack, url, line, column, userEmail } = req.body || {};
+    const { message, stack, url, line, column, idToken } = req.body || {};
 
-    if (message && message.length > 1000) return res.status(400).send({ error: "Message too large" });
+    if (typeof message !== 'string' || !message.trim()) return res.status(400).send({ error: "Message required" });
+    if (message.length > 1000) return res.status(400).send({ error: "Message too large" });
+    if (stack !== undefined && typeof stack !== 'string') return res.status(400).send({ error: "Stack must be text" });
     if (stack && stack.length > 5000) return res.status(400).send({ error: "Stack too large" });
+
+    let reporter = 'Anonymous';
+    let rateLimitIdentity;
+    if (idToken) {
+        try {
+            const decodedToken = await admin.auth().verifyIdToken(idToken);
+            reporter = decodedToken.uid || 'Authenticated';
+            rateLimitIdentity = `uid_${decodedToken.uid || 'unknown'}`;
+        } catch (_) {
+            return res.status(401).send({ error: "Invalid identity token" });
+        }
+    }
 
     try {
         const clientIp = req.ip || req.headers['x-forwarded-for'] || 'anonymous';
-        const rl = await checkRateLimit(`ip_${clientIp}`, 'logClientError', 5); // Max 5 errors per window
+        const rl = await checkRateLimit(rateLimitIdentity || `ip_${clientIp}`, 'logClientError', 5);
         if (!rl.allowed) {
             return res.status(429).send({ error: "Rate limit exceeded" });
         }
@@ -1241,16 +1476,26 @@ exports.logClientError = onRequest({ cors: false, memory: "128MiB" }, async (req
     }
 
     // Sanitize client-supplied fields before logging to prevent log injection
-    const safeEmail = typeof userEmail === 'string' ? userEmail.replace(/[\n\r\t]/g, '').slice(0, 100) : 'Anonymous';
-    const safeMessage = typeof message === 'string' ? message.replace(/[\n\r]/g, ' ') : 'Unknown Error';
-    const safeUrl = typeof url === 'string' ? url.replace(/[\n\r]/g, '').slice(0, 500) : 'Unknown URL';
+    const safeMessage = sanitizeControlCharacters(message, ' ').slice(0, 1000);
+    const safeStack = sanitizeControlCharacters(stack || 'No stack trace provided', ' ').slice(0, 5000);
+    let safeUrl = 'Unknown URL';
+    if (typeof url === 'string') {
+        try {
+            const parsedUrl = new URL(url);
+            safeUrl = `${parsedUrl.origin}${parsedUrl.pathname}`.slice(0, 500);
+        } catch (_) {
+            safeUrl = sanitizeControlCharacters(url).split(/[?#]/)[0].slice(0, 500);
+        }
+    }
+    const safeLine = Number.isInteger(line) && line >= 0 && line <= 10_000_000 ? line : null;
+    const safeColumn = Number.isInteger(column) && column >= 0 && column <= 10_000_000 ? column : null;
 
     // Construct a rich error string for GCP
     const errorBody = [
         `Frontend Error: ${safeMessage}`,
-        `User: ${safeEmail}`,
-        `URL: ${safeUrl}${(line && column) ? `:${line}:${column}` : ''}`,
-        `\nStack Trace:\n${stack || 'No stack trace provided'}`
+        `Reporter: ${reporter}`,
+        `URL: ${safeUrl}${(safeLine !== null && safeColumn !== null) ? `:${safeLine}:${safeColumn}` : ''}`,
+        `Stack Trace: ${safeStack}`
     ].join('\n');
 
     // Passing an Error object triggers native GCP Error Reporting aggregation
@@ -1270,25 +1515,36 @@ if (process.env.NODE_ENV === 'test') {
 }
 
 // --- CASHFREE PAYMENT INTEGRATION ---
-exports.createCashfreeOrder = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+exports.createCashfreeOrder = onRequest({
+    cors: false,
+    memory: "256MiB",
+    maxInstances: 10,
+    secrets: [CASHFREE_APP_ID, CASHFREE_SECRET_KEY]
+}, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
 
     if (req.method !== 'POST') return res.status(405).send({ error: "Method not allowed" });
     if (!isJsonRequest(req)) return res.status(415).send({ error: "Content-Type must be application/json" });
+    if (!(await enforceAppCheck(req, res))) return;
 
     const { idToken, price, phone } = req.body || {};
-    if (!idToken || !price) return res.status(400).send({ error: "Missing required fields" });
-
-    const VALID_PRICES = new Set([19, 29, 49, 79, 129, 290, 490]);
-    if (!VALID_PRICES.has(Number(price))) {
-        return res.status(400).send({ error: 'Invalid price' });
+    if (!idToken || price === undefined || price === null || !phone) {
+        return res.status(400).send({ error: "Missing required fields" });
+    }
+    const normalizedPrice = normalizePrice(price);
+    if (normalizedPrice === null) return res.status(400).send({ error: 'Invalid price' });
+    const normalizedPhone = String(phone).replace(/\D/g, '');
+    if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
+        return res.status(400).send({ error: 'Invalid Indian mobile number' });
     }
 
     try {
-        const decodedToken = await admin.auth().verifyIdToken(idToken);
-        const userEmail = decodedToken.email.toLowerCase();
+        const config = getCashfreeConfig();
+        const decodedToken = await admin.auth().verifyIdToken(idToken, true);
+        const userEmail = getVerifiedEmail(decodedToken);
+        if (!userEmail) return res.status(401).send({ error: "Verified email required" });
         
         const rl = await checkRateLimit(userEmail, 'createCashfreeOrder', RATE_LIMIT_DEFAULT);
         if (!rl.allowed) {
@@ -1297,89 +1553,172 @@ exports.createCashfreeOrder = onRequest({ cors: false, memory: "256MiB" }, async
         }
 
         const userId = decodedToken.uid;
-        const orderId = `order_${Date.now()}_${userId}`;
-        
-        // Notify URL must be publicly accessible by Cashfree
-        const notifyUrl = 'https://ai-planner-project-467800.web.app/cashfreeWebhook';
-
-        const response = await fetch('https://sandbox.cashfree.com/pg/orders', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-client-id': process.env.CASHFREE_APP_ID,
-                'x-client-secret': process.env.CASHFREE_SECRET_KEY,
-                'x-api-version': '2023-08-01'
+        const orderId = `order_${crypto.randomUUID()}`;
+        const data = await createCashfreeGatewayOrder(config, {
+            order_id: orderId,
+            order_amount: normalizedPrice,
+            order_currency: "INR",
+            customer_details: {
+                customer_id: userId,
+                customer_email: userEmail,
+                customer_phone: normalizedPhone
             },
-            body: JSON.stringify({
-                order_id: orderId,
-                order_amount: price,
-                order_currency: "INR",
-                customer_details: {
-                    customer_id: userId,
-                    customer_email: userEmail,
-                    customer_phone: phone || "9999999999" // Use user-provided phone
-                },
-                order_meta: {
-                    notify_url: notifyUrl
-                }
-            })
+            order_meta: {
+                notify_url: config.notifyUrl
+            }
         });
 
-        const data = await response.json();
-        if (!response.ok) {
-            logger.error("Cashfree Order Creation Failed", data);
-            return res.status(500).send({ error: "Payment Gateway failure" });
+        if (!data?.payment_session_id || (data.order_id && data.order_id !== orderId)) {
+            logger.error("Cashfree returned an invalid order creation response", { orderId });
+            return res.status(502).send({ error: "Payment gateway returned an invalid response" });
         }
 
         // Store pending order in firestore
         await admin.firestore().collection('cashfree_orders').doc(orderId).set({
             userId,
             userEmail,
-            price,
+            price: normalizedPrice,
+            amountPaise: normalizedPrice * 100,
+            currency: 'INR',
+            environment: config.environment,
             status: 'PENDING',
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             payment_session_id: data.payment_session_id
         });
 
-        res.status(200).send({ payment_session_id: data.payment_session_id });
+        res.status(200).send({
+            payment_session_id: data.payment_session_id,
+            payment_environment: config.checkoutMode
+        });
     } catch (error) {
-        logger.error("Cashfree Route Error:", error);
-        res.status(500).send({ error: "Gateway failure" });
+        if (error?.code === 'PAYMENTS_DISABLED' || error?.code === 'PAYMENTS_MISCONFIGURED') {
+            logger.warn("Payment order creation rejected by configuration", { code: error.code });
+            return res.status(503).send({ error: "Payments are temporarily unavailable" });
+        }
+        logger.error("Cashfree Route Error:", { error: error?.message });
+        res.status(502).send({ error: "Payment gateway failure" });
     }
 });
 
-exports.cashfreeWebhook = onRequest({ cors: false, memory: "256MiB" }, async (req, res) => {
+exports.cashfreeWebhook = onRequest({
+    cors: false,
+    memory: "256MiB",
+    maxInstances: 10,
+    secrets: [CASHFREE_APP_ID, CASHFREE_SECRET_KEY]
+}, async (req, res) => {
+    setStandardHeaders(res);
     // Webhooks are server-to-server POSTs
     if (req.method !== 'POST') return res.status(405).send({ error: "Method not allowed" });
+    if (!isJsonRequest(req)) return res.status(415).send("Unsupported media type");
+    if (!req.rawBody || !Buffer.isBuffer(req.rawBody)) {
+        return res.status(400).send("Raw webhook body required");
+    }
+    if (req.rawBody.length > 128 * 1024) {
+        return res.status(413).send("Webhook payload too large");
+    }
     
     try {
-        const signature = req.headers['x-webhook-signature'] || req.headers['x-cashfree-signature'];
+        const config = getCashfreeConfig();
+        const signature = req.headers['x-webhook-signature'];
         const timestamp = req.headers['x-webhook-timestamp'];
-        const secretKey = process.env.CASHFREE_SECRET_KEY;
-        // Fail closed: without a configured secret we cannot verify authenticity,
-        // so never process the webhook (prevents accepting forged empty-key signatures).
-        if (!secretKey) {
-            logger.error("Cashfree webhook secret not configured; rejecting webhook.");
-            return res.status(500).send("Webhook not configured");
+        const webhookVersion = req.headers['x-webhook-version'];
+        if (
+            typeof signature !== 'string'
+            || typeof timestamp !== 'string'
+            || !/^\d{10,16}$/.test(timestamp)
+            || !['2023-08-01', '2025-01-01'].includes(webhookVersion)
+        ) {
+            return res.status(400).send("Missing or invalid webhook headers");
         }
-        const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body);
-        const expectedSig = crypto.createHmac('sha256', secretKey)
-            .update((timestamp || '') + rawBody).digest('base64');
-        if (!signature || signature !== expectedSig) {
+        const rawBody = req.rawBody.toString('utf8');
+        const expectedSig = crypto.createHmac('sha256', config.secretKey)
+            .update(timestamp + rawBody).digest('base64');
+        const receivedBuffer = Buffer.from(signature);
+        const expectedBuffer = Buffer.from(expectedSig);
+        if (
+            receivedBuffer.length !== expectedBuffer.length
+            || !crypto.timingSafeEqual(receivedBuffer, expectedBuffer)
+        ) {
             return res.status(401).send('Invalid webhook signature');
         }
 
         const payload = req.body;
-        if (!payload || !payload.data || !payload.data.order) {
+        if (!payload?.data?.order || !payload?.data?.payment) {
             return res.status(400).send("Invalid payload");
         }
 
         const orderId = payload.data.order.order_id;
-        const txStatus = payload.data.payment ? payload.data.payment.payment_status : '';
+        const txStatus = payload.data.payment.payment_status;
+        if (typeof orderId !== 'string' || orderId.length > 128 || typeof txStatus !== 'string') {
+            return res.status(400).send("Invalid payment fields");
+        }
+
+        const rl = await checkRateLimit(`cashfree_${orderId}`, 'cashfreeWebhook', 60);
+        if (!rl.allowed) return res.status(429).send("Too many webhook attempts");
         
         const orderRef = admin.firestore().collection('cashfree_orders').doc(orderId);
-        
-        await admin.firestore().runTransaction(async (t) => {
+        const initialOrderSnap = await orderRef.get();
+        if (!initialOrderSnap.exists) return res.status(404).send("Order not found");
+        const initialOrder = initialOrderSnap.data();
+        if (initialOrder.status === 'SUCCESS') return res.status(200).send("Webhook already processed");
+        if (initialOrder.environment !== config.environment) {
+            return res.status(409).send("Payment environment mismatch");
+        }
+
+        const expectedPrice = normalizePrice(initialOrder.price);
+        const expectedAmountPaise = Number.isInteger(initialOrder.amountPaise)
+            ? initialOrder.amountPaise
+            : (expectedPrice === null ? null : expectedPrice * 100);
+        if (expectedPrice === null || expectedAmountPaise === null) {
+            await orderRef.update({
+                status: 'REVIEW_REQUIRED',
+                reviewReason: 'INVALID_STORED_PRICE',
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            return res.status(422).send("Order requires review");
+        }
+
+        const webhookOrderAmountPaise = Math.round(Number(payload.data.order.order_amount) * 100);
+        const webhookCurrency = payload.data.order.order_currency;
+        if (webhookOrderAmountPaise !== expectedAmountPaise || webhookCurrency !== 'INR') {
+            return res.status(409).send("Webhook order amount or currency mismatch");
+        }
+
+        if (txStatus === 'SUCCESS' && payload.type !== 'PAYMENT_SUCCESS_WEBHOOK') {
+            return res.status(400).send("Invalid success webhook type");
+        }
+
+        if (txStatus !== 'SUCCESS') {
+            await admin.firestore().runTransaction(async (t) => {
+                const latest = await t.get(orderRef);
+                if (!latest.exists || latest.data().status === 'SUCCESS') return;
+                t.update(orderRef, {
+                    status: txStatus,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+            });
+            return res.status(200).send("Non-success webhook recorded");
+        }
+
+        const gatewayOrder = await getCashfreeOrder(config, orderId);
+        const gatewayAmountPaise = Math.round(Number(gatewayOrder?.order_amount) * 100);
+        if (
+            gatewayOrder?.order_id !== orderId
+            || gatewayOrder?.order_status !== 'PAID'
+            || gatewayAmountPaise !== expectedAmountPaise
+            || gatewayOrder?.order_currency !== 'INR'
+            || (gatewayOrder?.customer_details?.customer_id
+                && gatewayOrder.customer_details.customer_id !== initialOrder.userId)
+        ) {
+            return res.status(409).send("Cashfree order verification failed");
+        }
+
+        const paymentId = String(payload.data.payment.cf_payment_id || '');
+        if (!paymentId || paymentId.length > 128) {
+            return res.status(400).send("Missing payment identifier");
+        }
+
+        const transactionResult = await admin.firestore().runTransaction(async (t) => {
             const orderSnap = await t.get(orderRef);
             if (!orderSnap.exists) {
                 throw new Error("Order not found");
@@ -1387,88 +1726,125 @@ exports.cashfreeWebhook = onRequest({ cors: false, memory: "256MiB" }, async (re
 
             const orderData = orderSnap.data();
             if (orderData.status === 'SUCCESS') {
-                return; // Already processed
+                return { alreadyProcessed: true };
+            }
+            if (orderData.environment !== config.environment) {
+                throw new Error("Payment environment mismatch");
             }
 
-            if (txStatus === 'SUCCESS') {
-                const p = orderData.price;
-                let updates = {};
-                let logMsg = "";
-                
-                const userRef = admin.firestore().collection('users').doc(orderData.userEmail);
-                const userSnap = await t.get(userRef);
-                const userData = userSnap.exists ? userSnap.data() : {};
-                
-                let currentExpiry = userData.subscriptionExpiryDate ? new Date(userData.subscriptionExpiryDate) : new Date();
-                if (currentExpiry < new Date()) {
-                    currentExpiry = new Date();
-                }
-
-                let daysToAdd = 0;
-                if ([29, 49].includes(p)) daysToAdd = 30;
-                else if ([79, 129].includes(p)) daysToAdd = 90;
-                else if ([290, 490].includes(p)) daysToAdd = 365;
-
-                if (daysToAdd > 0) {
-                    currentExpiry.setDate(currentExpiry.getDate() + daysToAdd);
-                }
-                const expiryISO = currentExpiry.toISOString();
-                const paymentRenewalStamp = new Date().toISOString().slice(0, 10);
-                
-                if (p === 19) {
-                    updates = { boosterCredits: admin.firestore.FieldValue.increment(50) };
-                    logMsg = `Cashfree payment success. Granted 50 Booster Credits to ${orderData.userEmail}`;
-                } else if ([29, 79, 290].includes(p)) {
-                    updates = { 
-                        tier: 'standard', 
-                        tierCredits: 100, 
-                        isPremium: true,
-                        subscriptionExpiryDate: expiryISO,
-                        lastTierCreditRenewalAt: paymentRenewalStamp,
-                        subscriptionRenewalDate: paymentRenewalStamp.slice(0, 7)
-                    };
-                    logMsg = `Cashfree payment success. Granted Standard to ${orderData.userEmail}`;
-                } else if ([49, 129, 490].includes(p)) {
-                    updates = { 
-                        tier: 'pro', 
-                        tierCredits: 250, 
-                        isPremium: true,
-                        subscriptionExpiryDate: expiryISO,
-                        lastTierCreditRenewalAt: paymentRenewalStamp,
-                        subscriptionRenewalDate: paymentRenewalStamp.slice(0, 7)
-                    };
-                    logMsg = `Cashfree payment success. Granted Pro to ${orderData.userEmail}`;
-                } else {
-                     logMsg = `Cashfree payment success but unknown price ${p} for ${orderData.userEmail}`;
-                }
-
-                // 1. Mark order successful
+            const p = normalizePrice(orderData.price);
+            if (p === null) {
                 t.update(orderRef, {
-                    status: 'SUCCESS',
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                    paymentDetails: payload.data.payment || {}
-                });
-
-                // 2. Grant appropriate status to user
-                if (Object.keys(updates).length > 0) {
-                    t.set(userRef, updates, { merge: true });
-                }
-                logger.info(logMsg);
-            } else {
-                // FAILED, USER_DROPPED, etc.
-                t.update(orderRef, {
-                    status: txStatus,
+                    status: 'REVIEW_REQUIRED',
+                    reviewReason: 'INVALID_STORED_PRICE',
                     updatedAt: admin.firestore.FieldValue.serverTimestamp()
                 });
+                return { reviewRequired: true };
             }
+            let updates = {};
+            let logMsg = "";
+                
+            const userRef = admin.firestore().collection('users').doc(orderData.userEmail);
+            const userSnap = await t.get(userRef);
+            const userData = userSnap.exists ? userSnap.data() : {};
+                
+            let currentExpiry = userData.subscriptionExpiryDate ? new Date(userData.subscriptionExpiryDate) : new Date();
+            if (currentExpiry < new Date()) currentExpiry = new Date();
+
+            let daysToAdd = 0;
+            if ([29, 49].includes(p)) daysToAdd = 30;
+            else if ([79, 129].includes(p)) daysToAdd = 90;
+            else if ([290, 490].includes(p)) daysToAdd = 365;
+
+            if (daysToAdd > 0) currentExpiry.setDate(currentExpiry.getDate() + daysToAdd);
+            const expiryISO = currentExpiry.toISOString();
+            const paymentRenewalStamp = new Date().toISOString().slice(0, 10);
+                
+            if (p === 19) {
+                updates = { boosterCredits: admin.firestore.FieldValue.increment(50) };
+                logMsg = `Cashfree payment success. Granted 50 Booster Credits to user ${orderData.userId}`;
+            } else if ([29, 79, 290].includes(p)) {
+                updates = {
+                    tier: 'standard',
+                    tierCredits: 100,
+                    isPremium: true,
+                    subscriptionExpiryDate: expiryISO,
+                    lastTierCreditRenewalAt: paymentRenewalStamp,
+                    subscriptionRenewalDate: paymentRenewalStamp.slice(0, 7)
+                };
+                logMsg = `Cashfree payment success. Granted Standard to user ${orderData.userId}`;
+            } else if ([49, 129, 490].includes(p)) {
+                updates = {
+                    tier: 'pro',
+                    tierCredits: 250,
+                    isPremium: true,
+                    subscriptionExpiryDate: expiryISO,
+                    lastTierCreditRenewalAt: paymentRenewalStamp,
+                    subscriptionRenewalDate: paymentRenewalStamp.slice(0, 7)
+                };
+                logMsg = `Cashfree payment success. Granted Pro to user ${orderData.userId}`;
+            }
+
+            t.update(orderRef, {
+                status: 'SUCCESS',
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                cashfreePaymentId: paymentId,
+                paymentStatus: txStatus,
+                paymentAmount: Number(payload.data.payment.payment_amount),
+                paymentCurrency: payload.data.payment.payment_currency || null,
+                paymentTime: payload.data.payment.payment_time || null,
+                verifiedOrderStatus: gatewayOrder.order_status
+            });
+
+            t.set(userRef, updates, { merge: true });
+            logger.info(logMsg);
+            return { fulfilled: true };
         });
 
+        if (transactionResult?.reviewRequired) return res.status(422).send("Order requires review");
         res.status(200).send("Webhook received");
     } catch (error) {
         if (error.message === "Order not found") {
             return res.status(404).send("Order not found");
         }
-        logger.error("Webhook Error:", error);
+        if (error?.code === 'PAYMENTS_DISABLED' || error?.code === 'PAYMENTS_MISCONFIGURED') {
+            logger.error("Cashfree webhook rejected by configuration", { code: error.code });
+            return res.status(503).send("Webhook not configured");
+        }
+        logger.error("Webhook Error:", { error: error?.message });
         res.status(500).send("Webhook Error");
+    }
+});
+
+exports.adminGrantCredits = onRequest({ memory: "512MiB", timeoutSeconds: 540, maxInstances: 1 }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (req.method !== 'POST') return res.status(405).send({ error: "Method not allowed" });
+    if (!isJsonRequest(req)) return res.status(415).send({ error: "Content-Type must be application/json" });
+
+    const expectedToken = String(CREDITS_GRANT_TOKEN.value() || '').trim();
+    const providedToken = String(req.get('x-credits-grant-token') || '').trim();
+    if (!expectedToken || providedToken !== expectedToken) {
+        return res.status(403).send({ error: "Forbidden" });
+    }
+
+    const body = req.body || {};
+    if (body.confirm !== 'GRANT-CREDITS-25') {
+        return res.status(400).send({ error: "Invalid confirm phrase" });
+    }
+
+    const amount = Number(body.amount ?? 25);
+    if (!Number.isInteger(amount) || amount <= 0 || amount > 500) {
+        return res.status(400).send({ error: "Invalid amount" });
+    }
+
+    try {
+        const db = admin.firestore();
+        const stats = await grantBoosterCreditsToAllUsers(db, amount, { dryRun: body.dryRun === true });
+        logger.info("Admin credit grant completed", stats);
+        return res.status(200).send({ success: true, stats });
+    } catch (err) {
+        logger.error("Admin credit grant failed", { error: err.message });
+        return res.status(500).send({ error: "Failed to grant credits" });
     }
 });

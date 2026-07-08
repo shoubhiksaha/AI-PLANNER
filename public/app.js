@@ -106,6 +106,8 @@ if (!helpers) {
 }
 const {
     parseJsonResponse,
+    readApiError,
+    showActionableError,
     getApiUrls,
     switchView: switchViewHelper,
     applyTheme: applyThemeHelper,
@@ -114,24 +116,28 @@ const {
 // --- GLOBAL ERROR HANDLING (GCP Error Reporting) ---
 const logToGCP = (errorEvent) => {
     try {
-        const errorData = {
-            message: errorEvent.message || errorEvent.reason?.message || "Unknown error",
-            stack: errorEvent.error?.stack || errorEvent.reason?.stack || "",
-            url: window.location.href,
-            line: errorEvent.lineno,
-            column: errorEvent.colno,
-            userEmail: currentUser?.email
-        };
+        Promise.resolve().then(async () => {
+            let idToken = null;
+            try {
+                idToken = currentUser ? await currentUser.getIdToken() : null;
+            } catch (_) { /* anonymous error report */ }
+            const errorData = {
+                message: errorEvent.message || errorEvent.reason?.message || "Unknown error",
+                stack: errorEvent.error?.stack || errorEvent.reason?.stack || "",
+                url: `${window.location.origin}${window.location.pathname}`,
+                line: errorEvent.lineno,
+                column: errorEvent.colno,
+                idToken
+            };
 
-        const { PRIMARY_API_URL } = getApiUrls(window.location.hostname, 'logClientError');
-        const targetUrl = PRIMARY_API_URL;
-        // Fire and forget via fetch to avoid blocking the main thread
-        fetch(targetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(errorData),
-            keepalive: true // Ensure request finishes even if page closes
-        }).catch(() => { }); // Swallow errors during error logging
+            const { PRIMARY_API_URL } = getApiUrls(window.location.hostname, 'logClientError');
+            fetch(PRIMARY_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(errorData),
+                keepalive: true
+            }).catch(() => { });
+        }).catch(() => { });
     } catch (e) { /* failsafe */ }
 };
 
@@ -446,7 +452,7 @@ function showCustomFields(subType) {
         urlInput.placeholder = 'https://api.example.com/v1/chat/completions';
     } else if (subType === 'local') {
         label.textContent = '🏠 Local / Self-Hosted (e.g., Ollama)';
-        urlInput.placeholder = 'http://localhost:11434/v1/chat/completions';
+        urlInput.placeholder = 'https://your-secure-ollama.example.com/v1/chat/completions';
     } else if (subType === 'enterprise') {
         label.textContent = '🏢 Enterprise Endpoint';
         urlInput.placeholder = 'https://your-company.openai.azure.com';
@@ -488,20 +494,41 @@ document.getElementById('save-notion-btn')?.addEventListener('click', async () =
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ idToken, notionKey: key, notionDbId: dbId })
         });
-        if (!res.ok) throw new Error("Failed to secure Notion keys.");
+        if (!res.ok) {
+            const apiErr = await readApiError(res);
+            showActionableError({
+                title: 'Notion setup failed',
+                summary: 'Could not save Notion keys securely. Please try again.',
+                details: apiErr.details,
+            });
+            return;
+        }
 
         // Mark setup complete via backend instead of frontend to bypass security rules
-        await fetch('/updateProfile', {
+        const profileRes = await fetch('/updateProfile', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ idToken, updates: { setupComplete: true } })
         });
+        if (!profileRes.ok) {
+            const apiErr = await readApiError(profileRes);
+            showActionableError({
+                title: 'Setup incomplete',
+                summary: 'Notion keys were saved, but setup could not be marked complete.',
+                details: apiErr.details,
+            });
+            return;
+        }
 
         switchView('view-dashboard');
         if (currentUser) loadSyncHistory(currentUser.email);
     } catch (err) {
         console.error("Failed to save Notion keys:", err);
-        alert("Could not save Notion keys securely. Please try again.");
+        showActionableError({
+            title: 'Notion setup failed',
+            summary: 'Could not save Notion keys securely. Please try again.',
+            details: err?.message || String(err),
+        });
     } finally {
         saveBtn.innerText = originalText;
         saveBtn.disabled = false;
@@ -609,7 +636,8 @@ document.getElementById('save-setup-btn')?.addEventListener('click', async () =>
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ idToken, apiKey: byokKey, provider, modelName, baseUrl: customUrl, apiVersion })
                 });
-                if (!byokRes.ok) throw new Error("Failed to securely envelope BYOK keys.");
+                const byokData = await parseJsonResponse(byokRes);
+                if (!byokRes.ok) throw new Error(byokData.error || "Failed to securely envelope BYOK keys.");
             }
         } else {
             sessionStorage.removeItem('byok_stateless_config');
@@ -676,19 +704,19 @@ updateDashButtons(false);
 const defaultUploadUI = `
     <div id="upload-ui" class="w-full h-full flex items-center justify-center gap-4 sm:gap-6 relative z-10">
         <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
-            <input type="file" accept="image/*" capture="environment" class="upload-input hidden">
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" class="upload-input hidden">
             <span class="text-3xl mb-1.5 pointer-events-none">📷</span>
             <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Camera</span>
         </label>
         <div class="w-px h-14 bg-theme-border/60"></div>
         <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
-            <input type="file" accept="image/*" class="upload-input hidden">
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" class="upload-input hidden">
             <span class="text-3xl mb-1.5 pointer-events-none">🖼️</span>
             <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Gallery</span>
         </label>
         <div class="w-px h-14 bg-theme-border/60"></div>
         <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
-            <input type="file" accept="*/*" class="upload-input hidden">
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" class="upload-input hidden">
             <span class="text-3xl mb-1.5 pointer-events-none">📁</span>
             <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Files</span>
         </label>
@@ -717,11 +745,11 @@ const renderThumbnails = () => {
                 ${filesAsBase64.length < 5 ? `
                     <div class="flex flex-col gap-1">
                         <label class="h-11 w-11 shrink-0 border-2 border-dashed border-theme-border flex items-center justify-center text-theme-muted hover:text-theme-text hover:border-theme-text transition-colors rounded-lg bg-theme-bg/50 cursor-pointer" title="Take Photo">
-                            <input type="file" accept="image/*" capture="environment" class="upload-input hidden">
+                            <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" class="upload-input hidden">
                             <span class="text-lg pointer-events-none">📷</span>
                         </label>
                         <label class="h-11 w-11 shrink-0 border-2 border-dashed border-theme-border flex items-center justify-center text-theme-muted hover:text-theme-text hover:border-theme-text transition-colors rounded-lg bg-theme-bg/50 cursor-pointer" title="Add from Gallery">
-                            <input type="file" accept="image/*" class="upload-input hidden">
+                            <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" class="upload-input hidden">
                             <span class="text-lg pointer-events-none">🖼️</span>
                         </label>
                     </div>
@@ -805,7 +833,7 @@ const handleFiles = async (files) => {
         }
 
         if (file.type.startsWith('image/')) {
-            // Security: 20MB Limit per file
+            // Allow large camera files; they are resized/compressed before upload.
             if (file.size > 20 * 1024 * 1024) {
                 alert(`${file.name} is too large. Images must be under 20MB.`);
                 continue;
@@ -1052,7 +1080,7 @@ async function exportMyData() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `ai - planner - data - ${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `ai-planner-data-${new Date().toISOString().split('T')[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
     } catch (err) {
@@ -1310,7 +1338,7 @@ const collectPhoneNumber = () => {
         const onSubmit = (e) => {
             e.preventDefault();
             const phone = phoneInput.value.trim();
-            if (phone.length === 10 && /^\d+$/.test(phone)) {
+            if (/^[6-9]\d{9}$/.test(phone)) {
                 cleanup();
                 resolve(phone);
             }
@@ -1376,8 +1404,10 @@ const handlePaymentClick = async (e, tierName, basePrice) => {
         }
 
         // 4. Initialize Cashfree SDK and trigger popup
-        const isProd = !/^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
-        const cashfree = await Cashfree({ mode: isProd ? "production" : "sandbox" });
+        if (!['production', 'sandbox'].includes(data.payment_environment)) {
+            throw new Error("Payment environment was not provided by the server.");
+        }
+        const cashfree = await Cashfree({ mode: data.payment_environment });
         cashfree.checkout({
             paymentSessionId: data.payment_session_id,
             redirectTarget: "_modal"
