@@ -18,8 +18,13 @@ const {
     applyCors,
     handleOptions,
     validateTokenFormat,
+    validateBYOKBaseUrl,
+    validateBYOKConfig,
+    isPrivateOrReservedIp,
     parseDateTime,
     MAX_IMAGE_BYTES,
+    MAX_TOTAL_IMAGE_BYTES,
+    MAX_REQUEST_BODY_BYTES,
     MAX_BASE64_LENGTH,
     ALLOWED_ORIGINS,
     ALLOWED_SYNC_TYPES,
@@ -204,12 +209,9 @@ describe('parseImageDataUrl', () => {
     });
 
     test('parseImageDataUrl returns null if decoded size is > MAX_IMAGE_BYTES', () => {
-        // Construct a string that is under MAX_BASE64_LENGTH but whose decoded size is > 20MB
-        // 20MB = 20971520 bytes. Required base64 length without padding = ~27962027 chars.
-        // If we make it 28,000,000 base64 chars of valid characters, decoded is 21,000,000 bytes (over 20MB limit)
-        // But MAX_BASE64_LENGTH is 28,730,983, so it passes the pre-filter, but fails the decoded byte check.
+        // Construct a string under the encoded pre-filter whose decoded size is over 20MB.
         const validPrefix = 'data:image/jpeg;base64,';
-        const largeBase64 = 'A'.repeat(28_000_000);
+        const largeBase64 = '/9j/' + 'A'.repeat(28_000_000);
         expect(parseImageDataUrl(validPrefix + largeBase64)).toBe(null);
     });
 });
@@ -248,22 +250,25 @@ describe('normalizeNotionDbId', () => {
 // NOTION KEY VALIDATION
 // ============================================
 describe('isLikelyNotionKey', () => {
-    test('accepts valid Notion keys', () => {
+    test('accepts legacy secret_ and modern ntn_ Notion tokens', () => {
         expect(isLikelyNotionKey('secret_abcdefghijklmnop')).toBe(true);
         expect(isLikelyNotionKey('secret_1234567890abcdef1234')).toBe(true);
+        expect(isLikelyNotionKey('ntn_dummy1234567890abcdefghijklmnopqrstuvwxyzA')).toBe(true);
     });
 
-    test('rejects keys that do not start with "secret_"', () => {
-        expect(isLikelyNotionKey('notsecret_abcdefghijklmnop')).toBe(false);
-        expect(isLikelyNotionKey('ABCDEFGHIJKLMNOPQRSTUVWXYZ')).toBe(false);
+    test('accepts opaque tokens within length bounds', () => {
+        expect(isLikelyNotionKey('ABCDEFGHIJKLMNOPQRSTUVWXYZ')).toBe(true);
+        expect(isLikelyNotionKey('notsecret_abcdefghijklmnop')).toBe(true);
     });
 
     test('rejects keys that are too short', () => {
         expect(isLikelyNotionKey('secret_abc')).toBe(false); // < 20 chars total
+        expect(isLikelyNotionKey('ntn_short')).toBe(false);
     });
 
     test('rejects keys that are too long', () => {
         expect(isLikelyNotionKey('secret_' + 'a'.repeat(300))).toBe(false); // > 256 chars
+        expect(isLikelyNotionKey('ntn_' + 'a'.repeat(300))).toBe(false);
     });
 
     test('rejects non-string input', () => {
@@ -274,6 +279,7 @@ describe('isLikelyNotionKey', () => {
 
     test('trims whitespace before checking', () => {
         expect(isLikelyNotionKey('  secret_abcdefghijklmnop  ')).toBe(true);
+        expect(isLikelyNotionKey('  ntn_dummy1234567890abcdefghijklmnopqrstuvwxyzA  ')).toBe(true);
     });
 });
 
@@ -441,12 +447,65 @@ describe('validateTokenFormat', () => {
     });
 });
 
+describe('BYOK security validation', () => {
+    test.each([
+        '127.0.0.2',
+        '10.0.0.1',
+        '100.64.0.1',
+        '169.254.169.254',
+        '172.16.0.1',
+        '192.168.1.1',
+        '198.18.0.1',
+        '::1',
+        'fc00::1',
+        'fe80::1',
+        '::ffff:127.0.0.1'
+    ])('blocks private or reserved address %s', (ip) => {
+        expect(isPrivateOrReservedIp(ip)).toBe(true);
+    });
+
+    test('allows a public address', () => {
+        expect(isPrivateOrReservedIp('93.184.216.34')).toBe(false);
+        expect(isPrivateOrReservedIp('2606:2800:220:1:248:1893:25c8:1946')).toBe(false);
+    });
+
+    test('rejects unsafe custom URLs', () => {
+        expect(validateBYOKBaseUrl('http://api.example.com').valid).toBe(false);
+        expect(validateBYOKBaseUrl('https://localhost/v1').valid).toBe(false);
+        expect(validateBYOKBaseUrl('https://user:pass@api.example.com/v1').valid).toBe(false);
+        expect(validateBYOKBaseUrl('https://api.example.com:8443/v1').valid).toBe(false);
+    });
+
+    test('normalizes a valid custom URL', () => {
+        const result = validateBYOKBaseUrl('https://api.example.com/v1/chat');
+        expect(result.valid).toBe(true);
+        expect(result.url).toBe('https://api.example.com/v1/chat');
+    });
+
+    test('validates provider, model and custom URL policy', () => {
+        const base = {
+            apiKey: 'a'.repeat(20),
+            provider: 'openai',
+            modelName: 'gpt-4o'
+        };
+        expect(validateBYOKConfig(base).valid).toBe(true);
+        expect(validateBYOKConfig({ ...base, provider: 'unknown' }).valid).toBe(false);
+        expect(validateBYOKConfig({ ...base, baseUrl: 'https://api.example.com/v1' }).valid).toBe(false);
+        expect(validateBYOKConfig(
+            { ...base, baseUrl: 'https://api.example.com/v1' },
+            { allowCustomUrl: true }
+        ).valid).toBe(true);
+    });
+});
+
 // ============================================
 // CONSTANTS VERIFICATION
 // ============================================
 describe('Constants', () => {
-    test('MAX_IMAGE_BYTES is 20MB', () => {
+    test('request and image limits fit below the platform maximum', () => {
         expect(MAX_IMAGE_BYTES).toBe(20 * 1024 * 1024);
+        expect(MAX_TOTAL_IMAGE_BYTES).toBe(24 * 1024 * 1024);
+        expect(MAX_REQUEST_BODY_BYTES).toBe(28 * 1024 * 1024);
     });
 
     test('MAX_BASE64_LENGTH accounts for ~37% base64 overhead', () => {
@@ -531,26 +590,22 @@ describe('Encryption Edge Cases', () => {
 // PARSE IMAGE DATA URL - ADDITIONAL MIME TYPES
 // ============================================
 describe('parseImageDataUrl - Mime Types', () => {
-    test('parses HEIC data URL', () => {
-        const result = parseImageDataUrl('data:image/heic;base64,AAAA');
-        expect(result).not.toBeNull();
-        expect(result.mimeType).toBe('image/heic');
+    test('rejects HEIC because the browser converts it to JPEG before upload', () => {
+        expect(parseImageDataUrl('data:image/heic;base64,AAAA')).toBeNull();
     });
 
     test('parses WebP data URL', () => {
-        const result = parseImageDataUrl('data:image/webp;base64,AAAA');
+        const result = parseImageDataUrl('data:image/webp;base64,UklGRgAAAABXRUJQ');
         expect(result).not.toBeNull();
         expect(result.mimeType).toBe('image/webp');
     });
 
-    test('parses SVG+XML data URL', () => {
-        const result = parseImageDataUrl('data:image/svg+xml;base64,PHN2Zz4=');
-        expect(result).not.toBeNull();
-        expect(result.mimeType).toBe('image/svg+xml');
+    test('rejects SVG uploads', () => {
+        expect(parseImageDataUrl('data:image/svg+xml;base64,PHN2Zz4=')).toBeNull();
     });
 
     test('normalizes uppercase mime type', () => {
-        const result = parseImageDataUrl('data:image/JPEG;base64,AAAA');
+        const result = parseImageDataUrl('data:image/JPEG;base64,/9j/4AAQ');
         expect(result).not.toBeNull();
         expect(result.mimeType).toBe('image/jpeg');
     });
@@ -571,16 +626,17 @@ describe('isLikelyNotionKey - Edge Cases', () => {
     test('accepts key at exactly 20 chars', () => {
         expect(isLikelyNotionKey('secret_abcdefghijk')).toBe(false); // 18 chars
         expect(isLikelyNotionKey('secret_abcdefghijklm')).toBe(true); // 20 chars
+        expect(isLikelyNotionKey('ntn_abcdefghijklmnop')).toBe(true); // 20 chars
     });
 
     test('accepts key at exactly 256 chars', () => {
-        const key256 = 'secret_' + 'a'.repeat(249);
+        const key256 = 'ntn_' + 'a'.repeat(252);
         expect(key256.length).toBe(256);
         expect(isLikelyNotionKey(key256)).toBe(true);
     });
 
     test('rejects key at 257 chars', () => {
-        const key257 = 'secret_' + 'a'.repeat(250);
+        const key257 = 'ntn_' + 'a'.repeat(253);
         expect(key257.length).toBe(257);
         expect(isLikelyNotionKey(key257)).toBe(false);
     });
