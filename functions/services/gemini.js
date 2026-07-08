@@ -53,6 +53,14 @@ function getJournalDatePrompt() {
             If no date is found, return { "date": null }.`;
 }
 
+function getJournalTranscriptionPrompt() {
+    return `Extract the handwritten date and meticulously transcribe all the handwritten content from this journal page.
+            Return a single JSON object: { "date": "string", "transcription": "string" }.
+            The date string should be formatted clearly (e.g., "15-January-2025").
+            If no date is found, return { "date": null }.
+            If no handwriting is detected, return { "transcription": "" }.`;
+}
+
 // Helper to fetch with timeout
 async function fetchWithTimeout(url, options, timeout = 60000) {
     const controller = new AbortController();
@@ -68,14 +76,11 @@ async function fetchWithTimeout(url, options, timeout = 60000) {
 }
 
 // Helper to call Gemini with a specific model
-async function callGeminiModel(model, apiKey, prompt, imagesArr, audioData = null) {
+async function callGeminiModel(model, apiKey, prompt, imagesArr) {
     logger.info(`Attempting Gemini model: ${model}...`);
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const parts = imagesArr.map(img => ({ inlineData: { mimeType: img.mimeType, data: img.base64Data } }));
-    if (audioData) {
-        parts.push({ inlineData: { mimeType: audioData.mimeType, data: audioData.base64Data } });
-    }
     parts.push({ text: prompt });
 
     const payload = {
@@ -127,18 +132,16 @@ async function callGeminiModel(model, apiKey, prompt, imagesArr, audioData = nul
 }
 
 
-async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = null, audioData = null) {
-    if ((!parsedImages || parsedImages.length === 0) && !audioData) {
-        throw new Error("INVALID_PAYLOAD_NO_MEDIA");
+async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = null) {
+    if (!parsedImages || parsedImages.length === 0) {
+        throw new Error("INVALID_IMAGE_PAYLOAD");
     }
 
-    const basePrompt =
+    const prompt =
         syncType === 'evening' ? getEveningPrompt() :
             syncType === 'journal_date_only' ? getJournalDatePrompt() :
+            syncType === 'journal_transcribe' ? getJournalTranscriptionPrompt() :
                 getMorningPrompt();
-                
-    const audioPrompt = audioData ? "\n\nAdditionally, listen to the provided voice note. Accurately transcribe or summarize the audio and include it in the 'brainDump' field." : "";
-    const prompt = basePrompt + audioPrompt;
 
     // Schema validation to prevent malformed AI output from crashing downstream sync
     function validateAIOutput(data, type) {
@@ -155,8 +158,6 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
             // Sanitize each schedule item
             data.schedule = data.schedule.filter(item => item && typeof item.task === 'string');
             data.todos = data.todos.filter(item => item && typeof item.task === 'string');
-            
-            if (audioData && !data.brainDump) data.brainDump = "";
         } else if (type === 'evening') {
             if (typeof data.date !== 'string') data.date = new Date().toISOString().slice(0, 10);
             if (!Array.isArray(data.todos)) data.todos = [];
@@ -167,6 +168,13 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
         } else if (type === 'journal_date_only') {
             if (typeof data.date !== 'string' && data.date !== null) {
                 data.date = null;
+            }
+        } else if (type === 'journal_transcribe') {
+            if (typeof data.date !== 'string' && data.date !== null) {
+                data.date = null;
+            }
+            if (typeof data.transcription !== 'string') {
+                data.transcription = '';
             }
         }
         return data;
@@ -217,7 +225,7 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
 
     for (const model of models) {
         try {
-            const raw = await callGeminiModel(model, geminiApiKey, prompt, parsedImages, audioData);
+            const raw = await callGeminiModel(model, geminiApiKey, prompt, parsedImages);
             return validateAIOutput(raw, syncType);
         } catch (error) {
             lastError = error;
