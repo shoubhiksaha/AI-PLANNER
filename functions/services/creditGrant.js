@@ -31,6 +31,7 @@ async function grantBoosterCreditsToAllUsers(db, amount, { dryRun = false } = {}
     }
 
     let lastDoc = null;
+    // eslint-disable-next-line no-constant-condition
     while (true) {
         let query = db.collection('users').orderBy(FieldPath.documentId()).limit(PAGE_SIZE);
         if (lastDoc) query = query.startAfter(lastDoc);

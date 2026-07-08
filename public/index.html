@@ -608,21 +608,28 @@
             </div>
 
             <!-- Buttons -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <button id="btn-morning"
-                    class="dash-btn disabled:opacity-50 p-3 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl flex flex-col items-center transition-all">
+                    class="dash-btn disabled:opacity-50 p-3 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl flex flex-col items-center justify-center transition-all">
                     <span class="text-xl">☀️</span>
-                    <span class="font-bold text-orange-900 text-sm mt-1">Morning</span>
+                    <span class="font-bold text-orange-900 text-sm mt-1 text-center leading-tight">Morning</span>
                 </button>
                 <button id="btn-night"
-                    class="dash-btn disabled:opacity-50 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl flex flex-col items-center transition-all">
+                    class="dash-btn disabled:opacity-50 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl flex flex-col items-center justify-center transition-all">
                     <span class="text-xl">🌙</span>
-                    <span class="font-bold text-indigo-900 text-sm mt-1">Night Sync</span>
+                    <span class="font-bold text-indigo-900 text-sm mt-1 text-center leading-tight">Night Sync</span>
                 </button>
                 <button id="btn-journal"
-                    class="dash-btn disabled:opacity-50 p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl flex flex-col items-center transition-all">
+                    class="dash-btn disabled:opacity-50 p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl flex flex-col items-center justify-center transition-all">
                     <span class="text-xl">📖</span>
-                    <span class="font-bold text-emerald-900 text-sm mt-1">Journal</span>
+                    <span class="font-bold text-emerald-900 text-sm mt-1 text-center leading-tight">Journal</span>
+                </button>
+                <button id="btn-voice-note"
+                    class="dash-btn disabled:opacity-50 p-3 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl flex flex-col items-center justify-center transition-all relative overflow-hidden">
+                    <span id="voice-note-icon" class="text-xl transition-transform duration-300">🎤</span>
+                    <span id="voice-note-label" class="font-bold text-red-900 text-sm mt-1 text-center leading-tight">Voice Note</span>
+                    <!-- Pulse effect when recording -->
+                    <div id="voice-recording-pulse" class="hidden absolute inset-0 rounded-xl bg-red-500 opacity-25 animate-ping"></div>
                 </button>
             </div>
 
@@ -1133,8 +1140,8 @@
         </div>
     </div>
 
-    <script src="app-helpers.js?v=11"></script>
-    <script type="module" src="app.js?v=22"></script>
+    <script src="app-helpers.js?v=12"></script>
+    <script type="module" src="app.js?v=23"></script>
 </body>
 
 </html>

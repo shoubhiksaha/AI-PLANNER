@@ -135,6 +135,7 @@ function decryptNotionForMigration(text, newKey, oldKey) {
 
 async function scanCollection(collectionName, handler) {
     let lastDoc = null;
+    // eslint-disable-next-line no-constant-condition
     while (true) {
         let query = db.collection(collectionName)
             .orderBy(FieldPath.documentId())

@@ -53,6 +53,20 @@ function getJournalDatePrompt() {
             If no date is found, return { "date": null }.`;
 }
 
+function getJournalTranscriptionPrompt() {
+    return `Extract the handwritten date and meticulously transcribe all the handwritten content from this journal page.
+            Return a single JSON object: { "date": "string", "transcription": "string" }.
+            The date string should be formatted clearly (e.g., "15-January-2025").
+            If no date is found, return { "date": null }.
+            If no handwriting is detected, return { "transcription": "" }.`;
+}
+
+function getVoiceNoteTranscriptionPrompt() {
+    return `Please transcribe this audio recording accurately.
+            Return a single JSON object: { "transcription": "string" }.
+            If there is no speech, return { "transcription": "" }.`;
+}
+
 // Helper to fetch with timeout
 async function fetchWithTimeout(url, options, timeout = 60000) {
     const controller = new AbortController();
@@ -132,6 +146,8 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
     const prompt =
         syncType === 'evening' ? getEveningPrompt() :
             syncType === 'journal_date_only' ? getJournalDatePrompt() :
+            syncType === 'journal_transcribe' ? getJournalTranscriptionPrompt() :
+            syncType === 'voice_note' ? getVoiceNoteTranscriptionPrompt() :
                 getMorningPrompt();
 
     // Schema validation to prevent malformed AI output from crashing downstream sync
@@ -157,9 +173,12 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
             data.todos = data.todos.filter(item => item && typeof item.task === 'string');
             data.expenses = data.expenses.filter(item => item && typeof item.item === 'string' && typeof item.amount === 'number');
         } else if (type === 'journal_date_only') {
-            if (typeof data.date !== 'string' && data.date !== null) {
-                data.date = null;
-            }
+            data.date = typeof data.date === 'string' ? data.date : null;
+        } else if (type === 'journal_transcribe') {
+            data.date = typeof data.date === 'string' ? data.date : null;
+            data.transcription = typeof data.transcription === 'string' ? data.transcription : "";
+        } else if (type === 'voice_note') {
+            data.transcription = typeof data.transcription === 'string' ? data.transcription : "";
         }
         return data;
     }

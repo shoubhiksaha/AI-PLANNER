@@ -697,7 +697,13 @@ const dropZone = document.getElementById('drop-zone');
 const dashBtns = document.querySelectorAll('.dash-btn');
 
 const updateDashButtons = (enabled) => {
-    dashBtns.forEach(b => b.disabled = !enabled);
+    dashBtns.forEach(b => {
+        if (b.id !== 'btn-voice-note') {
+            b.disabled = !enabled;
+        } else {
+            b.disabled = false; // Voice note is always enabled (doesn't require image)
+        }
+    });
 };
 updateDashButtons(false);
 
@@ -924,7 +930,69 @@ document.getElementById('btn-morning')?.addEventListener('click', () => triggerS
 document.getElementById('btn-night')?.addEventListener('click', () => triggerSync('night'));
 document.getElementById('btn-journal')?.addEventListener('click', () => triggerSync('journal'));
 
-const triggerSync = async (syncType) => {
+let mediaRecorder;
+let audioChunks = [];
+let isRecording = false;
+let audioStream = null;
+
+document.getElementById('btn-voice-note')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-voice-note');
+    const icon = document.getElementById('voice-note-icon');
+    const label = document.getElementById('voice-note-label');
+    const pulse = document.getElementById('voice-recording-pulse');
+
+    if (isRecording) {
+        // Stop recording
+        mediaRecorder.stop();
+        isRecording = false;
+        
+        icon.textContent = '🎤';
+        label.textContent = 'Voice Note';
+        pulse.classList.add('hidden');
+        btn.classList.remove('ring-2', 'ring-red-400');
+    } else {
+        // Start recording
+        try {
+            audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(audioStream);
+            audioChunks = [];
+            
+            mediaRecorder.addEventListener('dataavailable', event => {
+                if (event.data.size > 0) audioChunks.push(event.data);
+            });
+            
+            mediaRecorder.addEventListener('stop', () => {
+                // Stop all tracks to release microphone
+                audioStream.getTracks().forEach(track => track.stop());
+
+                const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                
+                // Convert Blob to Base64
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64Audio = reader.result;
+                    // Trigger sync process with the recorded audio
+                    triggerSync('voice_note', [base64Audio]);
+                };
+                reader.readAsDataURL(audioBlob);
+            });
+            
+            mediaRecorder.start();
+            isRecording = true;
+            
+            icon.textContent = '⏹️';
+            label.textContent = 'Stop';
+            pulse.classList.remove('hidden');
+            btn.classList.add('ring-2', 'ring-red-400');
+            
+        } catch (err) {
+            console.error('Microphone access denied:', err);
+            alert('Please allow microphone access to record voice notes.');
+        }
+    }
+});
+
+const triggerSync = async (syncType, overrideFiles = null) => {
     // UI Loading with Granular Messages
     const loader = document.getElementById('dash-loader');
     loader.style.display = 'flex';
@@ -966,7 +1034,7 @@ const triggerSync = async (syncType) => {
             const payload = {
                 idToken,
                 googleToken: currentToken,
-                images: filesAsBase64,
+                images: overrideFiles || filesAsBase64,
                 syncType,
                 timeZone: clientTimeZone
             };
