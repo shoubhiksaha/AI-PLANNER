@@ -965,7 +965,7 @@ document.getElementById('btn-voice-note')?.addEventListener('click', async () =>
                 // Stop all tracks to release microphone
                 audioStream.getTracks().forEach(track => track.stop());
 
-                const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/mp4' });
                 
                 // Convert Blob to Base64
                 const reader = new FileReader();
@@ -1004,13 +1004,34 @@ const triggerSync = async (syncType, overrideFiles = null) => {
     updateDashButtons(false);
 
     // Granular Progress Timer (Simulated for UX)
-    const steps = [
-        { t: 1000, msg: "Uploading to Secure Cloud..." },
-        { t: 5000, msg: "AI is Reading Handwriting..." },
-        { t: 15000, msg: "Extracting Tasks & Events..." },
-        { t: 25000, msg: "Syncing with Notion & Google..." },
-        { t: 40000, msg: "Almost there..." }
-    ];
+    let steps = [];
+    if (syncType === 'voice_note') {
+        statusArea.textContent = "Processing Audio...";
+        steps = [
+            { t: 1000, msg: "Uploading to Secure Cloud..." },
+            { t: 5000, msg: "AI is Transcribing Audio..." },
+            { t: 15000, msg: "Extracting Insights..." },
+            { t: 25000, msg: "Syncing with Notion..." },
+            { t: 40000, msg: "Almost there..." }
+        ];
+    } else if (syncType === 'journal') {
+        statusArea.textContent = "Processing Image...";
+        steps = [
+            { t: 1000, msg: "Uploading to Secure Cloud..." },
+            { t: 5000, msg: "AI is Reading Handwriting..." },
+            { t: 15000, msg: "Extracting Journal Entries..." },
+            { t: 25000, msg: "Syncing with Notion..." },
+            { t: 40000, msg: "Almost there..." }
+        ];
+    } else {
+        steps = [
+            { t: 1000, msg: "Uploading to Secure Cloud..." },
+            { t: 5000, msg: "AI is Reading Handwriting..." },
+            { t: 15000, msg: "Extracting Tasks & Events..." },
+            { t: 25000, msg: "Syncing with Notion & Google..." },
+            { t: 40000, msg: "Almost there..." }
+        ];
+    }
 
     let timers = [];
     steps.forEach(step => {
@@ -1027,7 +1048,10 @@ const triggerSync = async (syncType, overrideFiles = null) => {
         let res;
         let data;
         let attempt = 0;
-        let currentToken = await ensureGoogleAccessToken();
+        let currentToken = null;
+        if (syncType !== 'journal' && syncType !== 'voice_note') {
+            currentToken = await ensureGoogleAccessToken();
+        }
         const idToken = await auth.currentUser.getIdToken();
 
         while (attempt < 2) {
@@ -1082,7 +1106,7 @@ const triggerSync = async (syncType, overrideFiles = null) => {
 
             clearTimeout(timeoutId);
 
-            if (res.status === 401 && attempt === 0) {
+            if (res.status === 401 && attempt === 0 && (syncType !== 'journal' && syncType !== 'voice_note')) {
                 console.warn("401 Unauthorized. Expired Google token detected, forcing refresh.");
                 attempt++;
                 try {

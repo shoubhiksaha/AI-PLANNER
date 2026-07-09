@@ -114,6 +114,9 @@ function hasExpectedImageSignature(mimeType, bytes) {
             && bytes.subarray(0, 4).toString('ascii') === 'RIFF'
             && bytes.subarray(8, 12).toString('ascii') === 'WEBP';
     }
+    if (mimeType.startsWith('audio/')) {
+        return true; // Defer audio signature validation to Gemini / parsing logic
+    }
     return false;
 }
 
@@ -121,7 +124,7 @@ function parseImageDataUrl(imageData) {
     if (typeof imageData !== 'string') return null;
     if (imageData.length > MAX_BASE64_LENGTH) return null;
 
-    const match = imageData.match(/^data:((?:image|audio)\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
+    const match = imageData.match(/^data:((?:image|audio)\/[a-zA-Z0-9.+-]+)(?:;[^,]*)?;base64,([A-Za-z0-9+/=]+)$/);
     if (!match) return null;
     const mimeType = match[1].toLowerCase();
     if (!ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) return null;
