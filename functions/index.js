@@ -372,6 +372,8 @@ exports.updateProfile = onRequest({ cors: false, memory: "256MiB", maxInstances:
             try {
                 if (Intl.supportedValuesOf('timeZone').includes(updates.timeZone)) allowedUpdates.timeZone = updates.timeZone;
             } catch (e) { /* Intl tz list unavailable; skip persisting */ }
+        }
+
         if (Object.keys(allowedUpdates).length > 0) {
             await admin.firestore().collection('users').doc(userEmail).set(allowedUpdates, { merge: true });
             logger.info(`Updated profile fields for ${userEmail}`);
@@ -820,6 +822,7 @@ exports.syncPlanner = onRequest({
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
         email = getVerifiedEmail(decodedToken);
+        const uid = decodedToken.uid;
         if (!email) return res.status(401).send({ error: "Verified email required" });
         mode = sanitizeSyncType(body.syncType);
 
@@ -927,6 +930,22 @@ exports.syncPlanner = onRequest({
                 };
                 let needsUpdate = false;
                 const updateObj = {};
+
+                if (!docSnap.exists) {
+                    const trialAuditRef = db.collection('trialAudit').doc(uid);
+                    const trialAuditSnap = await t.get(trialAuditRef);
+                    if (!trialAuditSnap.exists) {
+                        const trialExpiry = new Date();
+                        trialExpiry.setDate(trialExpiry.getDate() + 15);
+                        
+                        defaults.tier = 'pro';
+                        defaults.tierCredits = 250;
+                        defaults.subscriptionExpiryDate = trialExpiry.toISOString();
+                        
+                        t.set(trialAuditRef, { trialGrantedAt: new Date().toISOString() });
+                    }
+                }
+
                 for (const [key, val] of Object.entries(defaults)) {
                     if (rawData[key] === undefined) {
                         updateObj[key] = val;
