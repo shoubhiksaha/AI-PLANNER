@@ -1287,11 +1287,14 @@ const selectUpgradePlan = (plan) => {
         choice.classList.toggle('upgrade-choice-selected', choice.dataset.upgradePlan === plan);
     });
     const nextButton = document.getElementById('upgrade-next-plan');
-    nextButton.disabled = false;
-    nextButton.classList.remove('opacity-50');
-    document.getElementById('annual-option-price').textContent = `₹${upgradePrices[plan].annual}`;
-    document.getElementById('monthly-option-price').textContent = `₹${upgradePrices[plan].monthly}`;
-    document.getElementById('sprint-option-price').textContent = `₹${upgradePrices[plan].sprint}`;
+    if (nextButton) nextButton.disabled = false;
+    nextButton?.classList.remove('opacity-50');
+    const annualPrice = document.getElementById('annual-option-price');
+    const monthlyPrice = document.getElementById('monthly-option-price');
+    const sprintPrice = document.getElementById('sprint-option-price');
+    if (annualPrice) annualPrice.textContent = `₹${upgradePrices[plan].annual}`;
+    if (monthlyPrice) monthlyPrice.textContent = `₹${upgradePrices[plan].monthly}`;
+    if (sprintPrice) sprintPrice.textContent = `₹${upgradePrices[plan].sprint}`;
 };
 
 const selectUpgradeOutcome = (outcome) => {
@@ -1300,15 +1303,17 @@ const selectUpgradeOutcome = (outcome) => {
         choice.classList.toggle('upgrade-choice-selected', choice.dataset.upgradeOutcome === outcome);
     });
     const nextButton = document.getElementById('upgrade-next-outcome');
-    nextButton.disabled = false;
-    nextButton.classList.remove('opacity-50');
+    if (nextButton) nextButton.disabled = false;
+    nextButton?.classList.remove('opacity-50');
 
     const recommendedPlan = recommendedPlanForOutcome(outcome);
     selectUpgradePlan(recommendedPlan);
     const recommendation = document.getElementById('upgrade-recommendation');
-    recommendation.textContent = recommendedPlan === 'pro'
-        ? 'Pro is preselected for advanced workflows and larger batches.'
-        : 'Standard is preselected for everyday planner automation.';
+    if (recommendation) {
+        recommendation.textContent = recommendedPlan === 'pro'
+            ? 'Pro is preselected for advanced workflows and larger batches.'
+            : 'Standard is preselected for everyday planner automation.';
+    }
 };
 
 const updateCheckoutReview = () => {
@@ -1321,38 +1326,50 @@ const updateCheckoutReview = () => {
         ? 'for 12 months'
         : upgradeState.billing === 'sprint' ? 'for 90 days' : 'for 30 days';
 
-    document.getElementById('checkout-plan-name').textContent = `${planLabel} · ${billingLabels[upgradeState.billing]}`;
-    document.getElementById('checkout-plan-detail').textContent = `${creditCount} credits refresh every 30 days ${durationCopy}.`;
-    document.getElementById('checkout-plan-price').textContent = `₹${price}`;
-    document.getElementById('checkout-charge-copy').textContent =
-        `You pay ₹${price} once through Cashfree. This is not an auto-debit.`;
-    document.getElementById('checkout-renewal-copy').textContent = upgradeState.billing === 'monthly'
-        ? 'This option lasts 30 days. Buy again only if you choose to continue.'
-        : 'Your included credits refresh every 30 days while this access period is active.';
-    document.getElementById('checkout-selected-plan-btn').textContent = `Continue securely — ₹${price}`;
+    const planName = document.getElementById('checkout-plan-name');
+    const planDetail = document.getElementById('checkout-plan-detail');
+    const planPrice = document.getElementById('checkout-plan-price');
+    const chargeCopy = document.getElementById('checkout-charge-copy');
+    const renewalCopy = document.getElementById('checkout-renewal-copy');
+    const checkoutButton = document.getElementById('checkout-selected-plan-btn');
+    if (planName) planName.textContent = `${planLabel} · ${billingLabels[upgradeState.billing]}`;
+    if (planDetail) planDetail.textContent = `${creditCount} credits refresh every 30 days ${durationCopy}.`;
+    if (planPrice) planPrice.textContent = `₹${price}`;
+    if (chargeCopy) chargeCopy.textContent = `You pay ₹${price} once through Cashfree. This is not an auto-debit.`;
+    if (renewalCopy) {
+        renewalCopy.textContent = upgradeState.billing === 'monthly'
+            ? 'This option lasts 30 days. Buy again only if you choose to continue.'
+            : 'Your included credits refresh every 30 days while this access period is active.';
+    }
+    if (checkoutButton) checkoutButton.textContent = `Continue securely — ₹${price}`;
 };
 
 const openUpgradeFlow = ({ outcome = null, context = '' } = {}) => {
     upgradeState.outcome = null;
     upgradeState.plan = null;
     upgradeState.billing = 'annual';
-    document.querySelector('input[name="upgrade-billing"][value="annual"]').checked = true;
+    const annualBilling = document.querySelector('input[name="upgrade-billing"][value="annual"]');
+    if (annualBilling) annualBilling.checked = true;
     document.querySelectorAll('.upgrade-choice-selected').forEach(choice => choice.classList.remove('upgrade-choice-selected'));
-    document.getElementById('upgrade-next-outcome').disabled = true;
-    document.getElementById('upgrade-next-outcome').classList.add('opacity-50');
-    document.getElementById('upgrade-next-plan').disabled = true;
-    document.getElementById('upgrade-next-plan').classList.add('opacity-50');
-    document.getElementById('upgrade-context-message').textContent =
-        context || 'Choose the result you want, then see the plan that fits.';
+    const nextOutcome = document.getElementById('upgrade-next-outcome');
+    const nextPlan = document.getElementById('upgrade-next-plan');
+    const contextMessage = document.getElementById('upgrade-context-message');
+    if (nextOutcome) nextOutcome.disabled = true;
+    nextOutcome?.classList.add('opacity-50');
+    if (nextPlan) nextPlan.disabled = true;
+    nextPlan?.classList.add('opacity-50');
+    if (contextMessage) {
+        contextMessage.textContent = context || 'Choose the result you want, then see the plan that fits.';
+    }
     if (outcome) selectUpgradeOutcome(outcome);
     showUpgradeStep(1);
-    pricingModal.classList.remove('hidden');
-    pricingModal.classList.add('flex');
+    pricingModal?.classList.remove('hidden');
+    pricingModal?.classList.add('flex');
 };
 
 const closeUpgradeFlow = () => {
-    pricingModal.classList.add('hidden');
-    pricingModal.classList.remove('flex');
+    pricingModal?.classList.add('hidden');
+    pricingModal?.classList.remove('flex');
 };
 
 document.getElementById('current-plan-badge')?.addEventListener('click', () => openUpgradeFlow());
