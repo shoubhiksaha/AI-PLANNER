@@ -802,21 +802,23 @@ const handleFiles = async (files) => {
     const remainingSlots = limit - filesAsBase64.length;
 
     if (remainingSlots <= 0) {
-        document.getElementById('paywall-message').textContent = tier === 'free' 
-            ? "Batch uploading is available only on paid tiers. Upgrade to Standard or Pro to upload multiple pages!"
-            : "Standard tier limit reached. Upgrade to Pro for 5-page batch uploads!";
-        document.getElementById('paywall-modal').classList.remove('hidden');
-        document.getElementById('paywall-modal').classList.add('flex');
+        openUpgradeFlow({
+            outcome: 'batch',
+            context: tier === 'free'
+                ? 'Upload more than one planner page in a single workflow.'
+                : 'You reached the Standard batch limit. Pro supports up to five pages.'
+        });
         return;
     }
 
     const filesToProcess = Array.from(files).slice(0, remainingSlots);
     if (files.length > remainingSlots) {
-        document.getElementById('paywall-message').textContent = tier === 'free' 
-            ? `Batch uploading is available only on paid tiers. Only the first image was added. Upgrade to unlock!`
-            : `Your tier limit is ${limit} pages. Only ${remainingSlots} images were added. Upgrade for more!`;
-        document.getElementById('paywall-modal').classList.remove('hidden');
-        document.getElementById('paywall-modal').classList.add('flex');
+        openUpgradeFlow({
+            outcome: 'batch',
+            context: tier === 'free'
+                ? 'The first page was added. Upgrade to process several pages together.'
+                : `Only ${remainingSlots} more page${remainingSlots === 1 ? '' : 's'} fit your current limit.`
+        });
     }
 
     dropZone.innerHTML = '<div class="spinner border-theme-text"></div><p class="mt-2 text-sm text-theme-muted">Processing images...</p>';
@@ -1134,7 +1136,9 @@ const triggerSync = async (syncType, overrideFiles = null) => {
             statusArea.textContent = `Success! ${data.text}`;
             if (currentUser) loadSyncHistory(currentUser.email); // Refresh history
         } else {
-            throw new Error(data.error || "Server Error");
+            const syncError = new Error(data.error || "Server Error");
+            syncError.httpStatus = res.status;
+            throw syncError;
         }
     } catch (err) {
         console.error(err);
@@ -1148,6 +1152,12 @@ const triggerSync = async (syncType, overrideFiles = null) => {
 
         statusArea.textContent = `Error: ${msg}`;
         statusArea.classList.add('text-red-600', 'bg-red-50');
+        if (err.httpStatus === 402 || err.httpStatus === 403) {
+            openUpgradeFlow({
+                outcome: msg.toLowerCase().includes('voice') ? 'advanced' : 'automation',
+                context: msg
+            });
+        }
     } finally {
         document.getElementById('dash-loader').style.display = 'none';
         updateDashButtons(filesAsBase64.length > 0);
@@ -1217,8 +1227,7 @@ document.querySelectorAll('[data-drawer]').forEach(btn => {
         const action = btn.dataset.drawer;
         switch(action) {
             case 'upgrade':
-                document.getElementById('pricing-modal').classList.remove('hidden');
-                document.getElementById('pricing-modal').classList.add('flex');
+                openUpgradeFlow();
                 break;
             case 'reports':
                 switchView('view-reports');
@@ -1248,75 +1257,125 @@ document.querySelectorAll('[data-drawer]').forEach(btn => {
     });
 });
 
-// --- PRICING MODAL ---
+// --- OUTCOME-FIRST UPGRADE FLOW ---
 const pricingModal = document.getElementById('pricing-modal');
-document.getElementById('current-plan-badge')?.addEventListener('click', () => {
+const upgradeState = {
+    outcome: null,
+    plan: null,
+    billing: 'annual'
+};
+const upgradePrices = {
+    standard: { monthly: 29, sprint: 79, annual: 290 },
+    pro: { monthly: 49, sprint: 129, annual: 490 }
+};
+
+const showUpgradeStep = (step) => {
+    [1, 2, 3].forEach(stepNumber => {
+        document.getElementById(`upgrade-step-${stepNumber}`)?.classList.toggle('hidden', stepNumber !== step);
+        document.querySelector(`[data-upgrade-progress="${stepNumber}"]`)?.classList.toggle('upgrade-progress-active', stepNumber <= step);
+    });
+};
+
+const recommendedPlanForOutcome = (outcome) => {
+    if (outcome === 'advanced' || userProfile?.tier === 'standard') return 'pro';
+    return 'standard';
+};
+
+const selectUpgradePlan = (plan) => {
+    upgradeState.plan = plan;
+    document.querySelectorAll('[data-upgrade-plan]').forEach(choice => {
+        choice.classList.toggle('upgrade-choice-selected', choice.dataset.upgradePlan === plan);
+    });
+    const nextButton = document.getElementById('upgrade-next-plan');
+    nextButton.disabled = false;
+    nextButton.classList.remove('opacity-50');
+    document.getElementById('annual-option-price').textContent = `₹${upgradePrices[plan].annual}`;
+    document.getElementById('monthly-option-price').textContent = `₹${upgradePrices[plan].monthly}`;
+    document.getElementById('sprint-option-price').textContent = `₹${upgradePrices[plan].sprint}`;
+};
+
+const selectUpgradeOutcome = (outcome) => {
+    upgradeState.outcome = outcome;
+    document.querySelectorAll('[data-upgrade-outcome]').forEach(choice => {
+        choice.classList.toggle('upgrade-choice-selected', choice.dataset.upgradeOutcome === outcome);
+    });
+    const nextButton = document.getElementById('upgrade-next-outcome');
+    nextButton.disabled = false;
+    nextButton.classList.remove('opacity-50');
+
+    const recommendedPlan = recommendedPlanForOutcome(outcome);
+    selectUpgradePlan(recommendedPlan);
+    const recommendation = document.getElementById('upgrade-recommendation');
+    recommendation.textContent = recommendedPlan === 'pro'
+        ? 'Pro is preselected for advanced workflows and larger batches.'
+        : 'Standard is preselected for everyday planner automation.';
+};
+
+const updateCheckoutReview = () => {
+    if (!upgradeState.plan) return;
+    const planLabel = upgradeState.plan === 'pro' ? 'Pro' : 'Standard';
+    const billingLabels = { annual: 'Annual', sprint: '90 days', monthly: '30 days' };
+    const price = upgradePrices[upgradeState.plan][upgradeState.billing];
+    const creditCount = upgradeState.plan === 'pro' ? 250 : 100;
+    const durationCopy = upgradeState.billing === 'annual'
+        ? 'for 12 months'
+        : upgradeState.billing === 'sprint' ? 'for 90 days' : 'for 30 days';
+
+    document.getElementById('checkout-plan-name').textContent = `${planLabel} · ${billingLabels[upgradeState.billing]}`;
+    document.getElementById('checkout-plan-detail').textContent = `${creditCount} credits refresh every 30 days ${durationCopy}.`;
+    document.getElementById('checkout-plan-price').textContent = `₹${price}`;
+    document.getElementById('checkout-charge-copy').textContent =
+        `You pay ₹${price} once through Cashfree. This is not an auto-debit.`;
+    document.getElementById('checkout-renewal-copy').textContent = upgradeState.billing === 'monthly'
+        ? 'This option lasts 30 days. Buy again only if you choose to continue.'
+        : 'Your included credits refresh every 30 days while this access period is active.';
+    document.getElementById('checkout-selected-plan-btn').textContent = `Continue securely — ₹${price}`;
+};
+
+const openUpgradeFlow = ({ outcome = null, context = '' } = {}) => {
+    upgradeState.outcome = null;
+    upgradeState.plan = null;
+    upgradeState.billing = 'annual';
+    document.querySelector('input[name="upgrade-billing"][value="annual"]').checked = true;
+    document.querySelectorAll('.upgrade-choice-selected').forEach(choice => choice.classList.remove('upgrade-choice-selected'));
+    document.getElementById('upgrade-next-outcome').disabled = true;
+    document.getElementById('upgrade-next-outcome').classList.add('opacity-50');
+    document.getElementById('upgrade-next-plan').disabled = true;
+    document.getElementById('upgrade-next-plan').classList.add('opacity-50');
+    document.getElementById('upgrade-context-message').textContent =
+        context || 'Choose the result you want, then see the plan that fits.';
+    if (outcome) selectUpgradeOutcome(outcome);
+    showUpgradeStep(1);
     pricingModal.classList.remove('hidden');
     pricingModal.classList.add('flex');
-});
-document.getElementById('close-pricing')?.addEventListener('click', () => {
+};
+
+const closeUpgradeFlow = () => {
     pricingModal.classList.add('hidden');
     pricingModal.classList.remove('flex');
-});
-
-// Pricing toggle: Monthly <-> Upfront
-let pricingMode = 'monthly';
-const toggleMonthly = document.getElementById('toggle-monthly');
-const toggleUpfront = document.getElementById('toggle-upfront');
-const saveBadge = document.getElementById('save-badge');
-
-const updatePricingUI = () => {
-    const isMonthly = pricingMode === 'monthly';
-    toggleMonthly.classList.toggle('pricing-toggle-active', isMonthly);
-    toggleMonthly.style.backgroundColor = isMonthly ? 'var(--text-main)' : 'transparent';
-    toggleMonthly.style.color = isMonthly ? 'var(--bg-main)' : 'var(--text-muted)';
-
-    toggleUpfront.classList.toggle('pricing-toggle-active', !isMonthly);
-    toggleUpfront.style.backgroundColor = !isMonthly ? 'var(--text-main)' : 'transparent';
-    toggleUpfront.style.color = !isMonthly ? 'var(--bg-main)' : 'var(--text-muted)';
-    
-    // Show/hide upfront options and save badge
-    document.getElementById('standard-upfront-opts')?.classList.toggle('hidden', isMonthly);
-    document.getElementById('pro-upfront-opts')?.classList.toggle('hidden', isMonthly);
-    document.getElementById('standard-annual-tag')?.classList.toggle('hidden', isMonthly);
-    document.getElementById('pro-annual-tag')?.classList.toggle('hidden', isMonthly);
-    saveBadge?.classList.toggle('hidden', isMonthly);
-    
-    // Update hero prices
-    if (isMonthly) {
-        document.getElementById('standard-price').innerHTML = '₹29<span class="text-sm font-medium text-theme-muted"> /mo</span>';
-        document.getElementById('pro-price').innerHTML = '₹49<span class="text-sm font-medium text-theme-muted"> /mo</span>';
-    } else {
-        updateUpfrontPrices();
-    }
 };
 
-const updateUpfrontPrices = () => {
-    const stdDuration = document.querySelector('input[name="standard-duration"]:checked')?.value || 'annual';
-    const proDuration = document.querySelector('input[name="pro-duration"]:checked')?.value || 'annual';
-    
-    document.getElementById('standard-price').innerHTML = stdDuration === 'annual' 
-        ? '₹290<span class="text-sm font-medium text-theme-muted"> /year</span>'
-        : '₹79<span class="text-sm font-medium text-theme-muted"> /90 days</span>';
-    document.getElementById('standard-annual-tag')?.classList.toggle('hidden', stdDuration !== 'annual');
-    
-    document.getElementById('pro-price').innerHTML = proDuration === 'annual'
-        ? '₹490<span class="text-sm font-medium text-theme-muted"> /year</span>'
-        : '₹129<span class="text-sm font-medium text-theme-muted"> /90 days</span>';
-    document.getElementById('pro-annual-tag')?.classList.toggle('hidden', proDuration !== 'annual');
-};
-
-toggleMonthly?.addEventListener('click', () => { pricingMode = 'monthly'; updatePricingUI(); });
-toggleUpfront?.addEventListener('click', () => { pricingMode = 'upfront'; updatePricingUI(); });
-document.querySelectorAll('input[name="standard-duration"], input[name="pro-duration"]').forEach(r => {
-    r.addEventListener('change', updateUpfrontPrices);
+document.getElementById('current-plan-badge')?.addEventListener('click', () => openUpgradeFlow());
+document.getElementById('close-pricing')?.addEventListener('click', closeUpgradeFlow);
+document.querySelectorAll('[data-upgrade-outcome]').forEach(choice => {
+    choice.addEventListener('click', () => selectUpgradeOutcome(choice.dataset.upgradeOutcome));
 });
-
-// --- PAYWALL MODAL ---
-document.getElementById('close-paywall')?.addEventListener('click', () => {
-    document.getElementById('paywall-modal').classList.add('hidden');
-    document.getElementById('paywall-modal').classList.remove('flex');
+document.getElementById('upgrade-next-outcome')?.addEventListener('click', () => showUpgradeStep(2));
+document.getElementById('upgrade-back-outcome')?.addEventListener('click', () => showUpgradeStep(1));
+document.querySelectorAll('[data-upgrade-plan]').forEach(choice => {
+    choice.addEventListener('click', () => selectUpgradePlan(choice.dataset.upgradePlan));
 });
+document.querySelectorAll('input[name="upgrade-billing"]').forEach(option => {
+    option.addEventListener('change', () => {
+        upgradeState.billing = option.value;
+        updateCheckoutReview();
+    });
+});
+document.getElementById('upgrade-next-plan')?.addEventListener('click', () => {
+    updateCheckoutReview();
+    showUpgradeStep(3);
+});
+document.getElementById('upgrade-back-plan')?.addEventListener('click', () => showUpgradeStep(2));
 
 // --- NAME PROMPT ---
 document.getElementById('save-name-btn')?.addEventListener('click', async () => {
@@ -1391,12 +1450,6 @@ const loadHeatmap = async (email) => {
     });
 };
 
-// --- MONETIZATION & CASHFREE PLACEHOLDERS ---
-document.getElementById('close-paywall')?.addEventListener('click', () => {
-    document.getElementById('paywall-modal').classList.add('hidden');
-    document.getElementById('paywall-modal').classList.remove('flex');
-});
-
 const collectPhoneNumber = () => {
     return new Promise((resolve, reject) => {
         const modal = document.getElementById('phone-modal');
@@ -1446,23 +1499,12 @@ const collectPhoneNumber = () => {
     });
 };
 
-const handlePaymentClick = async (e, tierName, basePrice) => {
+const handlePaymentClick = async (e, basePrice) => {
     const btn = e.currentTarget;
     const origText = btn.innerHTML;
     
     if (btn.disabled) return;
     
-    let price = basePrice;
-    if (typeof pricingMode !== 'undefined' && pricingMode === 'upfront') {
-        if (tierName === 'Standard Tier') {
-            const stdDuration = document.querySelector('input[name="standard-duration"]:checked')?.value || 'annual';
-            price = stdDuration === 'annual' ? 290 : 79;
-        } else if (tierName === 'Pro Tier') {
-            const proDuration = document.querySelector('input[name="pro-duration"]:checked')?.value || 'annual';
-            price = proDuration === 'annual' ? 490 : 129;
-        }
-    }
-
     try {
         if (!currentUser) {
             throw new Error("You must be logged in to upgrade.");
@@ -1484,7 +1526,7 @@ const handlePaymentClick = async (e, tierName, basePrice) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 idToken: freshIdToken,
-                price: price,
+                price: basePrice,
                 phone: phoneNumber // Send the collected phone number
             })
         });
@@ -1519,11 +1561,13 @@ const handlePaymentClick = async (e, tierName, basePrice) => {
     }
 };
 
-document.getElementById('buy-booster-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits', 19));
-document.getElementById('buy-booster-btn-modal')?.addEventListener('click', (e) => handlePaymentClick(e, 'Booster Credits', 19));
-document.getElementById('upgrade-standard-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier', 29));
-document.getElementById('upgrade-standard-pricing-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Standard Tier', 29));
-document.getElementById('upgrade-pro-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 'Pro Tier', 49));
+document.getElementById('buy-booster-btn')?.addEventListener('click', (e) => handlePaymentClick(e, 19));
+document.getElementById('buy-booster-btn-modal')?.addEventListener('click', (e) => handlePaymentClick(e, 19));
+document.getElementById('checkout-selected-plan-btn')?.addEventListener('click', (e) => {
+    if (!upgradeState.plan) return;
+    const price = upgradePrices[upgradeState.plan][upgradeState.billing];
+    handlePaymentClick(e, price);
+});
 const loadSyncHistory = async (email) => {
     import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js").then(async ({ getFirestore, collection, query, orderBy, limit, getDocs }) => {
         const db = getFirestore(app);

@@ -60,6 +60,17 @@
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
         }
 
+        .upgrade-choice-selected {
+            border-color: #4f46e5 !important;
+            background: rgba(79, 70, 229, 0.08) !important;
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+        }
+
+        .upgrade-progress-active {
+            background-color: #4f46e5 !important;
+            color: #fff !important;
+        }
+
         /* Custom sub-category radios */
         .custom-sub-radio:checked+label {
             border-color: #6366f1;
@@ -876,219 +887,180 @@
         </div>
     </div>
 
-    <!-- PRICING MODAL (Full Comparison) -->
+    <!-- OUTCOME-FIRST UPGRADE FLOW -->
     <div id="pricing-modal"
         class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
         <div
-            class="bg-theme-card border border-theme-border rounded-2xl max-w-lg w-full shadow-2xl overflow-y-auto max-h-[90vh] relative">
-            <!-- Close -->
+            class="bg-theme-card border border-theme-border rounded-2xl max-w-lg w-full shadow-2xl overflow-y-auto max-h-[92vh] relative">
             <button id="close-pricing"
+                aria-label="Close upgrade options"
                 class="absolute top-4 right-4 text-theme-muted hover:text-theme-text text-xl z-10 transition-colors">✕</button>
 
-            <div class="p-6 pb-4 text-center border-b border-theme-border">
-                <h2 class="text-2xl font-bold text-theme-text tracking-tight">Invest in Your Productivity.</h2>
-                <p class="text-sm text-theme-muted mt-1">Choose the plan that fits your workflow.</p>
-
-                <!-- Monthly / Upfront Toggle -->
-                <div
-                    class="inline-flex items-center bg-theme-bg border border-theme-border rounded-full p-1 mt-4 relative">
-                    <button id="toggle-monthly"
-                        class="pricing-toggle-active px-4 py-1.5 rounded-full text-xs font-bold transition-all" style="background-color: var(--text-main); color: var(--bg-main);">Pay
-                        Monthly</button>
-                    <button id="toggle-upfront"
-                        class="px-4 py-1.5 rounded-full text-xs font-bold transition-all" style="background-color: transparent; color: var(--text-muted);">Pay
-                        Upfront</button>
-                    <span id="save-badge"
-                        class="absolute -top-2 -right-2 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full hidden">Save
-                        16%</span>
+            <div class="px-6 pt-6 pb-4 border-b border-theme-border">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-indigo-500">Upgrade AI Planner</p>
+                <h2 class="text-2xl font-bold text-theme-text tracking-tight mt-1">Turn more handwritten plans into action.</h2>
+                <p id="upgrade-context-message" class="text-sm text-theme-muted mt-2">Choose the result you want, then see the plan that fits.</p>
+                <div class="flex items-center gap-2 mt-5" aria-label="Upgrade progress">
+                    <span data-upgrade-progress="1"
+                        class="upgrade-progress-active w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center">1</span>
+                    <span class="flex-1 border-t border-theme-border"></span>
+                    <span data-upgrade-progress="2"
+                        class="w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center">2</span>
+                    <span class="flex-1 border-t border-theme-border"></span>
+                    <span data-upgrade-progress="3"
+                        class="w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center">3</span>
                 </div>
             </div>
 
-            <!-- Plan Cards -->
-            <div class="px-6 pt-5 pb-4 grid grid-cols-2 gap-3">
-                <!-- Standard Card -->
-                <div class="bg-theme-bg border border-theme-border rounded-xl p-4 space-y-3">
-                    <div>
-                        <h3 class="font-bold text-theme-text">Standard</h3>
-                    </div>
-                    <p class="text-[10px] text-theme-muted">For the organized planner.</p>
-                    <div id="standard-price" class="text-2xl font-black text-theme-text">₹29<span
-                            class="text-sm font-medium text-theme-muted"> /mo</span></div>
-                    <ul class="text-xs text-theme-muted space-y-2 opacity-80">
-                        <li class="flex items-center gap-2"><span
-                                class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
-                            100 Sync Credits</li>
-                        <li class="flex items-center gap-2"><span
-                                class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
-                            Multi-page uploads</li>
-                        <li class="flex items-center gap-2"><span
-                                class="w-4 h-4 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
-                            Standard AI (Gemini)</li>
-                    </ul>
-                    <!-- Upfront Options (hidden by default) -->
-                    <div id="standard-upfront-opts"
-                        class="hidden space-y-2 bg-theme-card border border-theme-border p-2 rounded-lg">
-                        <label class="flex items-center justify-between cursor-pointer">
-                            <div class="flex items-center gap-2">
-                                <input type="radio" name="standard-duration" value="annual" class="accent-emerald-500"
-                                    checked>
-                                <div><span class="text-xs font-bold text-theme-text">12-Month Mastery</span><br><span
-                                        class="text-[10px] text-theme-muted">Billed once</span></div>
-                            </div>
-                            <span class="text-xs font-bold text-theme-text">₹290</span>
-                        </label>
-                        <label class="flex items-center justify-between cursor-pointer">
-                            <div class="flex items-center gap-2">
-                                <input type="radio" name="standard-duration" value="sprint" class="accent-emerald-500">
-                                <div><span class="text-xs font-bold text-theme-text">90-Day Sprint</span><br><span
-                                        class="text-[10px] text-theme-muted">No auto-debit</span></div>
-                            </div>
-                            <span class="text-xs font-bold text-theme-text">₹79</span>
-                        </label>
-                    </div>
-                    <div id="standard-annual-tag" class="hidden text-[10px] text-emerald-500 font-bold text-center">🎁
-                        Includes 2 Months FREE</div>
-                    <button id="upgrade-standard-pricing-btn"
-                        class="upgrade-cta w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors shadow shadow-blue-500/20 active:scale-95">
-                        Upgrade Now
+            <!-- Step 1: desired outcome -->
+            <div id="upgrade-step-1" class="p-6">
+                <h3 class="font-bold text-theme-text">What would help most right now?</h3>
+                <p class="text-xs text-theme-muted mt-1 mb-4">We’ll use this only to recommend a plan.</p>
+                <div class="space-y-3">
+                    <button type="button" data-upgrade-outcome="batch"
+                        class="upgrade-choice w-full text-left bg-theme-bg border border-theme-border rounded-xl p-4 transition-all">
+                        <span class="font-bold text-theme-text text-sm">Sync several pages at once</span>
+                        <span class="block text-xs text-theme-muted mt-1">Move a journal or busy planning day into your tools faster.</span>
+                    </button>
+                    <button type="button" data-upgrade-outcome="automation"
+                        class="upgrade-choice w-full text-left bg-theme-bg border border-theme-border rounded-xl p-4 transition-all">
+                        <span class="font-bold text-theme-text text-sm">Automate my daily planning</span>
+                        <span class="block text-xs text-theme-muted mt-1">Get more monthly syncs for Calendar, Tasks, Sheets, and Notion.</span>
+                    </button>
+                    <button type="button" data-upgrade-outcome="advanced"
+                        class="upgrade-choice w-full text-left bg-theme-bg border border-theme-border rounded-xl p-4 transition-all">
+                        <span class="font-bold text-theme-text text-sm">Use advanced AI workflows</span>
+                        <span class="block text-xs text-theme-muted mt-1">Unlock custom prompts, voice notes, and five-page batches.</span>
                     </button>
                 </div>
-
-                <!-- Pro Card -->
-                <div class="bg-indigo-600/10 border-2 border-indigo-500/60 rounded-xl p-4 space-y-3 relative">
-                    <div class="flex justify-between items-center">
-                        <h3 class="font-bold text-theme-text">Pro</h3>
-                        <span style="background-color: #4f46e5; color: white;"
-                            class="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">Most
-                            Popular</span>
-                    </div>
-                    <p class="text-[10px] text-theme-muted">For the productivity power user.</p>
-                    <div id="pro-price" class="text-2xl font-black text-theme-text">₹49<span
-                            class="text-sm font-medium text-theme-muted"> /mo</span></div>
-                    <ul class="text-xs text-theme-muted space-y-2 opacity-80">
-                        <li class="flex items-center gap-2"><span
-                                class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
-                            250 Sync Credits</li>
-                        <li class="flex items-center gap-2"><span
-                                class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
-                            Custom prompts</li>
-                        <li class="flex items-center gap-2"><span
-                                class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
-                            Premium LLM routing</li>
-                        <li class="flex items-center gap-2"><span
-                                class="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center justify-center text-[10px] font-bold flex-shrink-0">✓</span>
-                            5-page batch uploads</li>
-                    </ul>
-                    <!-- Upfront Options -->
-                    <div id="pro-upfront-opts"
-                        class="hidden space-y-2 bg-theme-card border border-theme-border p-2 rounded-lg">
-                        <label class="flex items-center justify-between cursor-pointer">
-                            <div class="flex items-center gap-2">
-                                <input type="radio" name="pro-duration" value="annual" class="accent-indigo-500"
-                                    checked>
-                                <div><span class="text-xs font-bold text-theme-text">12-Month Mastery</span><br><span
-                                        class="text-[10px] text-theme-muted">Billed once</span></div>
-                            </div>
-                            <span class="text-xs font-bold text-theme-text">₹490</span>
-                        </label>
-                        <label class="flex items-center justify-between cursor-pointer">
-                            <div class="flex items-center gap-2">
-                                <input type="radio" name="pro-duration" value="sprint" class="accent-indigo-500">
-                                <div><span class="text-xs font-bold text-theme-text">90-Day Sprint</span><br><span
-                                        class="text-[10px] text-theme-muted">No auto-debit</span></div>
-                            </div>
-                            <span class="text-xs font-bold text-theme-text">₹129</span>
-                        </label>
-                    </div>
-                    <div id="pro-annual-tag" class="hidden text-[10px] text-emerald-500 font-bold text-center">🎁
-                        Includes 2 Months FREE</div>
-                    <button id="upgrade-pro-btn" style="background-color: #2563eb; color: white;"
-                        class="upgrade-cta w-full py-2.5 font-bold rounded-xl text-sm transition-colors shadow shadow-blue-500/20 active:scale-95">
-                        Upgrade to Pro
-                    </button>
-                </div>
-            </div>
-
-            <!-- Booster Pack -->
-            <div class="px-6 pb-4">
-                <div
-                    class="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 gap-3">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">⚡</span>
-                        <div>
-                            <p class="text-sm font-bold text-theme-text">50 Credit Booster</p>
-                            <p class="text-[10px] text-theme-muted">One-time top-up. ₹19 only.</p>
-                        </div>
-                    </div>
-                    <button id="buy-booster-btn-modal" style="background-color: #2563eb; color: white;"
-                        class="upgrade-cta font-bold px-4 py-2 rounded-xl text-xs transition-colors shadow shadow-blue-500/20 active:scale-95 whitespace-nowrap">
-                        Buy for ₹19</button>
-                </div>
-            </div>
-
-            <div class="px-6 pb-5 text-center text-[10px] text-theme-muted border-t border-theme-border pt-4">
-                Credits remain valid as long as your plan is active. No daily limits.
-            </div>
-        </div>
-    </div>
-
-    <!-- PAYWALL MODAL (Out of Credits - Bottom Sheet) -->
-    <div id="paywall-modal"
-        class="fixed inset-0 bg-black/50 hidden items-end sm:items-center justify-center p-0 sm:p-4 z-50 backdrop-blur-sm">
-        <div
-            class="bg-white dark:bg-gray-900 rounded-t-[2rem] sm:rounded-2xl max-w-sm w-full p-7 shadow-2xl relative overflow-hidden">
-            <!-- Decorative blur -->
-            <div
-                class="absolute -top-10 -right-10 w-40 h-40 bg-orange-400/30 blur-[60px] rounded-full pointer-events-none">
-            </div>
-
-            <div class="text-center relative z-10">
-                <div class="text-4xl mb-3">⛽</div>
-                <h3 class="font-black text-2xl text-theme-text mb-2 tracking-tight">Upgrade to Unlock</h3>
-                <p id="paywall-message" class="text-theme-muted text-[13px] font-medium mb-6 leading-relaxed px-2">
-                    This feature is available only on paid tiers. Upgrade or grab a quick booster pack.
-                </p>
-            </div>
-
-            <!-- Primary Upsell -->
-            <div class="space-y-3 relative z-10">
-                <div class="border-2 border-blue-200 bg-blue-50/50 rounded-2xl p-4">
-                    <p class="font-bold text-blue-900 text-sm">Unlock Standard — ₹29/month</p>
-                    <p class="text-[11px] text-blue-700 mt-1">100 credits/mo + Batch Uploading</p>
-                    <button id="upgrade-standard-btn"
-                        class="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition-colors shadow shadow-blue-500/20 active:scale-95">
-                        Upgrade Now
-                    </button>
-                </div>
-
-                <!-- OR divider -->
-                <div class="flex items-center gap-3 px-2">
-                    <div class="flex-1 border-t border-gray-200"></div>
-                    <span class="text-xs text-gray-400 font-medium">OR</span>
-                    <div class="flex-1 border-t border-gray-200"></div>
-                </div>
-
-                <!-- Sachet -->
-                <div
-                    class="flex items-center justify-between bg-white dark:bg-black/20 border border-gray-200 rounded-2xl p-4 shadow-sm">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">⚡</span>
-                        <div>
-                            <p class="font-bold text-theme-text text-sm">50 Credit Booster</p>
-                            <p class="text-[10px] text-theme-muted">One-time. Credits never expire.</p>
-                        </div>
-                    </div>
-                    <button
-                        class="bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-sm opacity-50 cursor-not-allowed"
-                        disabled>₹19</button>
-                </div>
-            </div>
-
-            <div class="pt-6 pb-1 text-center relative z-10">
-                <button id="close-paywall"
-                    class="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                    Maybe Later
+                <button id="upgrade-next-outcome" type="button" disabled
+                    class="w-full mt-5 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm transition-colors opacity-50">
+                    Compare plans
                 </button>
+                <button id="buy-booster-btn-modal" type="button"
+                    class="w-full mt-3 text-xs font-bold text-theme-muted hover:text-theme-text transition-colors">
+                    Only need more credits? Buy 50 once for ₹19
+                </button>
+            </div>
+
+            <!-- Step 2: plan comparison -->
+            <div id="upgrade-step-2" class="hidden p-6">
+                <div class="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                        <h3 class="font-bold text-theme-text">Choose your capacity</h3>
+                        <p id="upgrade-recommendation" class="text-xs text-theme-muted mt-1">Annual access is selected by default.</p>
+                    </div>
+                    <button id="upgrade-back-outcome" type="button" class="text-xs font-bold text-theme-muted hover:text-theme-text">Back</button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="upgrade-standard-pricing-btn" type="button" data-upgrade-plan="standard"
+                        class="upgrade-plan-choice bg-theme-bg border border-theme-border rounded-xl p-4 text-left transition-all">
+                        <span class="font-bold text-theme-text">Standard</span>
+                        <span class="block text-xl font-black text-theme-text mt-2">₹290<span class="text-[10px] font-medium text-theme-muted"> /year</span></span>
+                        <span class="block text-[10px] text-theme-muted mt-1">₹24.17/month equivalent</span>
+                        <span class="block text-xs text-theme-muted mt-3">100 credits every 30 days</span>
+                        <span class="block text-xs text-theme-muted mt-1">Up to 3 journal pages</span>
+                    </button>
+                    <button id="upgrade-pro-btn" type="button" data-upgrade-plan="pro"
+                        class="upgrade-plan-choice bg-theme-bg border border-theme-border rounded-xl p-4 text-left transition-all">
+                        <span class="font-bold text-theme-text">Pro</span>
+                        <span class="block text-xl font-black text-theme-text mt-2">₹490<span class="text-[10px] font-medium text-theme-muted"> /year</span></span>
+                        <span class="block text-[10px] text-theme-muted mt-1">₹40.83/month equivalent</span>
+                        <span class="block text-xs text-theme-muted mt-3">250 credits every 30 days</span>
+                        <span class="block text-xs text-theme-muted mt-1">5-page batches + advanced AI</span>
+                    </button>
+                </div>
+
+                <div class="mt-4 border border-theme-border rounded-xl overflow-hidden text-xs">
+                    <div class="grid grid-cols-3 gap-2 p-3 bg-theme-bg font-bold text-theme-text">
+                        <span>What you get</span><span class="text-center">Standard</span><span class="text-center">Pro</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 p-3 border-t border-theme-border text-theme-muted">
+                        <span>Credits / 30 days</span><span class="text-center">100</span><span class="text-center">250</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 p-3 border-t border-theme-border text-theme-muted">
+                        <span>Batch size</span><span class="text-center">Up to 3*</span><span class="text-center">Up to 5</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 p-3 border-t border-theme-border text-theme-muted">
+                        <span>Custom prompts</span><span class="text-center">—</span><span class="text-center">✓</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 p-3 border-t border-theme-border text-theme-muted">
+                        <span>Voice notes</span><span class="text-center">—</span><span class="text-center">✓</span>
+                    </div>
+                </div>
+
+                <p class="text-[10px] text-theme-muted mt-2">*Standard allows up to 3 pages for journal syncs and 1 page for morning/evening syncs.</p>
+
+                <details id="other-billing-options" class="mt-4 border border-theme-border rounded-xl p-3">
+                    <summary class="text-xs font-bold text-theme-text cursor-pointer">View monthly and 90-day options</summary>
+                    <div class="space-y-3 mt-3">
+                        <label class="flex items-center justify-between cursor-pointer text-xs text-theme-muted">
+                            <span><input type="radio" name="upgrade-billing" value="annual" checked class="mr-2 accent-indigo-500">Annual, paid once</span>
+                            <span id="annual-option-price" class="font-bold text-theme-text">₹290</span>
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer text-xs text-theme-muted">
+                            <span><input type="radio" name="upgrade-billing" value="monthly" class="mr-2 accent-indigo-500">30 days</span>
+                            <span id="monthly-option-price" class="font-bold text-theme-text">₹29</span>
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer text-xs text-theme-muted">
+                            <span><input type="radio" name="upgrade-billing" value="sprint" class="mr-2 accent-indigo-500">90 days, paid once</span>
+                            <span id="sprint-option-price" class="font-bold text-theme-text">₹79</span>
+                        </label>
+                    </div>
+                </details>
+
+                <button id="upgrade-next-plan" type="button" disabled
+                    class="w-full mt-5 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm transition-colors opacity-50">
+                    Review checkout
+                </button>
+            </div>
+
+            <!-- Step 3: risk-reducing checkout review -->
+            <div id="upgrade-step-3" class="hidden p-6">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h3 class="font-bold text-theme-text">Know exactly what happens next</h3>
+                        <p class="text-xs text-theme-muted mt-1">No hidden trial or surprise charge.</p>
+                    </div>
+                    <button id="upgrade-back-plan" type="button" class="text-xs font-bold text-theme-muted hover:text-theme-text">Back</button>
+                </div>
+
+                <div class="mt-5 bg-theme-bg border border-theme-border rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                        <p id="checkout-plan-name" class="font-bold text-theme-text">Standard · Annual</p>
+                        <p id="checkout-plan-detail" class="text-xs text-theme-muted mt-1">100 credits refresh every 30 days for 12 months.</p>
+                    </div>
+                    <p id="checkout-plan-price" class="text-xl font-black text-theme-text">₹290</p>
+                </div>
+
+                <ol class="mt-5 space-y-4">
+                    <li class="flex gap-3">
+                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-500 text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
+                        <div><p class="text-sm font-bold text-theme-text">Today</p><p id="checkout-charge-copy" class="text-xs text-theme-muted">You pay once through Cashfree. This is not an auto-debit.</p></div>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-500 text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
+                        <div><p class="text-sm font-bold text-theme-text">Right after payment</p><p class="text-xs text-theme-muted">Your plan and full credit allowance unlock after payment confirmation.</p></div>
+                    </li>
+                    <li class="flex gap-3">
+                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-500 text-xs font-bold flex items-center justify-center flex-shrink-0">3</span>
+                        <div><p class="text-sm font-bold text-theme-text">Every 30 days while active</p><p id="checkout-renewal-copy" class="text-xs text-theme-muted">Your included credits refresh. Unused tier credits do not roll over.</p></div>
+                    </li>
+                </ol>
+
+                <button id="checkout-selected-plan-btn" type="button"
+                    class="w-full mt-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-colors shadow shadow-indigo-500/20 active:scale-95">
+                    Continue securely — ₹290
+                </button>
+                <p class="text-center text-[10px] text-theme-muted mt-3">
+                    Payments are processed by Cashfree. We never store card, UPI, or phone details.
+                </p>
+                <p class="text-center text-[10px] text-theme-muted mt-2">
+                    <a href="pricing-policy.html" target="_blank" rel="noopener" class="underline">Pricing terms</a>
+                    <span aria-hidden="true"> · </span>
+                    <a href="refund-policy.html" target="_blank" rel="noopener" class="underline">Refund policy</a>
+                </p>
             </div>
         </div>
     </div>
@@ -1141,7 +1113,7 @@
     </div>
 
     <script src="app-helpers.js?v=12"></script>
-    <script type="module" src="app.js?v=23"></script>
+    <script type="module" src="app.js?v=24"></script>
 </body>
 
 </html>

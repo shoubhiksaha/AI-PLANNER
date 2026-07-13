@@ -34,7 +34,7 @@ test.describe('Dashboard UI Smoke Checks', () => {
         await expect(drawer).toHaveClass(/hidden/);
     });
 
-    test('Free Plan badge opens Pricing Modal', async ({ page }) => {
+    test('Free Plan badge opens the outcome-first upgrade flow', async ({ page }) => {
         const pricingModal = page.locator('#pricing-modal');
         await expect(pricingModal).toHaveClass(/hidden/);
 
@@ -42,11 +42,22 @@ test.describe('Dashboard UI Smoke Checks', () => {
 
         await expect(pricingModal).not.toHaveClass(/hidden/);
         await expect(pricingModal).toHaveClass(/flex/);
+        await expect(page.locator('#upgrade-step-1')).toBeVisible();
+        await expect(page.locator('#upgrade-next-outcome')).toBeDisabled();
 
-        // Close modal (Click outside or use Escape/close button if one exists, relying on JS for this test)
-        // Check that Standard Plan button is present in the modal
+        await page.click('[data-upgrade-outcome="automation"]');
+        await page.click('#upgrade-next-outcome');
+
+        await expect(page.locator('#upgrade-step-2')).toBeVisible();
         await expect(page.locator('#upgrade-standard-pricing-btn')).toBeVisible();
         await expect(page.locator('#upgrade-pro-btn')).toBeVisible();
+        await expect(page.locator('[data-upgrade-plan]')).toHaveCount(2);
+        await expect(page.locator('input[name="upgrade-billing"][value="annual"]')).toBeChecked();
+
+        await page.click('#upgrade-next-plan');
+        await expect(page.locator('#upgrade-step-3')).toBeVisible();
+        await expect(page.locator('#checkout-plan-name')).toContainText('Standard · Annual');
+        await expect(page.locator('#checkout-selected-plan-btn')).toContainText('₹290');
     });
 
     test('Notion Setup save triggers backend and shows success', async ({ page }) => {
