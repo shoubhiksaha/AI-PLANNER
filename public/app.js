@@ -1204,21 +1204,44 @@ document.getElementById('back-to-dash-from-setup')?.addEventListener('click', ()
 
 // --- HAMBURGER DRAWER ---
 const drawerContainer = document.getElementById('drawer-container');
+const drawerPanel = document.getElementById('drawer-panel');
+let drawerReturnFocus = null;
+let drawerCloseTimer = null;
+
 const openDrawer = () => {
+    if (!drawerContainer) return;
+    if (drawerCloseTimer) clearTimeout(drawerCloseTimer);
+    drawerReturnFocus = document.activeElement;
     drawerContainer.classList.remove('hidden');
+    drawerContainer.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
     // Double rAF ensures the browser paints the hidden->visible state before
     // adding the class that triggers the CSS transition
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             drawerContainer.classList.add('drawer-open');
+            drawerPanel?.focus();
         });
     });
 };
-const closeDrawer = () => { drawerContainer.classList.remove('drawer-open'); setTimeout(() => drawerContainer.classList.add('hidden'), 300); };
+
+const closeDrawer = () => {
+    if (!drawerContainer) return;
+    drawerContainer.classList.remove('drawer-open');
+    drawerContainer.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    drawerCloseTimer = setTimeout(() => drawerContainer.classList.add('hidden'), 300);
+    drawerReturnFocus?.focus?.();
+};
 
 document.getElementById('hamburger-btn')?.addEventListener('click', openDrawer);
 document.getElementById('close-drawer')?.addEventListener('click', closeDrawer);
 document.getElementById('drawer-overlay')?.addEventListener('click', closeDrawer);
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && drawerContainer?.classList.contains('drawer-open')) {
+        closeDrawer();
+    }
+});
 
 // Drawer item handlers
 document.querySelectorAll('[data-drawer]').forEach(btn => {

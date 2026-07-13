@@ -16,12 +16,22 @@
     <style>
         /* Hamburger Drawer */
         .drawer-overlay {
-            transition: opacity 0.3s ease;
+            background: rgba(2, 6, 23, 0.62);
+            backdrop-filter: blur(3px);
+            -webkit-backdrop-filter: blur(3px);
+            transition: opacity 0.25s ease;
         }
 
         .drawer-panel {
-            transition: transform 0.3s ease;
+            width: min(88vw, 340px);
+            background: #ffffff;
+            color: #0f172a;
+            border-right: 1px solid #e2e8f0;
+            box-shadow: 20px 0 50px rgba(15, 23, 42, 0.22);
+            transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
             transform: translateX(-100%);
+            display: flex;
+            flex-direction: column;
         }
 
         .drawer-open .drawer-panel {
@@ -31,6 +41,354 @@
         .drawer-open .drawer-overlay {
             opacity: 1;
             pointer-events: auto;
+        }
+
+        .drawer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .drawer-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .drawer-brand-mark,
+        .drawer-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+        }
+
+        .drawer-brand-mark {
+            width: 36px;
+            height: 36px;
+            border-radius: 11px;
+            background: #eef2ff;
+        }
+
+        .drawer-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            color: #475569;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        .drawer-close:hover,
+        .drawer-close:focus-visible {
+            background: #f1f5f9;
+            color: #0f172a;
+            outline: none;
+        }
+
+        .drawer-nav {
+            flex: 1;
+            padding-top: 14px;
+        }
+
+        .drawer-section-label {
+            margin: 14px 10px 6px;
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .drawer-item {
+            min-height: 44px;
+            color: #334155 !important;
+            border: 1px solid transparent;
+            transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+        }
+
+        .drawer-item:hover,
+        .drawer-item:focus-visible {
+            background: #f8fafc !important;
+            border-color: #e2e8f0;
+            transform: translateX(2px);
+            outline: none;
+        }
+
+        .drawer-item[data-drawer="upgrade"] {
+            color: #3730a3 !important;
+            background: #eef2ff;
+            border-color: #c7d2fe;
+            font-weight: 700;
+        }
+
+        .drawer-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            background: #f1f5f9;
+            font-size: 14px;
+        }
+
+        .drawer-footer {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .dark-mode .drawer-panel,
+        .oled-mode .drawer-panel {
+            background: #111827;
+            color: #f8fafc;
+            border-right-color: #334155;
+        }
+
+        .oled-mode .drawer-panel {
+            background: #050505;
+        }
+
+        .dark-mode .drawer-header,
+        .oled-mode .drawer-header,
+        .dark-mode .drawer-footer,
+        .oled-mode .drawer-footer {
+            border-color: #334155;
+        }
+
+        .dark-mode .drawer-item,
+        .oled-mode .drawer-item {
+            color: #e2e8f0 !important;
+        }
+
+        .dark-mode .drawer-item:hover,
+        .dark-mode .drawer-item:focus-visible,
+        .oled-mode .drawer-item:hover,
+        .oled-mode .drawer-item:focus-visible {
+            background: #1e293b !important;
+            border-color: #475569;
+        }
+
+        .dark-mode .drawer-icon,
+        .oled-mode .drawer-icon,
+        .dark-mode .drawer-close:hover,
+        .oled-mode .drawer-close:hover {
+            background: #1e293b;
+        }
+
+        .dark-mode .drawer-close,
+        .oled-mode .drawer-close,
+        .dark-mode .drawer-section-label,
+        .oled-mode .drawer-section-label {
+            color: #94a3b8;
+        }
+
+        .dark-mode .drawer-item[data-drawer="upgrade"],
+        .oled-mode .drawer-item[data-drawer="upgrade"] {
+            color: #e0e7ff !important;
+            background: rgba(79, 70, 229, 0.22);
+            border-color: rgba(129, 140, 248, 0.45);
+        }
+
+        /* Isolated upgrade flow styles: do not affect the rest of the app */
+        .upgrade-shell {
+            position: relative;
+            width: 100%;
+            max-width: 32rem;
+            max-height: 92vh;
+            overflow-y: auto;
+            border-radius: 20px;
+            background: #ffffff;
+            color: #0f172a;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.35);
+        }
+
+        .upgrade-shell .text-theme-text {
+            color: #0f172a;
+        }
+
+        .upgrade-shell .text-theme-muted {
+            color: #475569;
+        }
+
+        .upgrade-shell .border-theme-border {
+            border-color: #cbd5e1;
+        }
+
+        .upgrade-eyebrow {
+            color: #4338ca;
+        }
+
+        .upgrade-back {
+            color: #475569;
+            padding: 6px 8px;
+            border-radius: 8px;
+        }
+
+        .upgrade-back:hover,
+        .upgrade-back:focus-visible {
+            color: #0f172a;
+            background: #f1f5f9;
+            outline: none;
+        }
+
+        .upgrade-shell .bg-theme-bg,
+        .upgrade-choice,
+        .upgrade-plan-choice,
+        #other-billing-options,
+        .upgrade-summary-card {
+            background: #f8fafc;
+        }
+
+        .upgrade-choice,
+        .upgrade-plan-choice {
+            border: 1px solid #cbd5e1;
+        }
+
+        .upgrade-choice:hover,
+        .upgrade-plan-choice:hover {
+            border-color: #818cf8;
+            background: #f5f3ff;
+        }
+
+        .upgrade-primary {
+            display: block;
+            width: 100%;
+            color: #ffffff;
+            background: #4338ca;
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(67, 56, 202, 0.22);
+        }
+
+        .upgrade-primary:hover:not(:disabled) {
+            background: #3730a3;
+        }
+
+        .upgrade-primary:disabled {
+            cursor: not-allowed;
+            opacity: 0.48;
+        }
+
+        [data-upgrade-progress] {
+            width: 28px;
+            height: 28px;
+            flex: 0 0 28px;
+        }
+
+        .upgrade-progress-active {
+            background-color: #4338ca !important;
+            color: #fff !important;
+            border-color: #4338ca !important;
+        }
+
+        .upgrade-choice-selected {
+            border-color: #4f46e5 !important;
+            background: #eef2ff !important;
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.16);
+        }
+
+        .dark-mode .upgrade-shell,
+        .oled-mode .upgrade-shell {
+            background: #111827;
+            color: #f8fafc;
+            border-color: #475569;
+        }
+
+        .oled-mode .upgrade-shell {
+            background: #050505;
+        }
+
+        .dark-mode .upgrade-shell .text-theme-text,
+        .oled-mode .upgrade-shell .text-theme-text {
+            color: #f8fafc;
+        }
+
+        .dark-mode .upgrade-shell .text-theme-muted,
+        .oled-mode .upgrade-shell .text-theme-muted {
+            color: #cbd5e1;
+        }
+
+        .dark-mode .upgrade-eyebrow,
+        .oled-mode .upgrade-eyebrow {
+            color: #a5b4fc;
+        }
+
+        .dark-mode .upgrade-back,
+        .oled-mode .upgrade-back {
+            color: #cbd5e1;
+        }
+
+        .dark-mode .upgrade-back:hover,
+        .oled-mode .upgrade-back:hover {
+            color: #ffffff;
+            background: #1e293b;
+        }
+
+        .dark-mode .upgrade-shell .border-theme-border,
+        .oled-mode .upgrade-shell .border-theme-border,
+        .dark-mode .upgrade-choice,
+        .oled-mode .upgrade-choice,
+        .dark-mode .upgrade-plan-choice,
+        .oled-mode .upgrade-plan-choice {
+            border-color: #475569;
+        }
+
+        .dark-mode .upgrade-shell .bg-theme-bg,
+        .oled-mode .upgrade-shell .bg-theme-bg,
+        .dark-mode .upgrade-choice,
+        .oled-mode .upgrade-choice,
+        .dark-mode .upgrade-plan-choice,
+        .oled-mode .upgrade-plan-choice,
+        .dark-mode #other-billing-options,
+        .oled-mode #other-billing-options,
+        .dark-mode .upgrade-summary-card,
+        .oled-mode .upgrade-summary-card {
+            background: #1e293b;
+        }
+
+        .dark-mode .upgrade-choice-selected,
+        .oled-mode .upgrade-choice-selected {
+            background: #312e81 !important;
+            border-color: #a5b4fc !important;
+        }
+
+        .payment-details-shell {
+            background: #ffffff;
+            color: #0f172a;
+            border: 1px solid #cbd5e1;
+        }
+
+        .payment-details-shell input {
+            background: #f8fafc !important;
+            color: #0f172a !important;
+            border-color: #94a3b8 !important;
+        }
+
+        .payment-details-shell input::placeholder {
+            color: #64748b;
+        }
+
+        .dark-mode .payment-details-shell,
+        .oled-mode .payment-details-shell {
+            background: #111827;
+            color: #f8fafc;
+            border-color: #475569;
+        }
+
+        .oled-mode .payment-details-shell {
+            background: #050505;
+        }
+
+        .dark-mode .payment-details-shell input,
+        .oled-mode .payment-details-shell input {
+            background: #1e293b !important;
+            color: #f8fafc !important;
+            border-color: #64748b !important;
+        }
+
+        .dark-mode .payment-details-shell input::placeholder,
+        .oled-mode .payment-details-shell input::placeholder {
+            color: #94a3b8;
         }
 
         /* Tooltip */
@@ -58,17 +416,6 @@
         .pricing-toggle-active {
             background: #fff;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-        }
-
-        .upgrade-choice-selected {
-            border-color: #4f46e5 !important;
-            background: rgba(79, 70, 229, 0.08) !important;
-            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
-        }
-
-        .upgrade-progress-active {
-            background-color: #4f46e5 !important;
-            color: #fff !important;
         }
 
         /* Custom sub-category radios */
@@ -731,76 +1078,82 @@
     </div>
 
     <!-- HAMBURGER DRAWER (slides in from left) -->
-    <div id="drawer-container" class="fixed inset-0 z-50 hidden">
-        <div class="drawer-overlay fixed inset-0 bg-black/40 opacity-0 pointer-events-none" id="drawer-overlay"></div>
-        <div id="drawer-panel" style="background-color: var(--bg-main);"
-            class="drawer-panel fixed left-0 top-0 bottom-0 w-72 shadow-2xl p-6 overflow-y-auto">
-            <div class="flex items-center justify-between mb-6">
-                <h3 class="font-bold text-lg text-theme-text">Menu</h3>
-                <button id="close-drawer" class="text-xl hover:opacity-70 transition-opacity" style="color: var(--text-main);">✕</button>
+    <div id="drawer-container" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+        <div class="drawer-overlay fixed inset-0 opacity-0 pointer-events-none" id="drawer-overlay"></div>
+        <div id="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title" tabindex="-1"
+            class="drawer-panel fixed left-0 top-0 bottom-0 p-6 overflow-y-auto">
+            <div class="drawer-header">
+                <div class="drawer-brand">
+                    <span class="drawer-brand-mark">🌿</span>
+                    <div>
+                        <h3 id="drawer-title" class="font-bold text-lg">AI Planner</h3>
+                        <p class="text-xs" style="color: #64748b;">Workspace menu</p>
+                    </div>
+                </div>
+                <button id="close-drawer" class="drawer-close text-xl" aria-label="Close menu">✕</button>
             </div>
-            <nav class="space-y-1">
+            <nav class="drawer-nav space-y-1">
+                <p class="drawer-section-label">Workspace</p>
                 <button data-drawer="upgrade"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span>👑</span> Upgrade
+                    <span class="drawer-icon">👑</span> Upgrade
                 </button>
                 <button data-drawer="reports"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span>📊</span> Reports
+                    <span class="drawer-icon">📊</span> Reports
                 </button>
                 <button data-drawer="notion"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span>📝</span> Notion Settings
+                    <span class="drawer-icon">📝</span> Notion Settings
                 </button>
                 <button data-drawer="history"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span>🕐</span> History
+                    <span class="drawer-icon">🕐</span> History
                 </button>
                 <button data-drawer="settings"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span>⚙️</span> Advanced Settings
+                    <span class="drawer-icon">⚙️</span> Advanced Settings
                 </button>
-                <hr class="border-theme-border my-2">
+                <p class="drawer-section-label">Resources</p>
                 <a href="privacy.html" target="_blank"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>🛡️</span> Privacy Policy
+                    <span class="drawer-icon">🛡️</span> Privacy Policy
                 </a>
                 <a href="pricing-policy.html" target="_blank"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>💳</span> Pricing Policy
+                    <span class="drawer-icon">💳</span> Pricing Policy
                 </a>
                 <a href="refund-policy.html" target="_blank"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>💸</span> Refund Policy
+                    <span class="drawer-icon">💸</span> Refund Policy
                 </a>
                 <a href="planner.html" target="_blank"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>📄</span> Planner PDF
+                    <span class="drawer-icon">📄</span> Planner PDF
                 </a>
                 <a href="gear.html" target="_blank"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>🛍️</span> Gear List
+                    <span class="drawer-icon">🛍️</span> Gear List
                 </a>
+                <p class="drawer-section-label">Account</p>
                 <button data-drawer="export"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>📦</span> Export Data
+                    <span class="drawer-icon">📦</span> Export Data
                 </button>
-                <hr class="border-theme-border my-2">
                 <button data-drawer="delete"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-sm text-red-500">
-                    <span>🗑️</span> Delete Account
+                    <span class="drawer-icon">🗑️</span> Delete Account
                 </button>
                 <div class="flex items-center gap-3 px-3 py-2.5 text-sm text-gray-400 opacity-50 cursor-not-allowed">
-                    <span>⌚</span> Health <span
+                    <span class="drawer-icon">⌚</span> Health <span
                         class="text-[10px] bg-slate-100 px-1 py-0.5 rounded font-bold uppercase">Soon</span>
                 </div>
-                <hr class="border-theme-border my-2">
                 <button data-drawer="logout"
                     class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-red-400">
-                    <span>↪️</span> Sign Out
+                    <span class="drawer-icon">↪️</span> Sign Out
                 </button>
             </nav>
-            <div class="mt-6 pt-4 border-t border-theme-border text-xs text-theme-muted">
+            <div class="drawer-footer text-xs text-theme-muted">
                 <span id="drawer-user-email" class="truncate block"></span>
             </div>
         </div>
@@ -891,13 +1244,13 @@
     <div id="pricing-modal"
         class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
         <div
-            class="bg-theme-card border border-theme-border rounded-2xl max-w-lg w-full shadow-2xl overflow-y-auto max-h-[92vh] relative">
+            class="upgrade-shell">
             <button id="close-pricing"
                 aria-label="Close upgrade options"
                 class="absolute top-4 right-4 text-theme-muted hover:text-theme-text text-xl z-10 transition-colors">✕</button>
 
             <div class="px-6 pt-6 pb-4 border-b border-theme-border">
-                <p class="text-[10px] font-bold uppercase tracking-widest text-indigo-500">Upgrade AI Planner</p>
+                <p class="upgrade-eyebrow text-[10px] font-bold uppercase tracking-widest">Upgrade AI Planner</p>
                 <h2 class="text-2xl font-bold text-theme-text tracking-tight mt-1">Turn more handwritten plans into action.</h2>
                 <p id="upgrade-context-message" class="text-sm text-theme-muted mt-2">Choose the result you want, then see the plan that fits.</p>
                 <div class="flex items-center gap-2 mt-5" aria-label="Upgrade progress">
@@ -934,7 +1287,7 @@
                     </button>
                 </div>
                 <button id="upgrade-next-outcome" type="button" disabled
-                    class="w-full mt-5 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm transition-colors opacity-50">
+                    class="upgrade-primary mt-5 py-3 font-bold text-sm transition-colors opacity-50">
                     Compare plans
                 </button>
                 <button id="buy-booster-btn-modal" type="button"
@@ -950,7 +1303,7 @@
                         <h3 class="font-bold text-theme-text">Choose your capacity</h3>
                         <p id="upgrade-recommendation" class="text-xs text-theme-muted mt-1">Annual access is selected by default.</p>
                     </div>
-                    <button id="upgrade-back-outcome" type="button" class="text-xs font-bold text-theme-muted hover:text-theme-text">Back</button>
+                    <button id="upgrade-back-outcome" type="button" class="upgrade-back text-xs font-bold">← Back</button>
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">
@@ -1011,7 +1364,7 @@
                 </details>
 
                 <button id="upgrade-next-plan" type="button" disabled
-                    class="w-full mt-5 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm transition-colors opacity-50">
+                    class="upgrade-primary mt-5 py-3 font-bold text-sm transition-colors opacity-50">
                     Review checkout
                 </button>
             </div>
@@ -1023,10 +1376,10 @@
                         <h3 class="font-bold text-theme-text">Know exactly what happens next</h3>
                         <p class="text-xs text-theme-muted mt-1">No hidden trial or surprise charge.</p>
                     </div>
-                    <button id="upgrade-back-plan" type="button" class="text-xs font-bold text-theme-muted hover:text-theme-text">Back</button>
+                    <button id="upgrade-back-plan" type="button" class="upgrade-back text-xs font-bold">← Back</button>
                 </div>
 
-                <div class="mt-5 bg-theme-bg border border-theme-border rounded-xl p-4 flex items-center justify-between">
+                <div class="upgrade-summary-card mt-5 border border-theme-border rounded-xl p-4 flex items-center justify-between">
                     <div>
                         <p id="checkout-plan-name" class="font-bold text-theme-text">Standard · Annual</p>
                         <p id="checkout-plan-detail" class="text-xs text-theme-muted mt-1">100 credits refresh every 30 days for 12 months.</p>
@@ -1050,7 +1403,7 @@
                 </ol>
 
                 <button id="checkout-selected-plan-btn" type="button"
-                    class="w-full mt-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-colors shadow shadow-indigo-500/20 active:scale-95">
+                    class="upgrade-primary mt-6 py-3 font-bold text-sm transition-colors">
                     Continue securely — ₹290
                 </button>
                 <p class="text-center text-[10px] text-theme-muted mt-3">
@@ -1068,7 +1421,7 @@
     <!-- PHONE NUMBER MODAL (Cashfree Compliance) -->
     <div id="phone-modal" style="z-index: 9999;"
         class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
-        <div style="background-color: var(--bg-main);" class="rounded-2xl max-w-sm w-full p-7 shadow-2xl relative overflow-hidden transform scale-95 opacity-0 transition-all duration-300" id="phone-modal-content">
+        <div class="payment-details-shell rounded-2xl max-w-sm w-full p-7 shadow-2xl relative overflow-hidden transform scale-95 opacity-0 transition-all duration-300" id="phone-modal-content">
             <!-- Decorative icon -->
             <div class="w-12 h-12 rounded-full flex items-center justify-center text-xl mx-auto mb-4" style="background-color: rgba(37, 99, 235, 0.1); color: #2563eb;">
                 📱
@@ -1113,7 +1466,7 @@
     </div>
 
     <script src="app-helpers.js?v=12"></script>
-    <script type="module" src="app.js?v=25"></script>
+    <script type="module" src="app.js?v=26"></script>
 </body>
 
 </html>
