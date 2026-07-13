@@ -87,7 +87,18 @@
         }
 
         .upgrade-primary:hover:not(:disabled) { background: #3730a3; }
-        .upgrade-primary:disabled { cursor: not-allowed; opacity: 0.48; }
+        .upgrade-primary:disabled {
+            cursor: not-allowed;
+            color: #ffffff;
+            background: #475569;
+            box-shadow: none;
+            opacity: 1;
+        }
+
+        .upgrade-shell > #close-pricing {
+            top: 16px;
+            right: 16px;
+        }
 
         [data-upgrade-progress] {
             width: 28px;
