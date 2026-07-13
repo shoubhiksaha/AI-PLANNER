@@ -24,9 +24,14 @@ describe('Critical DOM Elements', () => {
             'current-plan-badge',
             'pricing-modal',
             'buy-booster-btn',
-            'upgrade-standard-btn',
+            'upgrade-step-1',
+            'upgrade-step-2',
+            'upgrade-step-3',
+            'upgrade-next-outcome',
+            'upgrade-next-plan',
+            'checkout-selected-plan-btn',
+            'upgrade-standard-pricing-btn',
             'upgrade-pro-btn',
-            'paywall-modal',
             'history-list',
             'heatmap-grid',
             'build-version',
@@ -48,6 +53,17 @@ describe('Critical DOM Elements', () => {
             const el = document.getElementById(id);
             if (!el) throw new Error(`Missing expected DOM ID: ${id}`);
         });
+    });
+
+    test('Upgrade flow limits the primary comparison to two plans and defaults to annual', () => {
+        const planChoices = document.querySelectorAll('[data-upgrade-plan]');
+        const annualBilling = document.querySelector('input[name="upgrade-billing"][value="annual"]');
+
+        expect(planChoices).toHaveLength(2);
+        expect(annualBilling).not.toBeNull();
+        expect(annualBilling.checked).toBe(true);
+        expect(document.getElementById('upgrade-step-2').classList.contains('hidden')).toBe(true);
+        expect(document.getElementById('upgrade-step-3').classList.contains('hidden')).toBe(true);
     });
 
     test('All drawer navigation items have valid data attributes', () => {
