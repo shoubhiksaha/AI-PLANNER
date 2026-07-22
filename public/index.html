@@ -1084,12 +1084,18 @@
                     Compare plans
                 </button>
                 <button id="buy-booster-btn-modal" type="button"
-                    class="w-full mt-6 p-4 border border-theme-border bg-theme-bg/50 hover:bg-theme-bg rounded-xl flex items-center justify-between transition-all group shadow-sm hover:shadow-md">
-                    <div class="text-left">
+                    class="w-full mt-6 p-4 border border-theme-border bg-theme-bg/50 hover:bg-theme-bg rounded-xl flex items-center justify-between transition-all group shadow-sm hover:shadow-md relative overflow-visible">
+                    
+                    <!-- Best Buy Style Hanging Tag -->
+                    <div class="absolute -top-3 -right-2 bg-[#FFF200] text-black text-[11px] font-black px-3 py-1 shadow-lg uppercase tracking-wider flex items-center justify-center transform rotate-[6deg] group-hover:rotate-[12deg] group-hover:scale-110 transition-all z-10" style="clip-path: polygon(15% 0, 100% 0, 100% 100%, 15% 100%, 0 50%); padding-left: 16px; border-radius: 3px;">
+                        <div class="absolute left-[4px] top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-black/40 rounded-full"></div>
+                        BUY NOW
+                    </div>
+                    
+                    <div class="text-left w-full">
                         <span class="block text-sm font-bold text-theme-text group-hover:text-indigo-500 transition-colors">Only need more credits?</span>
                         <span class="block text-xs text-theme-muted mt-0.5">Buy 50 once for ₹19</span>
                     </div>
-                    <span class="bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 text-[10px] font-bold px-2.5 py-1.5 rounded-md uppercase tracking-wider shadow-sm">Buy Now</span>
                 </button>
             </div>
 
