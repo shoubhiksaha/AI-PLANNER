@@ -1397,6 +1397,17 @@ document.getElementById('upgrade-next-plan')?.addEventListener('click', () => {
 });
 document.getElementById('upgrade-back-plan')?.addEventListener('click', () => showUpgradeStep(2));
 
+document.getElementById('step-nav-1')?.addEventListener('click', () => showUpgradeStep(1));
+document.getElementById('step-nav-2')?.addEventListener('click', () => {
+    if (upgradeState.outcome) showUpgradeStep(2);
+});
+document.getElementById('step-nav-3')?.addEventListener('click', () => {
+    if (upgradeState.outcome && upgradeState.plan) {
+        updateCheckoutReview();
+        showUpgradeStep(3);
+    }
+});
+
 // --- NAME PROMPT ---
 document.getElementById('save-name-btn')?.addEventListener('click', async () => {
     const nameInput = document.getElementById('user-display-name-input');
