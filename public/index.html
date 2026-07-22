@@ -15,6 +15,27 @@
     <link href="https://unpkg.com/aos@2.3.4/dist/aos.css" rel="stylesheet">
     <script src="sw-register.js" defer></script>
     <style>
+        @keyframes tagWiggle {
+            0%, 100% { transform: rotate(6deg); }
+            5% { transform: rotate(2deg) scale(1.05); }
+            15% { transform: rotate(10deg) scale(1.05); }
+            25% { transform: rotate(4deg) scale(1.05); }
+            35% { transform: rotate(8deg) scale(1.05); }
+            45%, 100% { transform: rotate(6deg); }
+        }
+        .price-tag-wiggle {
+            animation: tagWiggle 4s infinite ease-in-out;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform: rotate(6deg);
+        }
+        button:hover .price-tag-wiggle {
+            animation: none;
+            transform: rotate(12deg) scale(1.15) !important;
+            box-shadow: 0 0 25px rgba(255, 242, 0, 0.7), 0 5px 15px rgba(0,0,0,0.2) !important;
+            filter: brightness(1.15);
+            background-color: #fffb00 !important;
+        }
+
         /* Hamburger Drawer */
         .drawer-overlay {
             transition: opacity 0.3s ease;
@@ -1087,8 +1108,8 @@
                     class="w-full mt-6 p-4 border border-theme-border bg-theme-bg/50 hover:bg-theme-bg rounded-xl flex items-center justify-between transition-all group shadow-sm hover:shadow-md relative overflow-visible">
                     
                     <!-- Best Buy Style Hanging Tag -->
-                    <div class="absolute z-10 shadow-lg font-black uppercase tracking-wider flex items-center justify-center transition-all group-hover:scale-110" 
-                         style="top: -12px; right: -8px; background-color: #FFF200; color: #000; font-size: 11px; padding: 4px 12px 4px 16px; border-radius: 3px; transform: rotate(6deg); clip-path: polygon(15% 0, 100% 0, 100% 100%, 15% 100%, 0 50%);">
+                    <div class="absolute z-10 font-black uppercase tracking-wider flex items-center justify-center price-tag-wiggle" 
+                         style="top: -14px; right: -16px; background-color: #FFF200; color: #000; font-size: 11px; padding: 4px 12px 4px 16px; border-radius: 3px; clip-path: polygon(15% 0, 100% 0, 100% 100%, 15% 100%, 0 50%); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
                         <div class="absolute rounded-full" style="left: 4px; top: 50%; transform: translateY(-50%); width: 6px; height: 6px; background-color: rgba(0,0,0,0.4);"></div>
                         BUY NOW
                     </div>
