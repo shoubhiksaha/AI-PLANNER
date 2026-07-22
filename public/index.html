@@ -12,6 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" integrity="sha256-CWPPpQ6eHn5q+SmkCoHj6Jimc/EnDq+mkX3RN+SWgWQ=" crossorigin="anonymous"></script>
     <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://unpkg.com/aos@2.3.4/dist/aos.css" rel="stylesheet">
     <script src="sw-register.js" defer></script>
     <style>
         /* Hamburger Drawer */
@@ -268,7 +269,7 @@
 <body class="min-h-screen flex items-center justify-center p-4">
 
     <!-- MAIN CONTAINER -->
-    <div class="w-full max-w-lg mx-auto glass rounded-2xl shadow-xl p-8 relative overflow-hidden">
+    <div class="w-full max-w-lg mx-auto glass rounded-2xl shadow-xl p-8 relative overflow-hidden" data-aos="zoom-in" data-aos-duration="600">
 
         <!-- HEADER -->
         <div class="text-center mb-10 relative">
@@ -299,7 +300,7 @@
         </div>
 
         <!-- VIEW 1: LOGIN -->
-        <div id="view-login" class="fade-in flex flex-col items-center">
+        <div id="view-login" class="flex flex-col items-center" data-aos="fade-up" data-aos-delay="200">
 
             <!-- TRUST BADGE -->
             <div
@@ -327,7 +328,7 @@
             <div class="w-full text-left mb-8 space-y-4">
                 
                 <!-- Hero Pitch -->
-                <div class="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-blue-500/10 border border-emerald-500/20 dark:border-emerald-500/10 rounded-2xl p-5 shadow-sm relative overflow-hidden">
+                <div class="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-blue-500/10 border border-emerald-500/20 dark:border-emerald-500/10 rounded-2xl p-5 shadow-sm relative overflow-hidden" data-aos="fade-up" data-aos-delay="300">
                     <div class="absolute -top-4 -right-4 text-6xl opacity-10 blur-[2px] pointer-events-none">✨</div>
                     <h3 class="font-bold text-theme-text text-[17px] tracking-tight mb-2">Love your paper planner? <span class="text-emerald-600 dark:text-emerald-400">Upgrade it with AI.</span></h3>
                     <p class="text-[13px] text-theme-muted leading-relaxed">
@@ -337,7 +338,7 @@
 
                 <!-- Feature Cards -->
                 <div class="grid grid-cols-1 gap-3">
-                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default">
+                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default" data-aos="fade-up" data-aos-delay="400">
                         <div class="text-2xl pt-0.5 group-hover:scale-110 transition-transform">📅</div>
                         <div>
                             <h4 class="font-bold text-theme-text text-[13px]">Schedule It</h4>
@@ -345,7 +346,7 @@
                         </div>
                     </div>
 
-                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default">
+                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default" data-aos="fade-up" data-aos-delay="500">
                         <div class="text-2xl pt-0.5 group-hover:scale-110 transition-transform">✅</div>
                         <div>
                             <h4 class="font-bold text-theme-text text-[13px]">Crush Your To-Dos</h4>
@@ -1255,6 +1256,16 @@
         </div>
     </div>
 
+    <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            AOS.init({
+                once: true,
+                offset: 50,
+                duration: 600
+            });
+        });
+    </script>
     <script src="app-helpers.js?v=12"></script>
     <script type="module" src="app.js?v=25"></script>
 </body>

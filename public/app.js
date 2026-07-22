@@ -150,6 +150,9 @@ const switchView = (viewId) => {
     if (viewId !== 'view-login') {
         postNativeMessage('MOBILE_APP_READY', { viewId });
     }
+    if (window.AOS) {
+        setTimeout(() => AOS.refresh(), 50);
+    }
 };
 
 // Display a deterministic frontend build marker (derived from app.js?v=...)
