@@ -15,6 +15,27 @@
     <link href="https://unpkg.com/aos@2.3.4/dist/aos.css" rel="stylesheet">
     <script src="sw-register.js" defer></script>
     <style>
+        @keyframes tagWiggle {
+            0%, 100% { transform: rotate(6deg); }
+            5% { transform: rotate(2deg) scale(1.05); }
+            15% { transform: rotate(10deg) scale(1.05); }
+            25% { transform: rotate(4deg) scale(1.05); }
+            35% { transform: rotate(8deg) scale(1.05); }
+            45%, 100% { transform: rotate(6deg); }
+        }
+        .price-tag-wiggle {
+            animation: tagWiggle 4s infinite ease-in-out;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform: rotate(6deg);
+        }
+        button:hover .price-tag-wiggle {
+            animation: none;
+            transform: rotate(12deg) scale(1.15) !important;
+            box-shadow: 0 0 25px rgba(255, 242, 0, 0.7), 0 5px 15px rgba(0,0,0,0.2) !important;
+            filter: brightness(1.15);
+            background-color: #fffb00 !important;
+        }
+
         /* Hamburger Drawer */
         .drawer-overlay {
             transition: opacity 0.3s ease;
@@ -41,11 +62,12 @@
             max-width: 32rem;
             max-height: 92vh;
             overflow-y: auto;
-            border-radius: 20px;
-            background: #ffffff;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
             color: #0f172a;
-            border: 1px solid #cbd5e1;
-            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.35);
+            border: 1px solid rgba(203, 213, 225, 0.5);
+            box-shadow: 0 30px 80px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
         }
 
         .upgrade-shell .text-theme-text { color: #0f172a; }
@@ -115,9 +137,10 @@
 
         .dark-mode .upgrade-shell,
         .oled-mode .upgrade-shell {
-            background: #111827;
+            background: rgba(17, 24, 39, 0.95);
             color: #f8fafc;
-            border-color: #475569;
+            border-color: rgba(71, 85, 105, 0.5);
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
         }
 
         .oled-mode .upgrade-shell { background: #050505; }
@@ -621,45 +644,57 @@
                         <select id="byok-provider"
                             class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none">
                             <optgroup label="🌐 Major Cloud Providers">
+                                <option value="openai:gpt-4.1">OpenAI — GPT-4.1</option>
                                 <option value="openai:gpt-4o">OpenAI — GPT-4o</option>
-                                <option value="openai:gpt-4-turbo">OpenAI — GPT-4 Turbo</option>
                                 <option value="openai:gpt-4o-mini">OpenAI — GPT-4o Mini</option>
-                                <option value="anthropic:claude-3-5-sonnet-20240620">Anthropic — Claude 3.5 Sonnet
-                                </option>
+                                <option value="openai:o3-mini">OpenAI — o3-mini (Reasoning)</option>
+                                <option value="openai:gpt-4-turbo">OpenAI — GPT-4 Turbo</option>
+                                <option value="anthropic:claude-opus-4-5">Anthropic — Claude Opus 4.5</option>
+                                <option value="anthropic:claude-sonnet-4-5">Anthropic — Claude Sonnet 4.5</option>
+                                <option value="anthropic:claude-3-7-sonnet-20250219">Anthropic — Claude 3.7 Sonnet</option>
+                                <option value="anthropic:claude-3-5-sonnet-20241022">Anthropic — Claude 3.5 Sonnet</option>
+                                <option value="anthropic:claude-3-5-haiku-20241022">Anthropic — Claude 3.5 Haiku (Fast)</option>
                                 <option value="anthropic:claude-3-opus-20240229">Anthropic — Claude 3 Opus</option>
+                                <option value="google:gemini-2.5-pro">Google — Gemini 2.5 Pro</option>
                                 <option value="google:gemini-2.5-flash">Google — Gemini 2.5 Flash</option>
                                 <option value="google:gemini-2.0-flash">Google — Gemini 2.0 Flash</option>
                                 <option value="google:gemini-1.5-pro">Google — Gemini 1.5 Pro</option>
+                                <option value="xai:grok-3">xAI — Grok 3</option>
+                                <option value="xai:grok-3-mini">xAI — Grok 3 Mini (Fast)</option>
                                 <option value="azure:gpt-4o">Azure OpenAI — GPT-4o</option>
                             </optgroup>
                             <optgroup label="⚡ Fast & Affordable">
+                                <option value="groq:llama-3.3-70b-versatile">Groq — Llama 3.3 70B</option>
                                 <option value="groq:llama-3.1-70b-versatile">Groq — Llama 3.1 70B</option>
                                 <option value="groq:mixtral-8x7b-32768">Groq — Mixtral 8×7B</option>
-                                <option value="deepseek:deepseek-chat">DeepSeek — DeepSeek Chat</option>
-                                <option value="deepseek:deepseek-coder">DeepSeek — DeepSeek Coder</option>
+                                <option value="groq:gemma2-9b-it">Groq — Gemma 2 9B</option>
+                                <option value="deepseek:deepseek-chat">DeepSeek — DeepSeek Chat (V3)</option>
+                                <option value="deepseek:deepseek-reasoner">DeepSeek — DeepSeek R1 (Reasoning)</option>
                                 <option value="mistral:mistral-large-latest">Mistral — Mistral Large</option>
                                 <option value="mistral:mistral-small-latest">Mistral — Mistral Small</option>
+                                <option value="mistral:codestral-latest">Mistral — Codestral</option>
                             </optgroup>
                             <optgroup label="🔗 Aggregators & Platforms">
-                                <option value="together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo">Together.ai —
-                                    Llama 3.1 70B</option>
-                                <option value="openrouter:meta-llama/llama-3.1-70b-instruct">OpenRouter — Llama 3.1 70B
-                                </option>
-                                <option value="perplexity:llama-3.1-sonar-large-128k-online">Perplexity — Sonar Large
-                                </option>
+                                <option value="together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo">Together.ai — Llama 3.1 70B</option>
+                                <option value="together:meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo">Together.ai — Llama 3.1 405B</option>
+                                <option value="openrouter:meta-llama/llama-3.1-70b-instruct">OpenRouter — Llama 3.1 70B</option>
+                                <option value="openrouter:google/gemini-2.0-flash-exp:free">OpenRouter — Gemini 2.0 Flash (Free)</option>
+                                <option value="perplexity:llama-3.1-sonar-large-128k-online">Perplexity — Sonar Large</option>
                             </optgroup>
                             <optgroup label="🧪 Specialized">
+                                <option value="cohere:command-a-03-2025">Cohere — Command A</option>
                                 <option value="cohere:command-r-plus">Cohere — Command R+</option>
                                 <option value="cohere:command-r">Cohere — Command R</option>
-                                <option value="huggingface:meta-llama/Llama-3.1-70B-Instruct">HuggingFace — Llama 3.1
-                                    70B</option>
+                                <option value="huggingface:meta-llama/Llama-3.1-70B-Instruct">HuggingFace — Llama 3.1 70B</option>
                             </optgroup>
-                            <optgroup label="🔧 Custom / Other">
-                                <option value="custom:cloud">Custom — Standard Cloud API</option>
+                            <optgroup label="🔧 Custom / Self-Hosted">
+                                <option value="custom:openai-compat">Custom — OpenAI-Compatible API</option>
                                 <option value="custom:local">Custom — Local / Self-Hosted (Ollama)</option>
-                                <option value="custom:enterprise">Custom — Enterprise Endpoint</option>
+                                <option value="custom:azure">Custom — Azure OpenAI Endpoint</option>
                             </optgroup>
                         </select>
+                        <!-- Provider-specific API key hint -->
+                        <p id="byok-key-hint" class="text-[11px] text-slate-400 leading-snug hidden"></p>
 
                         <!-- Custom Sub-Category Fields -->
                         <div id="byok-custom-fields"
@@ -678,7 +713,7 @@
                                     placeholder="my-model-name">
                             </div>
                             <div id="custom-api-version-group" class="hidden">
-                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Version</label>
+                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Version (Azure only)</label>
                                 <input type="text" id="byok-custom-api-version"
                                     class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
                                     placeholder="2023-05-15">
@@ -691,7 +726,7 @@
                         <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Key</label>
                         <input type="password" id="byok-api-key"
                             class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
-                            placeholder="sk-...">
+                            placeholder="Paste your API key here…">
                     </div>
                 </div>
             </details>
@@ -1045,19 +1080,19 @@
                 <h2 class="text-2xl font-bold text-theme-text tracking-tight mt-1">Turn more handwritten plans into action.</h2>
                 <p id="upgrade-context-message" class="text-sm text-theme-muted mt-2">Choose the result you want, then see the plan that fits.</p>
                 <div class="flex items-center gap-2 mt-5" aria-label="Upgrade progress">
-                    <span data-upgrade-progress="1"
-                        class="upgrade-progress-active w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center">1</span>
+                    <button type="button" data-upgrade-progress="1" id="step-nav-1"
+                        class="upgrade-progress-active w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center cursor-pointer transition-colors hover:border-indigo-500">1</button>
                     <span class="flex-1 border-t border-theme-border"></span>
-                    <span data-upgrade-progress="2"
-                        class="w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center">2</span>
+                    <button type="button" data-upgrade-progress="2" id="step-nav-2"
+                        class="w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center cursor-pointer transition-colors hover:border-indigo-500">2</button>
                     <span class="flex-1 border-t border-theme-border"></span>
-                    <span data-upgrade-progress="3"
-                        class="w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center">3</span>
+                    <button type="button" data-upgrade-progress="3" id="step-nav-3"
+                        class="w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center cursor-pointer transition-colors hover:border-indigo-500">3</button>
                 </div>
             </div>
 
             <!-- Step 1: desired outcome -->
-            <div id="upgrade-step-1" class="p-6">
+            <div id="upgrade-step-1" class="p-6 pb-12">
                 <h3 class="font-bold text-theme-text">What would help most right now?</h3>
                 <p class="text-xs text-theme-muted mt-1 mb-4">We’ll use this only to recommend a plan.</p>
                 <div class="space-y-3">
@@ -1082,13 +1117,24 @@
                     Compare plans
                 </button>
                 <button id="buy-booster-btn-modal" type="button"
-                    class="w-full mt-3 text-xs font-bold text-theme-muted hover:text-theme-text transition-colors">
-                    Only need more credits? Buy 50 once for ₹19
+                    class="w-full mt-6 p-4 border border-theme-border bg-theme-bg/50 hover:bg-theme-bg rounded-xl flex items-center justify-between transition-all group shadow-sm hover:shadow-md relative overflow-visible">
+                    
+                    <!-- Best Buy Style Hanging Tag -->
+                    <div class="absolute z-10 font-black uppercase tracking-wider flex items-center justify-center price-tag-wiggle" 
+                         style="bottom: -12px; right: -12px; background-color: #FFF200; color: #000; font-size: 11px; padding: 4px 12px 4px 16px; border-radius: 3px; clip-path: polygon(15% 0, 100% 0, 100% 100%, 15% 100%, 0 50%); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+                        <div class="absolute rounded-full" style="left: 4px; top: 50%; transform: translateY(-50%); width: 6px; height: 6px; background-color: rgba(0,0,0,0.4);"></div>
+                        BUY NOW
+                    </div>
+                    
+                    <div class="text-left w-full">
+                        <span class="block text-sm font-bold text-theme-text group-hover:text-indigo-500 transition-colors">Only need more credits?</span>
+                        <span class="block text-xs text-theme-muted mt-0.5">Buy 50 once for ₹19</span>
+                    </div>
                 </button>
             </div>
 
             <!-- Step 2: plan comparison -->
-            <div id="upgrade-step-2" class="hidden p-6">
+            <div id="upgrade-step-2" class="hidden p-6 pb-12">
                 <div class="flex items-start justify-between gap-3 mb-4">
                     <div>
                         <h3 class="font-bold text-theme-text">Choose your capacity</h3>
@@ -1161,7 +1207,7 @@
             </div>
 
             <!-- Step 3: risk-reducing checkout review -->
-            <div id="upgrade-step-3" class="hidden p-6">
+            <div id="upgrade-step-3" class="hidden p-6 pb-12">
                 <div class="flex items-start justify-between gap-3">
                     <div>
                         <h3 class="font-bold text-theme-text">Know exactly what happens next</h3>
@@ -1225,11 +1271,11 @@
 
             <form id="phone-form" class="space-y-4">
                 <div>
-                    <div class="relative">
-                        <span class="absolute left-3 top-1/2 -translate-y-1/2 font-medium" style="color: var(--text-muted);">+91</span>
+                    <div class="flex items-center w-full rounded-xl px-4 py-3 border transition-all" style="background-color: var(--glass-bg); border-color: var(--border-color);">
+                        <span class="font-medium mr-2" style="color: var(--text-muted);">+91</span>
                         <input type="tel" id="user-phone" required pattern="[0-9]{10}"
-                            style="background-color: var(--glass-bg); color: var(--text-main); border: 1px solid var(--border-color);"
-                            class="w-full rounded-xl px-4 py-3 pl-12 outline-none transition-all font-medium"
+                            style="background-color: transparent; color: var(--text-main);"
+                            class="flex-1 outline-none font-medium p-0 border-0 focus:ring-0"
                             placeholder="10-digit mobile number">
                     </div>
                 </div>
