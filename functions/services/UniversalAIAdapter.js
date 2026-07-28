@@ -462,7 +462,7 @@ class UniversalAIAdapter {
 
         // Cohere v2 response: data.message.content is an array of content blocks
         if (data?.message?.content && Array.isArray(data.message.content)) {
-            const block = data.message.content.find(b => b.type === 'text' && typeof b.text === 'string');
+            const block = data.message.content.find(b => (!b.type || b.type === 'text') && typeof b.text === 'string');
             if (block) return stripMarkdownFences(block.text);
         }
 
