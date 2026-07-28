@@ -423,12 +423,13 @@ if (statelessConfigStr) {
         if (apiKeyInput && statelessRadio && providerSelect) {
             apiKeyInput.value = config.apiKey;
             if (config.customUrl) {
-                providerSelect.value = 'custom:cloud';
-                showCustomFields('cloud');
+                providerSelect.value = 'custom:openai-compat';
+                showCustomFields('openai-compat');
                 document.getElementById('byok-custom-url').value = config.customUrl;
                 document.getElementById('byok-custom-model').value = config.modelName;
             } else {
                 providerSelect.value = `${config.provider}:${config.modelName}`;
+                updateByokKeyHint(config.provider);
             }
             statelessRadio.checked = true;
         }
@@ -442,6 +443,35 @@ if (statelessConfigStr) {
     }
 }
 
+// Provider-specific API key hints
+const BYOK_KEY_HINTS = {
+    openai:      'Key format: sk-…  (from platform.openai.com/api-keys)',
+    anthropic:   'Key format: sk-ant-…  (from console.anthropic.com)',
+    google:      'Key format: AIza…  (from aistudio.google.com/app/apikey)',
+    xai:         'Key format: xai-…  (from console.x.ai)',
+    cohere:      'Key format: found in dashboard.cohere.com/api-keys',
+    huggingface: 'Key format: hf_…  (from huggingface.co/settings/tokens)',
+    groq:        'Key format: gsk_…  (from console.groq.com/keys)',
+    deepseek:    'Key format: sk-…  (from platform.deepseek.com)',
+    mistral:     'Key format: found in console.mistral.ai/api-keys',
+    perplexity:  'Key format: pplx-…  (from perplexity.ai/settings/api)',
+    together:    'Key format: found in api.together.ai/settings/api-keys',
+    openrouter:  'Key format: sk-or-…  (from openrouter.ai/keys)',
+    azure:       'Key format: your Azure OpenAI resource key (not a Bearer token)',
+};
+
+function updateByokKeyHint(provider) {
+    const hintEl = document.getElementById('byok-key-hint');
+    if (!hintEl) return;
+    const hint = BYOK_KEY_HINTS[provider];
+    if (hint) {
+        hintEl.textContent = '🔑 ' + hint;
+        hintEl.classList.remove('hidden');
+    } else {
+        hintEl.classList.add('hidden');
+    }
+}
+
 // Custom provider sub-category field logic
 function showCustomFields(subType) {
     const fields = document.getElementById('byok-custom-fields');
@@ -450,15 +480,15 @@ function showCustomFields(subType) {
     const versionGroup = document.getElementById('custom-api-version-group');
     fields.classList.remove('hidden');
     versionGroup.classList.add('hidden');
-    if (subType === 'cloud') {
-        label.textContent = '☁️ Standard Cloud API (OpenAI-compatible)';
+    if (subType === 'openai-compat' || subType === 'cloud') {
+        label.textContent = '☁️ OpenAI-Compatible API (same request format as OpenAI)';
         urlInput.placeholder = 'https://api.example.com/v1/chat/completions';
     } else if (subType === 'local') {
         label.textContent = '🏠 Local / Self-Hosted (e.g., Ollama)';
         urlInput.placeholder = 'https://your-secure-ollama.example.com/v1/chat/completions';
-    } else if (subType === 'enterprise') {
-        label.textContent = '🏢 Enterprise Endpoint';
-        urlInput.placeholder = 'https://your-company.openai.azure.com';
+    } else if (subType === 'azure' || subType === 'enterprise') {
+        label.textContent = '🏢 Azure OpenAI Endpoint';
+        urlInput.placeholder = 'https://your-resource.openai.azure.com';
         versionGroup.classList.remove('hidden');
     }
 }
@@ -467,8 +497,13 @@ document.getElementById('byok-provider').addEventListener('change', (e) => {
     const val = e.target.value;
     if (val.startsWith('custom:')) {
         showCustomFields(val.split(':')[1]);
+        // clear the hint for custom providers — user defines the endpoint
+        const hintEl = document.getElementById('byok-key-hint');
+        if (hintEl) hintEl.classList.add('hidden');
     } else {
         document.getElementById('byok-custom-fields').classList.add('hidden');
+        const [providerName] = val.split(':');
+        updateByokKeyHint(providerName);
     }
 });
 
@@ -591,26 +626,31 @@ document.getElementById('save-setup-btn')?.addEventListener('click', async () =>
     const byokMode = document.querySelector('input[name="byok-mode"]:checked').value;
     const byokKey = document.getElementById('byok-api-key').value.trim();
     const providerVal = document.getElementById('byok-provider').value;
-    
+
     let provider, modelName, customUrl, apiVersion;
     if (providerVal.startsWith('custom:')) {
         const subType = providerVal.split(':')[1];
         customUrl = document.getElementById('byok-custom-url').value.trim();
         modelName = document.getElementById('byok-custom-model').value.trim();
         apiVersion = document.getElementById('byok-custom-api-version')?.value.trim();
+        // Map sub-type → backend provider value
         if (subType === 'local') {
             provider = 'ollama';
-        } else if (subType === 'enterprise') {
-            provider = customUrl?.includes('azure') ? 'azure' : 'openai';
+        } else if (subType === 'azure' || subType === 'enterprise') {
+            provider = 'azure';
         } else {
-            provider = 'openai'; // Standard cloud = OpenAI compatible
+            // openai-compat, cloud, or any unknown custom → OpenAI-compatible format
+            provider = 'openai';
         }
         if (byokKey && (!customUrl || !modelName)) {
             alert("Please provide the API Base URL and Model Name");
             return;
         }
     } else {
-        [provider, modelName] = providerVal.split(':');
+        // Split on first colon only — model names (e.g. openrouter:google/model:free) may contain colons
+        const firstColon = providerVal.indexOf(':');
+        provider = providerVal.slice(0, firstColon);
+        modelName = providerVal.slice(firstColon + 1);
     }
 
     const saveBtn = document.getElementById('save-setup-btn');

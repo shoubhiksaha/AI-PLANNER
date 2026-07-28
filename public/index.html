@@ -644,45 +644,57 @@
                         <select id="byok-provider"
                             class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none">
                             <optgroup label="🌐 Major Cloud Providers">
+                                <option value="openai:gpt-4.1">OpenAI — GPT-4.1</option>
                                 <option value="openai:gpt-4o">OpenAI — GPT-4o</option>
-                                <option value="openai:gpt-4-turbo">OpenAI — GPT-4 Turbo</option>
                                 <option value="openai:gpt-4o-mini">OpenAI — GPT-4o Mini</option>
-                                <option value="anthropic:claude-3-5-sonnet-20240620">Anthropic — Claude 3.5 Sonnet
-                                </option>
+                                <option value="openai:o3-mini">OpenAI — o3-mini (Reasoning)</option>
+                                <option value="openai:gpt-4-turbo">OpenAI — GPT-4 Turbo</option>
+                                <option value="anthropic:claude-opus-4-5">Anthropic — Claude Opus 4.5</option>
+                                <option value="anthropic:claude-sonnet-4-5">Anthropic — Claude Sonnet 4.5</option>
+                                <option value="anthropic:claude-3-7-sonnet-20250219">Anthropic — Claude 3.7 Sonnet</option>
+                                <option value="anthropic:claude-3-5-sonnet-20241022">Anthropic — Claude 3.5 Sonnet</option>
+                                <option value="anthropic:claude-3-5-haiku-20241022">Anthropic — Claude 3.5 Haiku (Fast)</option>
                                 <option value="anthropic:claude-3-opus-20240229">Anthropic — Claude 3 Opus</option>
+                                <option value="google:gemini-2.5-pro">Google — Gemini 2.5 Pro</option>
                                 <option value="google:gemini-2.5-flash">Google — Gemini 2.5 Flash</option>
                                 <option value="google:gemini-2.0-flash">Google — Gemini 2.0 Flash</option>
                                 <option value="google:gemini-1.5-pro">Google — Gemini 1.5 Pro</option>
+                                <option value="xai:grok-3">xAI — Grok 3</option>
+                                <option value="xai:grok-3-mini">xAI — Grok 3 Mini (Fast)</option>
                                 <option value="azure:gpt-4o">Azure OpenAI — GPT-4o</option>
                             </optgroup>
                             <optgroup label="⚡ Fast & Affordable">
+                                <option value="groq:llama-3.3-70b-versatile">Groq — Llama 3.3 70B</option>
                                 <option value="groq:llama-3.1-70b-versatile">Groq — Llama 3.1 70B</option>
                                 <option value="groq:mixtral-8x7b-32768">Groq — Mixtral 8×7B</option>
-                                <option value="deepseek:deepseek-chat">DeepSeek — DeepSeek Chat</option>
-                                <option value="deepseek:deepseek-coder">DeepSeek — DeepSeek Coder</option>
+                                <option value="groq:gemma2-9b-it">Groq — Gemma 2 9B</option>
+                                <option value="deepseek:deepseek-chat">DeepSeek — DeepSeek Chat (V3)</option>
+                                <option value="deepseek:deepseek-reasoner">DeepSeek — DeepSeek R1 (Reasoning)</option>
                                 <option value="mistral:mistral-large-latest">Mistral — Mistral Large</option>
                                 <option value="mistral:mistral-small-latest">Mistral — Mistral Small</option>
+                                <option value="mistral:codestral-latest">Mistral — Codestral</option>
                             </optgroup>
                             <optgroup label="🔗 Aggregators & Platforms">
-                                <option value="together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo">Together.ai —
-                                    Llama 3.1 70B</option>
-                                <option value="openrouter:meta-llama/llama-3.1-70b-instruct">OpenRouter — Llama 3.1 70B
-                                </option>
-                                <option value="perplexity:llama-3.1-sonar-large-128k-online">Perplexity — Sonar Large
-                                </option>
+                                <option value="together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo">Together.ai — Llama 3.1 70B</option>
+                                <option value="together:meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo">Together.ai — Llama 3.1 405B</option>
+                                <option value="openrouter:meta-llama/llama-3.1-70b-instruct">OpenRouter — Llama 3.1 70B</option>
+                                <option value="openrouter:google/gemini-2.0-flash-exp:free">OpenRouter — Gemini 2.0 Flash (Free)</option>
+                                <option value="perplexity:llama-3.1-sonar-large-128k-online">Perplexity — Sonar Large</option>
                             </optgroup>
                             <optgroup label="🧪 Specialized">
+                                <option value="cohere:command-a-03-2025">Cohere — Command A</option>
                                 <option value="cohere:command-r-plus">Cohere — Command R+</option>
                                 <option value="cohere:command-r">Cohere — Command R</option>
-                                <option value="huggingface:meta-llama/Llama-3.1-70B-Instruct">HuggingFace — Llama 3.1
-                                    70B</option>
+                                <option value="huggingface:meta-llama/Llama-3.1-70B-Instruct">HuggingFace — Llama 3.1 70B</option>
                             </optgroup>
-                            <optgroup label="🔧 Custom / Other">
-                                <option value="custom:cloud">Custom — Standard Cloud API</option>
+                            <optgroup label="🔧 Custom / Self-Hosted">
+                                <option value="custom:openai-compat">Custom — OpenAI-Compatible API</option>
                                 <option value="custom:local">Custom — Local / Self-Hosted (Ollama)</option>
-                                <option value="custom:enterprise">Custom — Enterprise Endpoint</option>
+                                <option value="custom:azure">Custom — Azure OpenAI Endpoint</option>
                             </optgroup>
                         </select>
+                        <!-- Provider-specific API key hint -->
+                        <p id="byok-key-hint" class="text-[11px] text-slate-400 leading-snug hidden"></p>
 
                         <!-- Custom Sub-Category Fields -->
                         <div id="byok-custom-fields"
@@ -701,7 +713,7 @@
                                     placeholder="my-model-name">
                             </div>
                             <div id="custom-api-version-group" class="hidden">
-                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Version</label>
+                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Version (Azure only)</label>
                                 <input type="text" id="byok-custom-api-version"
                                     class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
                                     placeholder="2023-05-15">
@@ -714,7 +726,7 @@
                         <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Key</label>
                         <input type="password" id="byok-api-key"
                             class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
-                            placeholder="sk-...">
+                            placeholder="Paste your API key here…">
                     </div>
                 </div>
             </details>

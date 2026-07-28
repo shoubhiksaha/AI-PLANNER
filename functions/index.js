@@ -1919,3 +1919,5 @@ exports.adminGrantCredits = onRequest({ memory: "512MiB", timeoutSeconds: 540, m
         return res.status(500).send({ error: "Failed to grant credits" });
     }
 });
+
+

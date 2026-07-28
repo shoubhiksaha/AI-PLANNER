@@ -23,7 +23,7 @@ const ALLOWED_SYNC_TYPES = new Set(['morning', 'evening', 'night', 'journal', 'v
 const ALLOWED_BYOK_PROVIDERS = new Set([
     'openai', 'anthropic', 'google', 'azure', 'cohere', 'huggingface',
     'groq', 'deepseek', 'mistral', 'perplexity', 'together',
-    'openrouter', 'ollama', 'local'
+    'openrouter', 'ollama', 'local', 'xai'
 ]);
 const ALLOWED_ORIGINS = new Set([
     'https://ai-planner-project-467800.web.app',

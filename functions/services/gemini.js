@@ -218,9 +218,9 @@ async function getPlannerDataFromImages(parsedImages, syncType, byokConfig = nul
 
     // Fallback Strategy: Diverse models to avoid shared quota limits
     const models = [
-        "gemini-2.5-flash-lite", // "Ultra Fast" & Stable
-        "gemini-2.5-flash",      // Balanced & Stable
-        "gemini-2.0-flash-lite", // Previous gen fast model
+        "gemini-3.5-flash-lite", // "Ultra Fast" & Stable
+        "gemini-3.5-flash",      // Balanced & Stable
+        "gemini-3.6-flash",      // Next gen model
         "gemini-flash-latest"    // Fallback
     ];
 
