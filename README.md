@@ -140,6 +140,7 @@ Production deploy on `main` is CI-gated by the workflow in `.github/workflows/ma
 
 ### V10: Future Roadmap
 - **Human-in-the-Loop Review**: Review of extracted files by user with confidence scores and templating (inspired by DocSync AI).
+- **Notion Public OAuth**: Transition from manual API keys to 1-click OAuth integration with automatic database schema generation.
 - **Google Drive Image Fallback**: Store processed images in Google Drive if Notion is not configured.
 - **Agentic AI Pivot**: Transitioning from a static parser to a proactive agent (Clarification Loops, Smart Task Rollover).
 - **Multi-Provider Fallback**: Support for OpenAI, Anthropic, DeepSeek as fallback models.

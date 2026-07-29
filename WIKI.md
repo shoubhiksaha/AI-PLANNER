@@ -494,9 +494,12 @@ A specific sound/animation that triggers when "Brain Dump" is successfully captu
 
 ### 5.3 Product Roadmap
 
-**Human-in-the-Loop Review (Next Up):**
-- **Confidence Scoring & Templating:** Allow users to review extracted files/data before final sync, complete with confidence scores (inspired by DocSync AI workflows).
+**Frictionless Onboarding (Next Up):**
+- **Notion Public OAuth:** Replace the manual "Internal Integration / Database ID" setup with a 1-click Public OAuth flow that automatically generates the required database schema via `POST /v1/databases`.
 - **Google Drive Image Fallback:** If a user has not configured Notion, seamlessly fallback to storing processed journal images in their personal Google Drive.
+
+**Human-in-the-Loop Review:**
+- **Confidence Scoring & Templating:** Allow users to review extracted files/data before final sync, complete with confidence scores (inspired by DocSync AI workflows).
 
 **Brain Dump 2.0:**
 - Background OCR: Transcribe handwritten notes so users can search for "Revenue" and find the image.
