@@ -6,6 +6,7 @@
 /* global BigInt */
 const crypto = require('crypto');
 const net = require('net');
+const { parse: parseCookieHeader } = require('cookie');
 
 // --- CONSTANTS ---
 // Cloud Functions gen 2 rejects uncompressed HTTP requests above 32MB before
@@ -197,6 +198,8 @@ function applyCors(req, res) {
 
     res.set('Access-Control-Allow-Origin', origin);
     res.set('Vary', 'Origin');
+    // Required so browsers send/receive cookies in cross-origin requests
+    res.set('Access-Control-Allow-Credentials', 'true');
     return true;
 }
 
@@ -206,7 +209,8 @@ function handleOptions(req, res) {
         res.status(403).send({ error: "Origin not allowed" });
         return true;
     }
-    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
+    // x-byok-* headers kept for backward-compat with legacy stateless mode
     res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Firebase-AppCheck, x-byok-token, x-byok-provider, x-byok-model, x-byok-baseurl, x-byok-apiversion');
     res.status(204).send('');
     return true;
@@ -488,6 +492,19 @@ function computeDisplayStreak(userData, todayStr) {
     return 0;
 }
 
+/**
+ * Safely parse the Cookie request header into a key→value map.
+ * Uses Node's built-in 'cookie' package (ships with firebase-functions).
+ * Returns an empty object if the header is absent or unparseable.
+ */
+function parseCookies(req) {
+    try {
+        return parseCookieHeader(req.headers.cookie || '');
+    } catch (_) {
+        return {};
+    }
+}
+
 module.exports = {
     // Constants
     MAX_IMAGE_BYTES,
@@ -528,4 +545,5 @@ module.exports = {
     setStandardHeaders,
     applyCors,
     handleOptions,
+    parseCookies,
 };

@@ -320,6 +320,72 @@ describe('index.js Integration Tests', () => {
         });
     });
 
+    describe('byokSession', () => {
+        test('DELETE clears BYOK cookies with Max-Age=0', async () => {
+            req.method = 'DELETE';
+            await myFunctions.byokSession(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            // Should set two expiry cookies
+            const setCookieCall = res.set.mock.calls.find(c => c[0] === 'Set-Cookie');
+            expect(setCookieCall).toBeDefined();
+            const cookies = setCookieCall[1];
+            expect(cookies).toHaveLength(2);
+            expect(cookies[0]).toContain('byok_token=;');
+            expect(cookies[0]).toContain('Max-Age=0');
+            expect(cookies[1]).toContain('byok_meta=;');
+        });
+
+        test('rejects GET with 405', async () => {
+            req.method = 'GET';
+            await myFunctions.byokSession(req, res);
+            expect(res.status).toHaveBeenCalledWith(405);
+        });
+
+        test('rejects missing or invalid body with 400', async () => {
+            req.body = null;
+            await myFunctions.byokSession(req, res);
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: 'Invalid session payload' }));
+        });
+
+        test('sets HttpOnly cookie pair on success — nothing written to Firestore', async () => {
+            req.body = {
+                idToken: 'valid-firebase-id-token',
+                apiKey: 'sk-abcdefg123456789012345',
+                provider: 'openai',
+                modelName: 'gpt-4o'
+            };
+            mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com' });
+
+            await myFunctions.byokSession(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+
+            // Verify cookies were set
+            const setCookieCall = res.set.mock.calls.find(c => c[0] === 'Set-Cookie');
+            expect(setCookieCall).toBeDefined();
+            const [tokenCookie, metaCookie] = setCookieCall[1];
+            expect(tokenCookie).toContain('byok_token=');
+            expect(tokenCookie).toContain('HttpOnly');
+            expect(tokenCookie).toContain('Secure');
+            expect(tokenCookie).toContain('SameSite=Strict');
+            expect(metaCookie).toContain('byok_meta=');
+
+            // CRITICAL: must NOT write to Firestore
+            expect(mockSet).not.toHaveBeenCalled();
+        });
+
+        test('returns 429 when rate limit exceeded', async () => {
+            req.body = { idToken: 'valid-firebase-id-token', apiKey: 'sk-abcdefg123456789012345' };
+            mockVerifyIdToken.mockResolvedValue({ email: 'test@example.com' });
+            mockRateLimitGet.mockResolvedValue({ exists: true, data: () => ({ count: 100, windowStart: Date.now() }) });
+            await myFunctions.byokSession(req, res);
+            expect(res.status).toHaveBeenCalledWith(429);
+            expect(res.set).toHaveBeenCalledWith('Retry-After', expect.any(String));
+        });
+    });
+
     describe('exportUserData', () => {
         test('rejects missing token', async () => {
             await myFunctions.exportUserData(req, res);
