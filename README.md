@@ -139,6 +139,8 @@ Production deploy on `main` is CI-gated by the workflow in `.github/workflows/ma
 - **CI/CD Hardening**: Updated the GitHub Actions pipeline to seamlessly inject the required `KMS_KEY_NAME` environment variables into the non-interactive Firebase deployment routine.
 
 ### V10: Future Roadmap
+- **Human-in-the-Loop Review**: Review of extracted files by user with confidence scores and templating (inspired by DocSync AI).
+- **Google Drive Image Fallback**: Store processed images in Google Drive if Notion is not configured.
 - **Agentic AI Pivot**: Transitioning from a static parser to a proactive agent (Clarification Loops, Smart Task Rollover).
 - **Multi-Provider Fallback**: Support for OpenAI, Anthropic, DeepSeek as fallback models.
 - **CSP Reporting**: Add CSP enforcement violation monitoring endpoint.
