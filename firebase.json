@@ -112,6 +112,10 @@
         "function": "setupBYOK"
       },
       {
+        "source": "/byokSession",
+        "function": "byokSession"
+      },
+      {
         "source": "/createCashfreeOrder",
         "function": "createCashfreeOrder"
       },

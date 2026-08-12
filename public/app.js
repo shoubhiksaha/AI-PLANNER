@@ -388,7 +388,9 @@ function updateGamificationUI(data) {
     const highestStreak = data.highestStreak || 0;
     const streakFreezes = data.streakFreezes || 0;
     const hasKmsBYOK = !!data.geminiKey || !!data.byokConfig || !!data.byokKmsData;
-    const hasStatelessBYOK = !!sessionStorage.getItem('byok_stateless_config') || !!sessionStorage.getItem('byok_stateless_key');
+    // hasStatelessBYOK cannot be detected via sessionStorage anymore (key is HttpOnly).
+    // The server signals BYOK via the synced user data flag or an in-memory session marker.
+    const hasStatelessBYOK = !!sessionStorage.getItem('byok_cookie_session_active');
     const hasBYOK = hasKmsBYOK || hasStatelessBYOK;
 
     const streakBadge = document.getElementById('streak-badge');
@@ -412,34 +414,66 @@ function updateGamificationUI(data) {
     document.getElementById('reports-streak-freezes').textContent = `❄️ ${streakFreezes}`;
 }
 
-// Restore BYOK UI state
-const statelessConfigStr = sessionStorage.getItem('byok_stateless_config');
-if (statelessConfigStr) {
+// Restore BYOK UI state from sessionStorage marker (key itself is in HttpOnly cookie — unreadable by JS)
+// The 'byok_cookie_session_active' flag only tells us a session exists; the actual key is safe in the cookie.
+const byokCookieActive = sessionStorage.getItem('byok_cookie_session_active');
+if (byokCookieActive) {
     try {
-        const config = JSON.parse(statelessConfigStr);
+        const meta = JSON.parse(byokCookieActive);
         const apiKeyInput = document.getElementById('byok-api-key');
         const providerSelect = document.getElementById('byok-provider');
         const statelessRadio = document.querySelector('input[name="byok-mode"][value="stateless"]');
-        if (apiKeyInput && statelessRadio && providerSelect) {
-            apiKeyInput.value = config.apiKey;
-            if (config.customUrl) {
-                providerSelect.value = 'custom:openai-compat';
-                showCustomFields('openai-compat');
-                document.getElementById('byok-custom-url').value = config.customUrl;
-                document.getElementById('byok-custom-model').value = config.modelName;
-            } else {
-                providerSelect.value = `${config.provider}:${config.modelName}`;
-                updateByokKeyHint(config.provider);
-            }
+        
+        // PRIVACY FIRST: We deliberately do NOT put the real API key in the DOM. 
+        // We just show a placeholder to let the user know their session is active.
+        if (apiKeyInput) {
+            apiKeyInput.value = '(session active — key is stored securely in cookie)';
+        }
+        
+        // Restore the dropdowns
+        if (meta.customUrl && providerSelect) {
+            providerSelect.value = 'custom:openai-compat';
+            showCustomFields('openai-compat');
+            document.getElementById('byok-custom-url').value = meta.customUrl || '';
+            document.getElementById('byok-custom-model').value = meta.modelName || '';
+        } else if (providerSelect && meta.provider && meta.modelName) {
+            providerSelect.value = `${meta.provider}:${meta.modelName}`;
+            updateByokKeyHint(meta.provider);
+        }
+        
+        // Ensure the correct radio button is toggled ON
+        if (statelessRadio) {
             statelessRadio.checked = true;
         }
     } catch(e){}
-} else {
-    const statelessKey = sessionStorage.getItem('byok_stateless_key');
-    if (statelessKey) {
-        const apiKeyInput = document.getElementById('byok-api-key');
-        if (apiKeyInput) apiKeyInput.value = statelessKey;
-        document.querySelector('input[name="byok-mode"][value="stateless"]').checked = true;
+}
+
+// Provider-specific API key hints
+const BYOK_KEY_HINTS = {
+    openai:      'Key format: sk-…  (from platform.openai.com/api-keys)',
+    anthropic:   'Key format: sk-ant-…  (from console.anthropic.com)',
+    google:      'Key format: AIza…  (from aistudio.google.com/app/apikey)',
+    xai:         'Key format: xai-…  (from console.x.ai)',
+    cohere:      'Key format: found in dashboard.cohere.com/api-keys',
+    huggingface: 'Key format: hf_…  (from huggingface.co/settings/tokens)',
+    groq:        'Key format: gsk_…  (from console.groq.com/keys)',
+    deepseek:    'Key format: sk-…  (from platform.deepseek.com)',
+    mistral:     'Key format: found in console.mistral.ai/api-keys',
+    perplexity:  'Key format: pplx-…  (from perplexity.ai/settings/api)',
+    together:    'Key format: found in api.together.ai/settings/api-keys',
+    openrouter:  'Key format: sk-or-…  (from openrouter.ai/keys)',
+    azure:       'Key format: your Azure OpenAI resource key (not a Bearer token)',
+};
+
+function updateByokKeyHint(provider) {
+    const hintEl = document.getElementById('byok-key-hint');
+    if (!hintEl) return;
+    const hint = BYOK_KEY_HINTS[provider];
+    if (hint) {
+        hintEl.textContent = '🔑 ' + hint;
+        hintEl.classList.remove('hidden');
+    } else {
+        hintEl.classList.add('hidden');
     }
 }
 
@@ -665,11 +699,31 @@ document.getElementById('save-setup-btn')?.addEventListener('click', async () =>
         if (byokKey) {
             const byokConfig = { apiKey: byokKey, provider, modelName, customUrl, apiVersion };
             if (byokMode === 'stateless') {
-                sessionStorage.setItem('byok_stateless_config', JSON.stringify(byokConfig));
+                // New: use HttpOnly cookie via /byokSession — key never touches sessionStorage.
+                // credentials: 'include' ensures the Set-Cookie response is honoured.
+                const sessionRes = await fetch('/byokSession', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idToken, apiKey: byokKey, provider, modelName, baseUrl: customUrl, apiVersion })
+                });
+                const sessionData = await parseJsonResponse(sessionRes);
+                if (!sessionRes.ok) throw new Error(sessionData.error || 'Failed to establish BYOK cookie session.');
+
+                // Store only non-sensitive metadata in sessionStorage so the UI can show state.
+                // The actual key lives in the HttpOnly cookie and is invisible to JS.
+                const metaOnly = { provider, modelName, ...(customUrl ? { customUrl } : {}) };
+                sessionStorage.setItem('byok_cookie_session_active', JSON.stringify(metaOnly));
+
+                // Clean up any legacy plaintext storage
+                sessionStorage.removeItem('byok_stateless_config');
                 sessionStorage.removeItem('byok_stateless_key');
-                localStorage.removeItem('byok_stateless_config'); // cleanup dangling
-                localStorage.removeItem('byok_stateless_key'); // cleanup dangling
+                localStorage.removeItem('byok_stateless_config');
+                localStorage.removeItem('byok_stateless_key');
             } else if (byokMode === 'kms') {
+                // Clear any active cookie session first
+                await fetch('/byokSession', { method: 'DELETE', credentials: 'include' }).catch(() => {});
+                sessionStorage.removeItem('byok_cookie_session_active');
                 sessionStorage.removeItem('byok_stateless_config');
                 sessionStorage.removeItem('byok_stateless_key');
                 localStorage.removeItem('byok_stateless_config');
@@ -683,6 +737,9 @@ document.getElementById('save-setup-btn')?.addEventListener('click', async () =>
                 if (!byokRes.ok) throw new Error(byokData.error || "Failed to securely envelope BYOK keys.");
             }
         } else {
+            // Clearing BYOK — revoke cookie session and wipe all local state
+            await fetch('/byokSession', { method: 'DELETE', credentials: 'include' }).catch(() => {});
+            sessionStorage.removeItem('byok_cookie_session_active');
             sessionStorage.removeItem('byok_stateless_config');
             sessionStorage.removeItem('byok_stateless_key');
             localStorage.removeItem('byok_stateless_config');
@@ -1111,28 +1168,16 @@ const triggerSync = async (syncType, overrideFiles = null) => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes Frontend Timeout
 
-            // Inject BYOK Stateless Token if it exists
+            // Inject BYOK: cookies are sent automatically by the browser via credentials: 'include'.
+            // No manual header injection needed — the byok_token HttpOnly cookie is invisible to JS
+            // but the browser attaches it automatically on every same-origin or credentialed request.
+            // Legacy X-BYOK-* headers are kept as a server-side fallback only.
             const fetchHeaders = { 'Content-Type': 'application/json' };
-            const storedConfigStr = sessionStorage.getItem('byok_stateless_config');
-            if (storedConfigStr) {
-                try {
-                    const config = JSON.parse(storedConfigStr);
-                    fetchHeaders['X-BYOK-Token'] = config.apiKey;
-                    fetchHeaders['X-BYOK-Provider'] = config.provider;
-                    fetchHeaders['X-BYOK-Model'] = config.modelName;
-                    if (config.customUrl) fetchHeaders['X-BYOK-BaseURL'] = config.customUrl;
-                    if (config.apiVersion) fetchHeaders['X-BYOK-ApiVersion'] = config.apiVersion;
-                } catch(e) {}
-            } else {
-                const storedToken = sessionStorage.getItem('byok_stateless_key');
-                if (storedToken) {
-                    fetchHeaders['X-BYOK-Token'] = storedToken;
-                }
-            }
 
             try {
                 res = await fetch(PRIMARY_API_URL, {
                     method: 'POST',
+                    credentials: 'include', // sends HttpOnly byok_token cookie automatically
                     headers: fetchHeaders,
                     body: JSON.stringify(payload),
                     signal: controller.signal
@@ -1142,6 +1187,7 @@ const triggerSync = async (syncType, overrideFiles = null) => {
                 console.warn("Primary API route failed, retrying direct function URL.", primaryErr);
                 res = await fetch(FALLBACK_API_URL, {
                     method: 'POST',
+                    credentials: 'include', // sends HttpOnly byok_token cookie automatically
                     headers: fetchHeaders,
                     body: JSON.stringify(payload),
                     signal: controller.signal

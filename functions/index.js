@@ -66,6 +66,7 @@ const {
     validateBYOKConfig,
     calendarDayDiff,
     computeDisplayStreak,
+    parseCookies,
 } = require('./utils');
 // Crypto logic and Rate Limits have been extracted to services/
 
@@ -559,6 +560,93 @@ exports.setupBYOK = onRequest({ cors: false, memory: "256MiB", maxInstances: 20 
     }
 });
 
+// --- SETUP ENDPOINT: byokSession (HttpOnly cookie-based stateless BYOK) ---
+// Sets a short-lived, HttpOnly, Secure cookie so the browser auto-sends the
+// BYOK key on every subsequent request without any client-side JS injection.
+// The key is NEVER written to Firestore; it lives only in the browser cookie.
+exports.byokSession = onRequest({ cors: false, memory: "256MiB", maxInstances: 20 }, async (req, res) => {
+    setStandardHeaders(res);
+    if (handleOptions(req, res)) return;
+    if (!applyCors(req, res)) return res.status(403).send({ error: "Origin not allowed" });
+
+    // DELETE = clear the BYOK session cookies (logout)
+    if (req.method === 'DELETE') {
+        const cookieOpts = 'Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0';
+        res.set('Set-Cookie', [
+            `byok_token=; ${cookieOpts}`,
+            `byok_meta=; ${cookieOpts}`,
+        ]);
+        return res.status(200).send({ success: true, text: 'BYOK session cleared.' });
+    }
+
+    if (req.method !== 'POST') {
+        return res.status(405).send({ error: "Method not allowed" });
+    }
+    if (!isJsonRequest(req)) {
+        return res.status(415).send({ error: "Content-Type must be application/json" });
+    }
+    if (!(await enforceAppCheck(req, res))) return;
+
+    const body = req.body || {};
+    const idToken = body.idToken;
+    const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+    const provider = body.provider || 'openai';
+    const modelName = body.modelName || 'gpt-4o';
+    const baseUrl = body.baseUrl;
+    const apiVersion = body.apiVersion;
+
+    if (!idToken || !apiKey) {
+        return res.status(400).send({ error: "Invalid session payload" });
+    }
+
+    try {
+        // Verify Firebase Auth — we need a valid user to rate-limit, but we
+        // deliberately do NOT write anything to Firestore for this path.
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userEmail = getVerifiedEmail(decodedToken);
+        if (!userEmail) return res.status(401).send({ error: "Verified email required" });
+
+        const rl = await checkRateLimit(userEmail, 'byokSession', RATE_LIMIT_DEFAULT);
+        if (!rl.allowed) {
+            res.set('Retry-After', String(Math.ceil(rl.retryAfterMs / 1000)));
+            return res.status(429).send({ error: "Too many requests. Please try again later." });
+        }
+
+        const byokValidation = validateBYOKConfig(
+            { apiKey, provider, modelName, baseUrl, apiVersion },
+            { allowCustomUrl: customBYOKUrlsEnabled() }
+        );
+        if (!byokValidation.valid) {
+            return res.status(400).send({ error: byokValidation.error });
+        }
+        const nc = byokValidation.config;
+
+        // 1-hour session; HttpOnly blocks JS access; Secure enforces HTTPS;
+        // SameSite=Strict blocks CSRF.
+        const maxAge = 60 * 60; // seconds
+        const cookieFlags = `Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
+        const metaPayload = JSON.stringify({
+            provider: nc.provider,
+            modelName: nc.modelName,
+            ...(nc.baseUrl ? { baseUrl: nc.baseUrl } : {}),
+            ...(nc.apiVersion ? { apiVersion: nc.apiVersion } : {})
+        });
+
+        // Set-Cookie headers — key stored in byok_token, metadata in byok_meta.
+        // Neither header is ever logged or written to a database.
+        res.set('Set-Cookie', [
+            `byok_token=${encodeURIComponent(nc.apiKey)}; ${cookieFlags}`,
+            `byok_meta=${encodeURIComponent(metaPayload)}; ${cookieFlags}`,
+        ]);
+
+        logger.info('BYOK HttpOnly cookie session established', { authEmail: userEmail });
+        return res.status(200).send({ success: true, text: 'BYOK session established. Key stored as HttpOnly cookie.' });
+    } catch (err) {
+        logger.error('byokSession error:', err);
+        return res.status(500).send({ error: 'Failed to establish BYOK session.' });
+    }
+});
+
 // --- GDPR: Export User Data ---
 exports.exportUserData = onRequest({ cors: false, memory: "512MiB", maxInstances: 10 }, async (req, res) => {
     setStandardHeaders(res);
@@ -874,13 +962,28 @@ exports.syncPlanner = onRequest({
         
 
         // --- BYOK TRAFFIC COP ---
+        // Priority order:
+        //  1. HttpOnly cookie  (byokSession — XSS-proof, no client injection)
+        //  2. Legacy X-BYOK-* headers (backward-compat with old stateless mode)
+        //  3. KMS-wrapped key from Firestore (setupBYOK persistent mode)
         let byokConfig = null;
         let hasBYOK = false;
-        const statelessKey = req.headers['x-byok-token'];
-        const statelessProvider = req.headers['x-byok-provider'];
-        const statelessModel = req.headers['x-byok-model'];
-        const statelessBaseUrl = req.headers['x-byok-baseurl'];
-        const statelessApiVersion = req.headers['x-byok-apiversion'];
+
+        // 1. Check HttpOnly cookie (set by /byokSession)
+        const cookies = parseCookies(req);
+        const cookieKey = cookies.byok_token ? decodeURIComponent(cookies.byok_token) : null;
+        const cookieMetaRaw = cookies.byok_meta ? decodeURIComponent(cookies.byok_meta) : null;
+        let cookieMeta = {};
+        if (cookieMetaRaw) {
+            try { cookieMeta = JSON.parse(cookieMetaRaw); } catch (_) { /* ignore */ }
+        }
+
+        // 2. Legacy X-BYOK-* header fallback (kept for backward-compat)
+        const statelessKey = cookieKey || req.headers['x-byok-token'];
+        const statelessProvider = cookieMeta.provider || req.headers['x-byok-provider'];
+        const statelessModel = cookieMeta.modelName || req.headers['x-byok-model'];
+        const statelessBaseUrl = cookieMeta.baseUrl || req.headers['x-byok-baseurl'];
+        const statelessApiVersion = cookieMeta.apiVersion || req.headers['x-byok-apiversion'];
 
         if (statelessKey) {
             const statelessValidation = validateBYOKConfig({
@@ -932,7 +1035,15 @@ exports.syncPlanner = onRequest({
                 const updateObj = {};
 
                 if (!docSnap.exists) {
-                    const trialAuditRef = db.collection('trialAudit').doc(uid);
+                    // Privacy-Preserving Trial Abuse Prevention:
+                    // If a user deletes their Auth account, their UID changes. To prevent them from getting
+                    // infinite free trials, we must tie the trial to their identity. 
+                    // To maintain privacy and NOT store their Gmail ID in this audit log, we hash it.
+                    // We use a Pepper (server-side secret) via HMAC so the hash is mathematically irreversible
+                    // against guess-and-match (rainbow table) attacks.
+                    const crypto = require('crypto');
+                    const emailHash = crypto.createHmac('sha256', NOTION_ENCRYPTION_KEY_V2.value()).update(email).digest('hex');
+                    const trialAuditRef = db.collection('trialAudit').doc(emailHash);
                     const trialAuditSnap = await t.get(trialAuditRef);
                     if (!trialAuditSnap.exists) {
                         const trialExpiry = new Date();
@@ -1286,6 +1397,47 @@ exports.syncPlanner = onRequest({
                 await sheets.spreadsheets.values.update({
                     spreadsheetId, range: 'Health!A1:E1', valueInputOption: 'RAW',
                     requestBody: { values: [["Date", "Exercise", "Water", "Sleep", "Energy"]] }
+                });
+
+                // Apply advanced formatting: bold headers, indigo background, freeze top row, and auto-resize columns.
+                // Because we created this file under the drive.file scope, we have full permission to format it.
+                await sheets.spreadsheets.batchUpdate({
+                    spreadsheetId: spreadsheetId,
+                    requestBody: {
+                        requests: [
+                            // 1. Freeze the top row for BOTH sheets (index 0 and 1)
+                            { updateSheetProperties: { properties: { sheetId: 0, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } },
+                            { updateSheetProperties: { properties: { sheetId: 1, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } },
+                            // 2. Format the header row (Bold text, White text, Indigo background)
+                            {
+                                repeatCell: {
+                                    range: { sheetId: 0, startRowIndex: 0, endRowIndex: 1 }, // Expenses
+                                    cell: {
+                                        userEnteredFormat: {
+                                            backgroundColor: { red: 0.25, green: 0.31, blue: 0.71 }, // Indigo
+                                            textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } }
+                                        }
+                                    },
+                                    fields: "userEnteredFormat(backgroundColor,textFormat)"
+                                }
+                            },
+                            {
+                                repeatCell: {
+                                    range: { sheetId: 1, startRowIndex: 0, endRowIndex: 1 }, // Health
+                                    cell: {
+                                        userEnteredFormat: {
+                                            backgroundColor: { red: 0.25, green: 0.31, blue: 0.71 },
+                                            textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } }
+                                        }
+                                    },
+                                    fields: "userEnteredFormat(backgroundColor,textFormat)"
+                                }
+                            },
+                            // 3. Auto-resize columns
+                            { autoResizeDimensions: { dimensions: { sheetId: 0, dimension: "COLUMNS", startIndex: 0, endIndex: 3 } } },
+                            { autoResizeDimensions: { dimensions: { sheetId: 1, dimension: "COLUMNS", startIndex: 0, endIndex: 5 } } }
+                        ]
+                    }
                 });
 
                 await userRef.set({ spreadsheetId }, { merge: true });
