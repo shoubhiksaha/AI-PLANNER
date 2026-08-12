@@ -422,8 +422,15 @@ if (byokCookieActive) {
         const meta = JSON.parse(byokCookieActive);
         const apiKeyInput = document.getElementById('byok-api-key');
         const providerSelect = document.getElementById('byok-provider');
-        const cookieRadio = document.querySelector('input[name="byok-mode"][value="stateless"]');
-        if (apiKeyInput) apiKeyInput.value = '(session active — key is stored securely in cookie)';
+        const statelessRadio = document.querySelector('input[name="byok-mode"][value="stateless"]');
+        
+        // PRIVACY FIRST: We deliberately do NOT put the real API key in the DOM. 
+        // We just show a placeholder to let the user know their session is active.
+        if (apiKeyInput) {
+            apiKeyInput.value = '(session active — key is stored securely in cookie)';
+        }
+        
+        // Restore the dropdowns
         if (meta.customUrl && providerSelect) {
             providerSelect.value = 'custom:openai-compat';
             showCustomFields('openai-compat');
@@ -433,8 +440,41 @@ if (byokCookieActive) {
             providerSelect.value = `${meta.provider}:${meta.modelName}`;
             updateByokKeyHint(meta.provider);
         }
-        if (cookieRadio) cookieRadio.checked = true;
+        
+        // Ensure the correct radio button is toggled ON
+        if (statelessRadio) {
+            statelessRadio.checked = true;
+        }
     } catch(e){}
+}
+
+// Provider-specific API key hints
+const BYOK_KEY_HINTS = {
+    openai:      'Key format: sk-…  (from platform.openai.com/api-keys)',
+    anthropic:   'Key format: sk-ant-…  (from console.anthropic.com)',
+    google:      'Key format: AIza…  (from aistudio.google.com/app/apikey)',
+    xai:         'Key format: xai-…  (from console.x.ai)',
+    cohere:      'Key format: found in dashboard.cohere.com/api-keys',
+    huggingface: 'Key format: hf_…  (from huggingface.co/settings/tokens)',
+    groq:        'Key format: gsk_…  (from console.groq.com/keys)',
+    deepseek:    'Key format: sk-…  (from platform.deepseek.com)',
+    mistral:     'Key format: found in console.mistral.ai/api-keys',
+    perplexity:  'Key format: pplx-…  (from perplexity.ai/settings/api)',
+    together:    'Key format: found in api.together.ai/settings/api-keys',
+    openrouter:  'Key format: sk-or-…  (from openrouter.ai/keys)',
+    azure:       'Key format: your Azure OpenAI resource key (not a Bearer token)',
+};
+
+function updateByokKeyHint(provider) {
+    const hintEl = document.getElementById('byok-key-hint');
+    if (!hintEl) return;
+    const hint = BYOK_KEY_HINTS[provider];
+    if (hint) {
+        hintEl.textContent = '🔑 ' + hint;
+        hintEl.classList.remove('hidden');
+    } else {
+        hintEl.classList.add('hidden');
+    }
 }
 
 // Provider-specific API key hints
