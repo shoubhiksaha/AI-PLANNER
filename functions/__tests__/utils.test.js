@@ -406,7 +406,7 @@ describe('handleOptions', () => {
         const { req, res, headers, getStatus } = createMockReqRes('OPTIONS', 'https://ai-planner-project-467800.web.app');
         expect(handleOptions(req, res)).toBe(true);
         expect(getStatus()).toBe(204);
-        expect(headers['Access-Control-Allow-Methods']).toBe('POST, OPTIONS');
+        expect(headers['Access-Control-Allow-Methods']).toBe('POST, DELETE, OPTIONS');
         expect(headers['Access-Control-Allow-Headers']).toContain('x-byok-token');
         expect(headers['Access-Control-Allow-Headers']).toContain('Authorization');
     });
