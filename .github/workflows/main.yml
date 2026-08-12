@@ -191,14 +191,8 @@ jobs:
         echo "KMS_KEY_NAME=projects/ai-planner-project-467800/locations/global/keyRings/byok-ring/cryptoKeys/byok-key" >> .env
         echo "CASHFREE_APP_ID=${{ secrets.CASHFREE_APP_ID }}" >> .env
         echo "CASHFREE_SECRET_KEY=${{ secrets.CASHFREE_SECRET_KEY }}" >> .env
-        echo "CASHFREE_ENVIRONMENT=${{ secrets.CASHFREE_ENVIRONMENT }}" >> .env
-        echo "CASHFREE_NOTIFY_URL=${{ secrets.CASHFREE_NOTIFY_URL }}" >> .env
-        echo "PAYMENTS_ENABLED=${{ secrets.PAYMENTS_ENABLED }}" >> .env
         echo "NOTION_ENCRYPTION_KEY=${{ secrets.NOTION_ENCRYPTION_KEY }}" >> .env
         echo "NOTION_ENCRYPTION_KEY_V2=${{ secrets.NOTION_ENCRYPTION_KEY_V2 }}" >> .env
-        echo "ALLOW_CUSTOM_BYOK_URLS=${{ secrets.ALLOW_CUSTOM_BYOK_URLS }}" >> .env
-        echo "CREDITS_GRANT_TOKEN=${{ secrets.CREDITS_GRANT_TOKEN }}" >> .env
-        echo "REQUIRE_APP_CHECK=${{ secrets.REQUIRE_APP_CHECK }}" >> .env
 
     - name: Deploy Hosting + Functions
       run: firebase deploy --project ai-planner-project-467800
