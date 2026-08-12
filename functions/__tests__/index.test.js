@@ -97,6 +97,7 @@ const mockTasksPatch = jest.fn();
 const mockSheetsCreate = jest.fn();
 const mockSheetsUpdate = jest.fn();
 const mockSheetsAppend = jest.fn();
+const mockSheetsBatchUpdate = jest.fn();
 const mockSheetsGet = jest.fn().mockResolvedValue({ data: { values: [] } });
 
 jest.mock('googleapis', () => ({
@@ -110,6 +111,7 @@ jest.mock('googleapis', () => ({
         sheets: jest.fn(() => ({
             spreadsheets: {
                 create: mockSheetsCreate,
+                batchUpdate: mockSheetsBatchUpdate,
                 values: { update: mockSheetsUpdate, append: mockSheetsAppend, get: mockSheetsGet }
             }
         }))
