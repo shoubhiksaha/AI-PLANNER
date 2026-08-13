@@ -477,34 +477,7 @@ function updateByokKeyHint(provider) {
     }
 }
 
-// Provider-specific API key hints
-const BYOK_KEY_HINTS = {
-    openai:      'Key format: sk-…  (from platform.openai.com/api-keys)',
-    anthropic:   'Key format: sk-ant-…  (from console.anthropic.com)',
-    google:      'Key format: AIza…  (from aistudio.google.com/app/apikey)',
-    xai:         'Key format: xai-…  (from console.x.ai)',
-    cohere:      'Key format: found in dashboard.cohere.com/api-keys',
-    huggingface: 'Key format: hf_…  (from huggingface.co/settings/tokens)',
-    groq:        'Key format: gsk_…  (from console.groq.com/keys)',
-    deepseek:    'Key format: sk-…  (from platform.deepseek.com)',
-    mistral:     'Key format: found in console.mistral.ai/api-keys',
-    perplexity:  'Key format: pplx-…  (from perplexity.ai/settings/api)',
-    together:    'Key format: found in api.together.ai/settings/api-keys',
-    openrouter:  'Key format: sk-or-…  (from openrouter.ai/keys)',
-    azure:       'Key format: your Azure OpenAI resource key (not a Bearer token)',
-};
 
-function updateByokKeyHint(provider) {
-    const hintEl = document.getElementById('byok-key-hint');
-    if (!hintEl) return;
-    const hint = BYOK_KEY_HINTS[provider];
-    if (hint) {
-        hintEl.textContent = '🔑 ' + hint;
-        hintEl.classList.remove('hidden');
-    } else {
-        hintEl.classList.add('hidden');
-    }
-}
 
 // Custom provider sub-category field logic
 function showCustomFields(subType) {
