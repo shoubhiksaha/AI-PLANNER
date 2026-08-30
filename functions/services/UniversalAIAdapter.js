@@ -267,7 +267,8 @@ class UniversalAIAdapter {
 
         // OpenRouter requires site-identification headers per their policy.
         if (this.provider === 'openrouter') {
-            headers["HTTP-Referer"] = "https://ai-planner-project-467800.web.app";
+            const hostingUrl = process.env.APP_HOSTING_URL || (process.env.GCLOUD_PROJECT ? `https://${process.env.GCLOUD_PROJECT}.web.app` : "https://planner.analogdigital.tech");
+            headers["HTTP-Referer"] = hostingUrl;
             headers["X-Title"] = "AI Planner";
         }
 

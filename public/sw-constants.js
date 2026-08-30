@@ -16,6 +16,7 @@
         '/manifest.json',
         '/tailwind.css',
         '/app-helpers.js',
+        '/env-config.js',
         '/app.js',
         '/streak-utils.js',
         '/sw-register.js',

@@ -26,7 +26,7 @@ self.addEventListener('fetch', (event) => {
     if (url.origin !== self.location.origin) return;
 
     // Network-first for core scripts + app shell
-    const isAppScript = path.endsWith('/app.js') || path.endsWith('/app-helpers.js') || path.endsWith('/sw-register.js') || path.endsWith('/streak-utils.js');
+    const isAppScript = path.endsWith('/app.js') || path.endsWith('/app-helpers.js') || path.endsWith('/env-config.js') || path.endsWith('/sw-register.js') || path.endsWith('/streak-utils.js');
     const isAppShell = path === '/' || path.endsWith('.html');
 
     if (isAppScript || isAppShell) {

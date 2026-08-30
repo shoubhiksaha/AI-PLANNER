@@ -1399,4 +1399,50 @@ describe('index.js Integration Tests', () => {
         });
     });
 
+    describe('adminGrantCredits', () => {
+        test('rejects request with missing or invalid token with 403', async () => {
+            req.method = 'POST';
+            req.headers['x-credits-grant-token'] = 'wrong-token';
+            req.body = { confirm: 'GRANT-CREDITS-25', amount: 25 };
+
+            await myFunctions.adminGrantCredits(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(res.send).toHaveBeenCalledWith({ error: "Forbidden" });
+        });
+
+        test('rejects request with invalid confirm phrase with 400', async () => {
+            req.method = 'POST';
+            req.headers['x-credits-grant-token'] = 'test-encryption-key-for-jest';
+            req.body = { confirm: 'WRONG-PHRASE', amount: 25 };
+
+            await myFunctions.adminGrantCredits(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.send).toHaveBeenCalledWith({ error: "Invalid confirm phrase" });
+        });
+
+        test('rejects request with invalid amount with 400', async () => {
+            req.method = 'POST';
+            req.headers['x-credits-grant-token'] = 'test-encryption-key-for-jest';
+            req.body = { confirm: 'GRANT-CREDITS-25', amount: -5 };
+
+            await myFunctions.adminGrantCredits(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.send).toHaveBeenCalledWith({ error: "Invalid amount" });
+        });
+
+        test('successfully executes credit grant when token and payload are valid', async () => {
+            req.method = 'POST';
+            req.headers['x-credits-grant-token'] = 'test-encryption-key-for-jest';
+            req.body = { confirm: 'GRANT-CREDITS-25', amount: 25, dryRun: true };
+
+            await myFunctions.adminGrantCredits(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+        });
+    });
+
 });

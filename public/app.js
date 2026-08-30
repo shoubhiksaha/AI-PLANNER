@@ -6,15 +6,12 @@ import { computeDisplayStreak, normalizeSyncDateStr } from './streak-utils.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
 
-// FIREBASE CONFIG
-const firebaseConfig = {
-    apiKey: "AIzaSyBRVEfF58gL3yxQ2UY-_lMgftPnFrZ0_T0",
-    authDomain: "planner.analogdigital.tech",
-    projectId: "ai-planner-project-467800",
-    storageBucket: "ai-planner-project-467800.firebasestorage.app",
-    messagingSenderId: "195957114195",
-    appId: "1:195957114195:web:06bf15f172f55d2ff3cda6"
-};
+// FIREBASE CONFIG (Loaded from window.__ENV_CONFIG__)
+const firebaseConfig = (typeof window !== 'undefined' && window.__ENV_CONFIG__) ? window.__ENV_CONFIG__ : null;
+if (!firebaseConfig || !firebaseConfig.projectId) {
+    console.error("FATAL: window.__ENV_CONFIG__ is missing or invalid. Ensure env-config.js is loaded.");
+    throw new Error("Missing or invalid runtime environment configuration.");
+}
 
 const app = initializeApp(firebaseConfig);
 const isNativeWebView = !!window.ReactNativeWebView;
@@ -1119,7 +1116,7 @@ const triggerSync = async (syncType, overrideFiles = null) => {
 
     try {
         const clientTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
-        const { PRIMARY_API_URL, FALLBACK_API_URL } = getApiUrls(window.location.hostname, 'syncPlanner');
+        const { PRIMARY_API_URL } = getApiUrls(window.location.hostname, 'syncPlanner');
         let res;
         let data;
         let attempt = 0;
@@ -1156,16 +1153,10 @@ const triggerSync = async (syncType, overrideFiles = null) => {
                     signal: controller.signal
                 });
                 data = await parseJsonResponse(res);
-            } catch (primaryErr) {
-                console.warn("Primary API route failed, retrying direct function URL.", primaryErr);
-                res = await fetch(FALLBACK_API_URL, {
-                    method: 'POST',
-                    credentials: 'include', // sends HttpOnly byok_token cookie automatically
-                    headers: fetchHeaders,
-                    body: JSON.stringify(payload),
-                    signal: controller.signal
-                });
-                data = await parseJsonResponse(res);
+            } catch (fetchErr) {
+                console.error("API request failed:", fetchErr);
+                clearTimeout(timeoutId);
+                throw fetchErr;
             }
 
             clearTimeout(timeoutId);

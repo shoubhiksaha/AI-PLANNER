@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "ai-planner-project-467800"
+    "default": "ai-planner-staging",
+    "staging": "ai-planner-staging",
+    "production": "ai-planner-project-467800"
   }
 }

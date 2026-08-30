@@ -521,12 +521,16 @@ describe('Constants', () => {
         expect(ALLOWED_SYNC_TYPES.size).toBe(5);
     });
 
-    test('ALLOWED_ORIGINS contains production and dev origins', () => {
+    test('ALLOWED_ORIGINS contains production, staging and dev origins', () => {
         expect(ALLOWED_ORIGINS.has('https://ai-planner-project-467800.web.app')).toBe(true);
         expect(ALLOWED_ORIGINS.has('https://ai-planner-project-467800.firebaseapp.com')).toBe(true);
+        expect(ALLOWED_ORIGINS.has('https://ai-planner-staging.web.app')).toBe(true);
+        expect(ALLOWED_ORIGINS.has('https://ai-planner-staging.firebaseapp.com')).toBe(true);
+        expect(ALLOWED_ORIGINS.has('https://planner.analogdigital.tech')).toBe(true);
+        expect(ALLOWED_ORIGINS.has('https://staging-planner.analogdigital.tech')).toBe(true);
         expect(ALLOWED_ORIGINS.has('http://localhost:5000')).toBe(true);
         expect(ALLOWED_ORIGINS.has('http://127.0.0.1:5000')).toBe(true);
-        expect(ALLOWED_ORIGINS.size).toBe(5);
+        expect(ALLOWED_ORIGINS.size).toBe(10);
     });
 });
 
