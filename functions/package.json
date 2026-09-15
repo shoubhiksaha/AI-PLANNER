@@ -16,14 +16,14 @@
     "grant:credits:apply": "node scripts/grant_credits.js --amount=25 --apply --confirm=GRANT-CREDITS-25"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
     "@google-cloud/kms": "^5.4.0",
     "@google/generative-ai": "^0.24.1",
     "@notionhq/client": "^5.6.0",
-    "firebase-functions": "^7.1.1",
+    "firebase-functions": "^7.4.0",
     "googleapis": "^169.0.0",
     "node-fetch": "^2.7.0",
     "notion-multipart-uploader": "^2.1.4"
