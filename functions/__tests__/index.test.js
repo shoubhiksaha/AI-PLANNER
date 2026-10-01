@@ -35,14 +35,15 @@ const mockCollection = jest.fn((name) => {
     if (name === 'rateLimits') return {
         doc: mockRateLimitDoc,
         where: jest.fn().mockReturnThis(),
-        get: jest.fn().mockResolvedValue({ docs: [], forEach: jest.fn() })
+        get: jest.fn().mockResolvedValue({ empty: true, docs: [], forEach: jest.fn() })
     };
     return {
         doc: mockDoc,
         where: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
-        get: jest.fn().mockResolvedValue({ docs: [], forEach: jest.fn() })
+        startAfter: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue({ empty: true, docs: [], forEach: jest.fn() })
     };
 });
 
@@ -187,6 +188,12 @@ describe('index.js Integration Tests', () => {
             ok: true,
             json: async () => ({})
         });
+    });
+
+    afterEach(() => {
+        if (global.gc) {
+            global.gc();
+        }
     });
 
     describe('setupNotion', () => {

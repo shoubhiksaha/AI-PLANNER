@@ -25,7 +25,7 @@ function decryptStoredNotionKey(text) {
     try {
         if (text.startsWith('v2:')) {
             const val = _decryptGcmWithKey(text, getCryptoKey());
-            if (val) return { value: val, needsMigration: false };
+            return { value: val, needsMigration: false };
         }
         // Plaintext key (not encrypted yet)
         return { value: text, needsMigration: true };

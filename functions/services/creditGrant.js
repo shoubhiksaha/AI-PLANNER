@@ -37,7 +37,7 @@ async function grantBoosterCreditsToAllUsers(db, amount, { dryRun = false } = {}
         if (lastDoc) query = query.startAfter(lastDoc);
 
         const snap = await query.get();
-        if (snap.empty) break;
+        if (!snap || snap.empty || !snap.docs || snap.docs.length === 0) break;
 
         for (const doc of snap.docs) {
             stats.usersScanned += 1;
