@@ -85,6 +85,8 @@ jobs:
         run: npm ci
       - name: Run Unit & Integration Tests
         working-directory: ./functions
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npm test
 
   # ─────────────────────────────────────────────

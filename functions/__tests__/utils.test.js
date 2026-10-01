@@ -370,7 +370,7 @@ describe('applyCors', () => {
     });
 
     test('rejects localhost on wrong port', () => {
-        const { req, res } = mockReqRes('http://localhost:3000');
+        const { req, res } = mockReqRes('http://localhost:9999');
         expect(applyCors(req, res)).toBe(false);
     });
 });

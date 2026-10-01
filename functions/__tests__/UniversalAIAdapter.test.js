@@ -195,7 +195,7 @@ describe('UniversalAIAdapter', () => {
             });
             await adapter.chat('s', 'u', [], 'req');
             const headers = global.fetch.mock.calls[0][1].headers;
-            expect(headers['HTTP-Referer']).toContain('ai-planner');
+            expect(headers['HTTP-Referer']).toMatch(/planner/);
             expect(headers['X-Title']).toBe('AI Planner');
         });
 

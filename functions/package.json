@@ -7,7 +7,7 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "test": "jest --verbose --testPathIgnorePatterns=firestore.rules.test.js",
+    "test": "jest --runInBand --verbose --testPathIgnorePatterns=firestore.rules.test.js",
     "test:rules": "firebase emulators:exec --only firestore \"jest __tests__/firestore.rules.test.js --verbose\"",
     "lint": "eslint .",
     "migrate:security:dry-run": "node scripts/security_migration.js --dry-run",
