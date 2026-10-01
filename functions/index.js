@@ -44,7 +44,6 @@ admin.initializeApp({
 
 // --- CONFIGURATION ---
 const { defineSecret, defineString } = require('firebase-functions/params');
-const NOTION_ENCRYPTION_KEY = defineSecret('NOTION_ENCRYPTION_KEY');
 const NOTION_ENCRYPTION_KEY_V2 = defineSecret('NOTION_ENCRYPTION_KEY_V2');
 const ALLOW_CUSTOM_BYOK_URLS = defineString('ALLOW_CUSTOM_BYOK_URLS', { default: 'false' });
 const CREDITS_GRANT_TOKEN = defineSecret('CREDITS_GRANT_TOKEN');
@@ -444,7 +443,7 @@ exports.setupNotion = onRequest({
     cors: false,
     memory: "256MiB",
     maxInstances: 20,
-    secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2]
+    secrets: [NOTION_ENCRYPTION_KEY_V2]
 }, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
@@ -849,7 +848,7 @@ exports.syncPlanner = onRequest({
     timeoutSeconds: 300,
     maxInstances: 20,
     concurrency: 10,
-    secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2, GEMINI_API_KEY]
+    secrets: [NOTION_ENCRYPTION_KEY_V2, GEMINI_API_KEY]
 }, async (req, res) => {
     // Generate Request ID for structured logging and trace tying
     const requestId = require('crypto').randomUUID();
