@@ -5,26 +5,18 @@ const { uploadToNotion } = require("notion-multipart-uploader");
 const {
     deriveKey,
     encrypt: _encryptWithKey,
-    decryptCurrentGcm: _decryptGcmWithKey,
-    decryptLegacyCbc: _decryptCbcWithKey
+    decryptCurrentGcm: _decryptGcmWithKey
 } = require('../utils');
 
-const NOTION_ENCRYPTION_KEY = defineSecret('NOTION_ENCRYPTION_KEY');
 const NOTION_ENCRYPTION_KEY_V2 = defineSecret('NOTION_ENCRYPTION_KEY_V2');
 
-function getCryptoKeyNew() {
-    const v2 = NOTION_ENCRYPTION_KEY_V2.value();
-    if (v2) return deriveKey(v2);
-    return deriveKey(NOTION_ENCRYPTION_KEY.value());
-}
-
-function getCryptoKeyOld() {
-    return deriveKey(NOTION_ENCRYPTION_KEY.value());
+function getCryptoKey() {
+    return deriveKey(NOTION_ENCRYPTION_KEY_V2.value());
 }
 
 function encrypt(text) {
     if (!text) return text;
-    return _encryptWithKey(text, getCryptoKeyNew());
+    return _encryptWithKey(text, getCryptoKey());
 }
 
 function decryptStoredNotionKey(text) {
@@ -32,21 +24,10 @@ function decryptStoredNotionKey(text) {
 
     try {
         if (text.startsWith('v2:')) {
-            const val = _decryptGcmWithKey(text, getCryptoKeyNew());
-            if (val) return { value: val, needsMigration: false };
+            const val = _decryptGcmWithKey(text, getCryptoKey());
+            return { value: val, needsMigration: false };
         }
-    } catch (e) { /* ignore */ }
-
-    try {
-        const oldKey = getCryptoKeyOld();
-        if (text.startsWith('v2:')) {
-            const val = _decryptGcmWithKey(text, oldKey);
-            return { value: val, needsMigration: !!val };
-        }
-        if (text.includes(':')) {
-            const val = _decryptCbcWithKey(text, oldKey);
-            return { value: val, needsMigration: !!val };
-        }
+        // Plaintext key (not encrypted yet)
         return { value: text, needsMigration: true };
     } catch (e) {
         logger.error("Decryption failed for stored Notion key.", { error: e.message });

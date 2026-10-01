@@ -8,7 +8,7 @@
  * Keep this file free of DOM/SW APIs — constants only.
  */
 (function (exports) {
-    exports.CACHE_NAME = 'ai-planner-v43';
+    exports.CACHE_NAME = 'ai-planner-v44';
 
     exports.ASSETS_TO_CACHE = [
         '/',
@@ -16,6 +16,7 @@
         '/manifest.json',
         '/tailwind.css',
         '/app-helpers.js',
+        '/env-config.js',
         '/app.js',
         '/streak-utils.js',
         '/sw-register.js',

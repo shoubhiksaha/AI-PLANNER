@@ -35,14 +35,15 @@ const mockCollection = jest.fn((name) => {
     if (name === 'rateLimits') return {
         doc: mockRateLimitDoc,
         where: jest.fn().mockReturnThis(),
-        get: jest.fn().mockResolvedValue({ docs: [], forEach: jest.fn() })
+        get: jest.fn().mockResolvedValue({ empty: true, docs: [], forEach: jest.fn() })
     };
     return {
         doc: mockDoc,
         where: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
-        get: jest.fn().mockResolvedValue({ docs: [], forEach: jest.fn() })
+        startAfter: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue({ empty: true, docs: [], forEach: jest.fn() })
     };
 });
 
@@ -187,6 +188,12 @@ describe('index.js Integration Tests', () => {
             ok: true,
             json: async () => ({})
         });
+    });
+
+    afterEach(() => {
+        if (global.gc) {
+            global.gc();
+        }
     });
 
     describe('setupNotion', () => {
@@ -1396,6 +1403,52 @@ describe('index.js Integration Tests', () => {
 
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.send).toHaveBeenCalledWith({ success: true });
+        });
+    });
+
+    describe('adminGrantCredits', () => {
+        test('rejects request with missing or invalid token with 403', async () => {
+            req.method = 'POST';
+            req.headers['x-credits-grant-token'] = 'wrong-token';
+            req.body = { confirm: 'GRANT-CREDITS-25', amount: 25 };
+
+            await myFunctions.adminGrantCredits(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(res.send).toHaveBeenCalledWith({ error: "Forbidden" });
+        });
+
+        test('rejects request with invalid confirm phrase with 400', async () => {
+            req.method = 'POST';
+            req.headers['x-credits-grant-token'] = 'test-encryption-key-for-jest';
+            req.body = { confirm: 'WRONG-PHRASE', amount: 25 };
+
+            await myFunctions.adminGrantCredits(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.send).toHaveBeenCalledWith({ error: "Invalid confirm phrase" });
+        });
+
+        test('rejects request with invalid amount with 400', async () => {
+            req.method = 'POST';
+            req.headers['x-credits-grant-token'] = 'test-encryption-key-for-jest';
+            req.body = { confirm: 'GRANT-CREDITS-25', amount: -5 };
+
+            await myFunctions.adminGrantCredits(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.send).toHaveBeenCalledWith({ error: "Invalid amount" });
+        });
+
+        test('successfully executes credit grant when token and payload are valid', async () => {
+            req.method = 'POST';
+            req.headers['x-credits-grant-token'] = 'test-encryption-key-for-jest';
+            req.body = { confirm: 'GRANT-CREDITS-25', amount: 25, dryRun: true };
+
+            await myFunctions.adminGrantCredits(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
         });
     });
 

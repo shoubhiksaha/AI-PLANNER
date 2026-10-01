@@ -1,0 +1,103 @@
+name: Production Deployment Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1: Deploy to Production Firebase Project
+  # ─────────────────────────────────────────────
+  deploy_production:
+    name: Deploy to Production Project
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Guard unresolved merge conflicts
+        run: bash ./scripts/check-conflict-markers.sh
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install Functions Dependencies
+        working-directory: ./functions
+        run: npm ci
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools@13
+
+      # Authenticate via OIDC Workload Identity if configured, or fallback to FIREBASE_TOKEN
+      - name: Authenticate to Google Cloud (OIDC)
+        if: ${{ vars.WIF_PROVIDER != '' && vars.SA_EMAIL != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.SA_EMAIL }}
+
+      - name: Generate Runtime env-config.js (Production)
+        run: |
+          cat > public/env-config.js << 'EOF'
+          window.__ENV_CONFIG__ = {
+            apiKey: "${{ vars.FIREBASE_API_KEY || 'AIzaSyBRVEfF58gL3yxQ2UY-_lMgftPnFrZ0_T0' }}",
+            authDomain: "planner.analogdigital.tech",
+            projectId: "ai-planner-project-467800",
+            storageBucket: "ai-planner-project-467800.firebasestorage.app",
+            messagingSenderId: "${{ vars.FIREBASE_MESSAGING_SENDER_ID || '195957114195' }}",
+            appId: "${{ vars.FIREBASE_APP_ID || '1:195957114195:web:06bf15f172f55d2ff3cda6' }}",
+            environment: "production",
+            hostingUrl: "https://planner.analogdigital.tech"
+          };
+          EOF
+
+      - name: Deploy Hosting, Rules, and Functions to Production
+        run: |
+          if [ -n "${{ secrets.FIREBASE_TOKEN }}" ]; then
+            firebase deploy --project ai-planner-project-467800 --token "${{ secrets.FIREBASE_TOKEN }}"
+          else
+            firebase deploy --project ai-planner-project-467800
+          fi
+
+  # ─────────────────────────────────────────────
+  # JOB 2: Post-Deploy Production Verification
+  # ─────────────────────────────────────────────
+  post_deploy_smoke:
+    name: Post-Deploy Production Verification
+    runs-on: ubuntu-latest
+    needs: [deploy_production]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install E2E Dependencies
+        working-directory: ./e2e
+        run: npm ci
+      - name: Install Chromium
+        working-directory: ./e2e
+        run: npx playwright install --with-deps chromium
+      - name: Run Production Smoke Test
+        working-directory: ./e2e
+        env:
+          PRODUCTION_URL: https://planner.analogdigital.tech
+          CI: true
+        run: |
+          npx playwright test tests/staging-contract.spec.js --project=chromium

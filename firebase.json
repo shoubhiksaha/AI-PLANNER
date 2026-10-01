@@ -46,7 +46,7 @@
           },
           {
             "key": "Content-Security-Policy",
-            "value": "default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com https://accounts.google.com https://sdk.cashfree.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.run.app wss://*.firebaseio.com https://*.cashfree.com; frame-src 'self' https://ai-planner-project-467800.firebaseapp.com https://ai-planner-project-467800.web.app https://accounts.google.com https://planner.analogdigital.tech https://*.cashfree.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+            "value": "default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com https://accounts.google.com https://sdk.cashfree.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://*.run.app wss://*.firebaseio.com https://*.cashfree.com; frame-src 'self' https://ai-planner-project-467800.firebaseapp.com https://ai-planner-project-467800.web.app https://ai-planner-staging.firebaseapp.com https://ai-planner-staging.web.app https://accounts.google.com https://planner.analogdigital.tech https://staging-planner.analogdigital.tech https://*.cashfree.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
           }
         ]
       },

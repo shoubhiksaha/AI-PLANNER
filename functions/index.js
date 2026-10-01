@@ -36,18 +36,19 @@ const {
     getCashfreeOrder
 } = require('./services/cashfree');
 
-// Initialize Firebase Admin with explicit bucket
+// Initialize Firebase Admin with project-scoped default storage bucket
+const activeProjectId = process.env.GCLOUD_PROJECT || 'ai-planner-staging';
 admin.initializeApp({
-    storageBucket: "ai-planner-project-467800.firebasestorage.app"
+    storageBucket: `${activeProjectId}.firebasestorage.app`
 });
 
 // --- CONFIGURATION ---
 const { defineSecret, defineString } = require('firebase-functions/params');
-const NOTION_ENCRYPTION_KEY = defineSecret('NOTION_ENCRYPTION_KEY');
 const NOTION_ENCRYPTION_KEY_V2 = defineSecret('NOTION_ENCRYPTION_KEY_V2');
 const ALLOW_CUSTOM_BYOK_URLS = defineString('ALLOW_CUSTOM_BYOK_URLS', { default: 'false' });
-const CREDITS_GRANT_TOKEN = defineString('CREDITS_GRANT_TOKEN', { default: '' });
+const CREDITS_GRANT_TOKEN = defineSecret('CREDITS_GRANT_TOKEN');
 const REQUIRE_APP_CHECK = defineString('REQUIRE_APP_CHECK', { default: 'false' });
+const APP_HOSTING_URL = defineString('APP_HOSTING_URL', { default: '' });
 
 // --- UTILITIES (shared with tests) ---
 const {
@@ -442,7 +443,7 @@ exports.setupNotion = onRequest({
     cors: false,
     memory: "256MiB",
     maxInstances: 20,
-    secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2]
+    secrets: [NOTION_ENCRYPTION_KEY_V2]
 }, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
@@ -847,7 +848,7 @@ exports.syncPlanner = onRequest({
     timeoutSeconds: 300,
     maxInstances: 20,
     concurrency: 10,
-    secrets: [NOTION_ENCRYPTION_KEY, NOTION_ENCRYPTION_KEY_V2, GEMINI_API_KEY]
+    secrets: [NOTION_ENCRYPTION_KEY_V2, GEMINI_API_KEY]
 }, async (req, res) => {
     // Generate Request ID for structured logging and trace tying
     const requestId = require('crypto').randomUUID();
@@ -2039,7 +2040,12 @@ exports.cashfreeWebhook = onRequest({
     }
 });
 
-exports.adminGrantCredits = onRequest({ memory: "512MiB", timeoutSeconds: 540, maxInstances: 1 }, async (req, res) => {
+exports.adminGrantCredits = onRequest({
+    memory: "512MiB",
+    timeoutSeconds: 540,
+    maxInstances: 1,
+    secrets: [CREDITS_GRANT_TOKEN]
+}, async (req, res) => {
     setStandardHeaders(res);
     if (handleOptions(req, res)) return;
     if (req.method !== 'POST') return res.status(405).send({ error: "Method not allowed" });

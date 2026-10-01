@@ -19,20 +19,15 @@
     };
 
     exports.getApiUrls = (hostname, endpoint = 'syncPlanner') => {
+        const projectId = (typeof window !== 'undefined' && window.__ENV_CONFIG__ && window.__ENV_CONFIG__.projectId)
+            ? window.__ENV_CONFIG__.projectId
+            : 'ai-planner-staging';
+
         const PRIMARY_API_URL = (hostname === "localhost" || hostname === "127.0.0.1")
-            ? `http://127.0.0.1:5001/ai-planner-project-467800/us-central1/${endpoint}`
+            ? `http://127.0.0.1:5001/${projectId}/us-central1/${endpoint}`
             : `/${endpoint}`;
 
-        const FALLBACK_MAP = {
-            'syncPlanner': 'https://syncplanner-xeh5qbnxga-uc.a.run.app',
-            'setupNotion': 'https://setupnotion-xeh5qbnxga-uc.a.run.app',
-            'exportUserData': 'https://exportuserdata-xeh5qbnxga-uc.a.run.app',
-            'deleteUserAccount': 'https://deleteuseraccount-xeh5qbnxga-uc.a.run.app',
-            'logClientError': 'https://logclienterror-xeh5qbnxga-uc.a.run.app'
-        };
-
-        const FALLBACK_API_URL = FALLBACK_MAP[endpoint] || `https://${endpoint.toLowerCase()}-xeh5qbnxga-uc.a.run.app`;
-        return { PRIMARY_API_URL, FALLBACK_API_URL };
+        return { PRIMARY_API_URL, FALLBACK_API_URL: PRIMARY_API_URL };
     };
 
     exports.applyTheme = (mode, htmlElement, themeBtn, themeItems, matchMediaDark) => {

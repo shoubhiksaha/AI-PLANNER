@@ -160,11 +160,10 @@ describe('showActionableError', () => {
 });
 
 describe('API URL Resolution', () => {
-    test('uses localhost URL for local development', () => {
-        const { PRIMARY_API_URL, FALLBACK_API_URL } = getApiUrls('localhost');
+    test('uses localhost URL with projectId for local development', () => {
+        const { PRIMARY_API_URL } = getApiUrls('localhost');
         expect(PRIMARY_API_URL).toContain('127.0.0.1:5001');
         expect(PRIMARY_API_URL).toContain('syncPlanner');
-        expect(FALLBACK_API_URL).toContain('run.app');
     });
 
     test('uses localhost URL for 127.0.0.1', () => {
@@ -172,21 +171,17 @@ describe('API URL Resolution', () => {
         expect(PRIMARY_API_URL).toContain('127.0.0.1:5001');
     });
 
-    test('uses relative URL for production', () => {
+    test('uses relative URL for production or staging hostnames', () => {
         const { PRIMARY_API_URL } = getApiUrls('ai-planner-project-467800.web.app');
         expect(PRIMARY_API_URL).toBe('/syncPlanner');
+
+        const staging = getApiUrls('staging-planner.analogdigital.tech');
+        expect(staging.PRIMARY_API_URL).toBe('/syncPlanner');
     });
 
-    test('uses relative URL for any non-local hostname', () => {
-        const { PRIMARY_API_URL } = getApiUrls('example.com');
+    test('uses relative URL for any custom domain', () => {
+        const { PRIMARY_API_URL } = getApiUrls('planner.analogdigital.tech');
         expect(PRIMARY_API_URL).toBe('/syncPlanner');
-    });
-
-    test('fallback URL is always the direct Cloud Run URL', () => {
-        const prod = getApiUrls('ai-planner-project-467800.web.app');
-        const local = getApiUrls('localhost');
-        expect(prod.FALLBACK_API_URL).toBe(local.FALLBACK_API_URL);
-        expect(prod.FALLBACK_API_URL).toContain('run.app');
     });
 });
 
@@ -312,37 +307,23 @@ describe('triggerSync URL fallback logic', () => {
         global.fetch = originalFetch;
     });
 
-    test('primary URL is used first, fallback on failure', async () => {
+    test('primary URL failure throws cleanly without leaking tokens cross-domain', async () => {
         const callLog = [];
 
         global.fetch = jest.fn(async (url) => {
             callLog.push(url);
-            if (url.includes('/syncPlanner')) {
-                throw new Error('Network timeout');
-            }
-            // Fallback succeeds
-            return {
-                ok: true,
-                status: 200,
-                text: async () => JSON.stringify({ text: "Success" }),
-                headers: { get: () => 'application/json' }
-            };
+            throw new Error('Network timeout');
         });
 
-        const { PRIMARY_API_URL, FALLBACK_API_URL } = getApiUrls('ai-planner-project-467800.web.app');
+        const { PRIMARY_API_URL } = getApiUrls('staging-planner.analogdigital.tech');
 
-        let data;
-        try {
+        await expect(async () => {
             const res = await fetch(PRIMARY_API_URL, { method: 'POST' });
-            data = await parseJsonResponse(res);
-        } catch (primaryErr) {
-            const res = await fetch(FALLBACK_API_URL, { method: 'POST' });
-            data = await parseJsonResponse(res);
-        }
+            await parseJsonResponse(res);
+        }).rejects.toThrow('Network timeout');
 
+        expect(callLog).toHaveLength(1);
         expect(callLog[0]).toBe('/syncPlanner');
-        expect(callLog[1]).toContain('run.app');
-        expect(data).toEqual({ text: "Success" });
     });
 
     test('primary URL succeeds without fallback', async () => {

@@ -6,15 +6,12 @@ import { computeDisplayStreak, normalizeSyncDateStr } from './streak-utils.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, GoogleAuthProvider, signInWithCredential, signInWithPopup, signInWithRedirect, getRedirectResult, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
 
-// FIREBASE CONFIG
-const firebaseConfig = {
-    apiKey: "AIzaSyBRVEfF58gL3yxQ2UY-_lMgftPnFrZ0_T0",
-    authDomain: "planner.analogdigital.tech",
-    projectId: "ai-planner-project-467800",
-    storageBucket: "ai-planner-project-467800.firebasestorage.app",
-    messagingSenderId: "195957114195",
-    appId: "1:195957114195:web:06bf15f172f55d2ff3cda6"
-};
+// FIREBASE CONFIG (Loaded from window.__ENV_CONFIG__)
+const firebaseConfig = (typeof window !== 'undefined' && window.__ENV_CONFIG__) ? window.__ENV_CONFIG__ : null;
+if (!firebaseConfig || !firebaseConfig.projectId) {
+    console.error("FATAL: window.__ENV_CONFIG__ is missing or invalid. Ensure env-config.js is loaded.");
+    throw new Error("Missing or invalid runtime environment configuration.");
+}
 
 const app = initializeApp(firebaseConfig);
 const isNativeWebView = !!window.ReactNativeWebView;
@@ -477,34 +474,7 @@ function updateByokKeyHint(provider) {
     }
 }
 
-// Provider-specific API key hints
-const BYOK_KEY_HINTS = {
-    openai:      'Key format: sk-…  (from platform.openai.com/api-keys)',
-    anthropic:   'Key format: sk-ant-…  (from console.anthropic.com)',
-    google:      'Key format: AIza…  (from aistudio.google.com/app/apikey)',
-    xai:         'Key format: xai-…  (from console.x.ai)',
-    cohere:      'Key format: found in dashboard.cohere.com/api-keys',
-    huggingface: 'Key format: hf_…  (from huggingface.co/settings/tokens)',
-    groq:        'Key format: gsk_…  (from console.groq.com/keys)',
-    deepseek:    'Key format: sk-…  (from platform.deepseek.com)',
-    mistral:     'Key format: found in console.mistral.ai/api-keys',
-    perplexity:  'Key format: pplx-…  (from perplexity.ai/settings/api)',
-    together:    'Key format: found in api.together.ai/settings/api-keys',
-    openrouter:  'Key format: sk-or-…  (from openrouter.ai/keys)',
-    azure:       'Key format: your Azure OpenAI resource key (not a Bearer token)',
-};
 
-function updateByokKeyHint(provider) {
-    const hintEl = document.getElementById('byok-key-hint');
-    if (!hintEl) return;
-    const hint = BYOK_KEY_HINTS[provider];
-    if (hint) {
-        hintEl.textContent = '🔑 ' + hint;
-        hintEl.classList.remove('hidden');
-    } else {
-        hintEl.classList.add('hidden');
-    }
-}
 
 // Custom provider sub-category field logic
 function showCustomFields(subType) {
@@ -1146,7 +1116,7 @@ const triggerSync = async (syncType, overrideFiles = null) => {
 
     try {
         const clientTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
-        const { PRIMARY_API_URL, FALLBACK_API_URL } = getApiUrls(window.location.hostname, 'syncPlanner');
+        const { PRIMARY_API_URL } = getApiUrls(window.location.hostname, 'syncPlanner');
         let res;
         let data;
         let attempt = 0;
@@ -1183,16 +1153,10 @@ const triggerSync = async (syncType, overrideFiles = null) => {
                     signal: controller.signal
                 });
                 data = await parseJsonResponse(res);
-            } catch (primaryErr) {
-                console.warn("Primary API route failed, retrying direct function URL.", primaryErr);
-                res = await fetch(FALLBACK_API_URL, {
-                    method: 'POST',
-                    credentials: 'include', // sends HttpOnly byok_token cookie automatically
-                    headers: fetchHeaders,
-                    body: JSON.stringify(payload),
-                    signal: controller.signal
-                });
-                data = await parseJsonResponse(res);
+            } catch (fetchErr) {
+                console.error("API request failed:", fetchErr);
+                clearTimeout(timeoutId);
+                throw fetchErr;
             }
 
             clearTimeout(timeoutId);

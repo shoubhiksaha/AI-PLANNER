@@ -29,10 +29,31 @@ const ALLOWED_BYOK_PROVIDERS = new Set([
 const ALLOWED_ORIGINS = new Set([
     'https://ai-planner-project-467800.web.app',
     'https://ai-planner-project-467800.firebaseapp.com',
+    'https://ai-planner-staging.web.app',
+    'https://ai-planner-staging.firebaseapp.com',
     'http://localhost:5000',
     'http://127.0.0.1:5000',
-    'https://planner.analogdigital.tech'
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://planner.analogdigital.tech',
+    'https://staging-planner.analogdigital.tech'
 ]);
+
+function isOriginAllowed(origin) {
+    if (!origin || typeof origin !== 'string') return false;
+    if (ALLOWED_ORIGINS.has(origin)) return true;
+
+    const projectId = process.env.GCLOUD_PROJECT;
+    if (projectId) {
+        if (origin === `https://${projectId}.web.app` || origin === `https://${projectId}.firebaseapp.com`) {
+            return true;
+        }
+    }
+    if (process.env.APP_HOSTING_URL && origin === process.env.APP_HOSTING_URL) {
+        return true;
+    }
+    return false;
+}
 const ALGORITHM = 'aes-256-gcm';
 const LEGACY_ALGORITHM = 'aes-256-cbc';
 const RATE_LIMIT_SYNC = 10;       // syncPlanner: 10 requests per window
@@ -194,7 +215,7 @@ function setStandardHeaders(res) {
 function applyCors(req, res) {
     const origin = req.headers.origin;
     if (!origin) return true;
-    if (!ALLOWED_ORIGINS.has(origin)) return false;
+    if (!isOriginAllowed(origin)) return false;
 
     res.set('Access-Control-Allow-Origin', origin);
     res.set('Vary', 'Origin');
@@ -544,6 +565,7 @@ module.exports = {
     // HTTP
     setStandardHeaders,
     applyCors,
+    isOriginAllowed,
     handleOptions,
     parseCookies,
 };
