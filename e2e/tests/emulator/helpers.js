@@ -101,6 +101,9 @@ async function openDrawerItem(page, action) {
     }
     await page.click('#hamburger-btn');
     await page.click(`[data-drawer="${action}"]`);
+    // The drawer (and its dark overlay) is hidden by a 300 ms timer after closing;
+    // wait for it so nothing measures or clicks through the overlay.
+    await expect(page.locator('#drawer-container')).toBeHidden();
 }
 
 module.exports = {

@@ -66,7 +66,6 @@ test.describe('Browser quality', () => {
 
         for (const action of ['history', 'reports', 'settings']) {
             await h.openDrawerItem(page, action);
-            await page.waitForTimeout(350); // drawer close animation
             expect(await seriousViolations(page), `axe on ${action}`).toEqual([]);
             expect(await noHorizontalOverflow(page), `overflow on ${action}`).toBe(true);
         }
