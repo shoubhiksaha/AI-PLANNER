@@ -22,6 +22,10 @@ async function noHorizontalOverflow(page) {
 }
 
 test.describe('Browser quality', () => {
+    // Accessibility checks run with reduced motion (which the app honours), so axe never
+    // measures a view mid-fade on slower CI machines. Motion itself is covered by the other specs.
+    test.use({ reducedMotion: 'reduce' });
+
     test.beforeEach(async ({ request }) => {
         await h.resetEmulators(request);
     });
