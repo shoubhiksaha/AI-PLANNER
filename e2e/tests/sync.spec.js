@@ -2,58 +2,65 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('E2E Sync Flow', () => {
 
-  test('login -> upload -> morning/night/journal sync -> verify side effects', async ({ page, baseURL }) => {
+  test('login -> upload -> morning sync -> verify side effects', async ({ page, baseURL }) => {
     const targetUrl = baseURL || 'http://localhost:3000';
     const isCI = !!process.env.CI;
+    const pageErrors = [];
+    page.on('pageerror', err => pageErrors.push(err.message));
 
-    // In CI without a Firebase Emulator, run a smoke test only
-    // The full E2E flow requires a running Firebase Auth Emulator
+    // In CI without a Firebase Emulator, run a smoke test only.
     if (isCI) {
         await page.goto(targetUrl);
         await expect(page.locator('#login-btn')).toBeVisible({ timeout: 15000 });
-        
-        // Verify critical UI elements are present and the app didn't crash
-        await expect(page.locator('#app-title, h1, .app-header')).toBeVisible({ timeout: 5000 }).catch(() => {
-            // App title selector may vary, just ensure page loaded
-        });
-
-        console.log("✅ CI Smoke test passed: App loaded, login button visible, no JS crashes.");
+        await expect(page.locator('h1')).toHaveText('AI Planner');
+        await expect(page.locator('#view-dashboard')).toBeHidden();
+        expect(pageErrors).toEqual([]);
         return;
     }
 
-    // --- FULL E2E FLOW (Local Emulator Only) ---
-    await page.goto(targetUrl + '/?emulator=true');
-
-    // Bypass real Google OAuth and login directly with emulator test endpoint
-    await page.evaluate(async () => {
-        if (!window.e2eLogin) throw new Error("e2eLogin not exposed. Check emulator flag.");
-        await window.e2eLogin('playwright@aiplanner.local', 'testpassword123');
-    });
-
-    // Verify Login Side Effect (Dashboard visible)
-    await expect(page.locator('[data-drawer="logout"], #btn-logout')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('#btn-morning')).toBeVisible();
-
-    // Intercept the API to validate UI side effects without triggering real backend charges/quota
+    // --- FULL E2E FLOW (Local Auth Emulator only) ---
+    await page.route('**/updateProfile', route => route.fulfill({ status: 200, contentType: 'application/json', json: { success: true } }));
+    await page.route('**/refreshStaleStreak', route => route.fulfill({ status: 200, contentType: 'application/json', json: { success: true } }));
+    const syncBodies = [];
     await page.route('**/syncPlanner', async route => {
-        const json = { text: "Planner synced successfully to E2E Mock Backend!" };
-        await route.fulfill({ json, status: 200, contentType: 'application/json' });
+        syncBodies.push(route.request().postDataJSON());
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            json: { text: 'Planner synced successfully to E2E Mock Backend!', counts: { events: 2, tasks: 3 }, creditsCharged: 1, warnings: [] },
+        });
     });
 
-    // Upload a real 1x1 transparent PNG to pass browser image parsing rules
+    await page.goto(targetUrl + '/?emulator=true');
+    await page.waitForFunction(() => typeof window.e2eLogin === 'function');
+    await page.evaluate(() => window.e2eLogin('playwright@aiplanner.local', 'testpassword123'));
+    await expect(page.locator('#view-dashboard')).toBeVisible({ timeout: 10000 });
+
+    // Provide a Google access token through the C7 bridge (no OAuth popup in tests).
+    await page.evaluate(() => window.mobileUpdateAccessToken('e2e-google-token'));
+
     const base64Image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-    const buffer = Buffer.from(base64Image, 'base64');
-    await page.setInputFiles('#drop-zone input.upload-input[accept="image/*"]:not([capture])', {
+    await page.locator('#drop-zone input.upload-input:not([capture])').first().setInputFiles({
         name: 'test-planner.png',
         mimeType: 'image/png',
-        buffer
+        buffer: Buffer.from(base64Image, 'base64'),
     });
+    await expect(page.locator('#btn-morning')).toBeEnabled();
 
-    // Click specific sync mode
+    const syncResponse = page.waitForResponse('**/syncPlanner');
     await page.click('#btn-morning');
+    await syncResponse;
 
-    // Verify Side Effects
-    await expect(page.locator('#status-area')).toContainText('Planner synced successfully to E2E Mock Backend!', { timeout: 15000 });
+    const card = page.locator('#status-area .status-card');
+    await expect(card).toHaveAttribute('data-tone', 'success');
+    await expect(card).toContainText('2 events · 3 tasks added');
+    await expect(card).toContainText('1 credit used');
+    expect(syncBodies).toHaveLength(1);
+    expect(syncBodies[0].syncType).toBe('morning');
+    expect(syncBodies[0].googleToken).toBe('e2e-google-token');
+    expect(syncBodies[0].clientRequestId).toMatch(/^[0-9a-f-]{36}$/);
+    // B-16: photos are cleared only after a successful sync
+    await expect(page.locator('#btn-sync-primary')).toBeDisabled();
   });
 
 });

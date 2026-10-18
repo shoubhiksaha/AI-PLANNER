@@ -77,12 +77,18 @@ if [[ -n "${SLACK_CHANNEL_ID}" && -n "${SLACK_AUTH_TOKEN}" ]]; then
         --format "value(name)" | head -n1 || true)"
 
     if [[ -z "${existing_slack_channel}" ]]; then
+        # Pass the Slack token through a private temp file, never on the command line
+        # (argv is visible to other processes and shell history).
+        slack_tmp="$(umask 077; mktemp)"
+        cat > "${slack_tmp}" <<SLACK_JSON
+{"type": "slack", "displayName": "AI Planner Alerts Slack (${SLACK_CHANNEL_ID})",
+ "labels": {"channel_name": "${SLACK_CHANNEL_ID}", "auth_token": "${SLACK_AUTH_TOKEN}"}}
+SLACK_JSON
         existing_slack_channel="$(gcloud monitoring channels create \
             --project "${PROJECT_ID}" \
-            --display-name "AI Planner Alerts Slack (${SLACK_CHANNEL_ID})" \
-            --type slack \
-            --channel-labels "channel_name=${SLACK_CHANNEL_ID},auth_token=${SLACK_AUTH_TOKEN}" \
+            --channel-content-from-file "${slack_tmp}" \
             --format "value(name)")"
+        rm -f "${slack_tmp}"
         echo "Created Slack channel: ${existing_slack_channel}"
     else
         echo "Reusing existing Slack channel: ${existing_slack_channel}"
@@ -97,6 +103,14 @@ if (( ${#CHANNEL_IDS[@]} > 0 )); then
 fi
 
 echo "Notification channels: ${CHANNEL_JSON}"
+if [[ "${CHANNEL_JSON}" == "[]" ]]; then
+    echo "WARNING: no notification channels configured; alerts would fire silently."
+    echo "         Set EMAIL_ADDRESS, SLACK_CHANNEL_ID/SLACK_AUTH_TOKEN or NOTIFICATION_CHANNELS."
+    if [[ "${ALLOW_SILENT_ALERTS:-}" != "true" ]]; then
+        echo "         Re-run with ALLOW_SILENT_ALERTS=true to continue anyway."
+        exit 1
+    fi
+fi
 
 ensure_log_metric() {
     local name="$1"
@@ -129,16 +143,17 @@ upsert_policy() {
         --format "value(name)" | head -n1 || true)"
 
     if [[ -n "${existing_id}" ]]; then
-        gcloud monitoring policies delete "${existing_id}" \
+        # Update in place: no alerting gap and the policy keeps its ID.
+        gcloud monitoring policies update "${existing_id}" \
             --project "${PROJECT_ID}" \
-            --quiet >/dev/null
-        echo "Deleted existing policy: ${display_name}"
+            --policy-from-file "${json_path}" >/dev/null
+        echo "Updated policy: ${display_name}"
+    else
+        gcloud monitoring policies create \
+            --project "${PROJECT_ID}" \
+            --policy-from-file "${json_path}" >/dev/null
+        echo "Created policy: ${display_name}"
     fi
-
-    gcloud monitoring policies create \
-        --project "${PROJECT_ID}" \
-        --policy-from-file "${json_path}" >/dev/null
-    echo "Created policy: ${display_name}"
 }
 
 gemini_filter="(resource.type=\"cloud_run_revision\" OR resource.type=\"cloud_function\") AND \
@@ -148,6 +163,15 @@ gemini_filter="(resource.type=\"cloud_run_revision\" OR resource.type=\"cloud_fu
 notion_filter="(resource.type=\"cloud_run_revision\" OR resource.type=\"cloud_function\") AND \
 (resource.labels.service_name=~\"${SERVICE_REGEX}\" OR resource.labels.function_name=\"syncPlanner\") AND \
 (textPayload:\"Notion Sync Error\" OR textPayload:\"Notion Direct Upload Error\" OR jsonPayload.message:\"Notion Sync Error\" OR jsonPayload.message:\"Notion Direct Upload Error\")"
+
+payment_filter="(resource.type=\"cloud_run_revision\" OR resource.type=\"cloud_function\") AND \
+(resource.labels.service_name=~\"(cashfreewebhook|createcashfreeorder).*\" OR resource.labels.function_name=~\"(cashfreeWebhook|createCashfreeOrder)\") AND \
+severity>=ERROR"
+
+ensure_log_metric \
+    "ai_planner_payment_errors_count" \
+    "Count of ERROR logs from the Cashfree order and webhook functions." \
+    "${payment_filter}"
 
 ensure_log_metric \
     "ai_planner_gemini_failures_count" \
@@ -314,6 +338,45 @@ cat > "${tmp_dir}/p2_latency.json" <<EOF
 }
 EOF
 
+cat > "${tmp_dir}/p1_payment_errors.json" <<EOF
+{
+  "displayName": "AI Planner P1 - payment errors",
+  "documentation": {
+    "content": "P1 alert: the Cashfree order or webhook function logged errors. Paid users may not have received credits. Check cashfree_orders with status REVIEW_REQUIRED and the Cashfree dashboard.",
+    "mimeType": "text/markdown"
+  },
+  "combiner": "OR",
+  "enabled": true,
+  "notificationChannels": ${CHANNEL_JSON},
+  "alertStrategy": {
+    "autoClose": "3600s"
+  },
+  "conditions": [
+    {
+      "displayName": "Any payment error in 5 minutes",
+      "conditionThreshold": {
+        "filter": "metric.type=\\"logging.googleapis.com/user/ai_planner_payment_errors_count\\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": []
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
+        "duration": "0s",
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ]
+}
+EOF
+
+upsert_policy "AI Planner P1 - payment errors" "${tmp_dir}/p1_payment_errors.json"
 upsert_policy "AI Planner P1 - syncPlanner 5xx spike" "${tmp_dir}/p1_5xx_spike.json"
 upsert_policy "AI Planner P2 - Gemini failure burst" "${tmp_dir}/p2_gemini_failures.json"
 upsert_policy "AI Planner P2 - Notion failure burst" "${tmp_dir}/p2_notion_failures.json"
@@ -321,6 +384,8 @@ upsert_policy "AI Planner P2 - syncPlanner p95 latency high" "${tmp_dir}/p2_late
 
 echo ""
 echo "Done. Created/updated:"
+echo "- log metric: ai_planner_payment_errors_count"
+echo "- policy: AI Planner P1 - payment errors"
 echo "- log metric: ai_planner_gemini_failures_count"
 echo "- log metric: ai_planner_notion_failures_count"
 echo "- policy: AI Planner P1 - syncPlanner 5xx spike"

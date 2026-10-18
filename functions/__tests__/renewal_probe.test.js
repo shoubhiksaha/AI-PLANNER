@@ -1,3 +1,9 @@
+// firebase-admin/auth and /app-check load ESM-only jose, which Jest cannot require; not needed here.
+jest.mock('firebase-admin/auth', () => ({ getAuth: jest.fn() }));
+jest.mock('firebase-admin/app-check', () => ({ getAppCheck: jest.fn() }));
+// firebase-functions' HTTPS module pulls in firebase-admin/auth (ESM-only jose) — not needed here.
+jest.mock('firebase-functions/v2/https', () => ({ onRequest: (_opts, handler) => handler }));
+
 process.env.NODE_ENV = 'test';
 const { needsTierCreditRenewal, calendarDayDiff } = require('../index');
 

@@ -6,7 +6,6 @@
 /* global BigInt */
 const crypto = require('crypto');
 const net = require('net');
-const { parse: parseCookieHeader } = require('cookie');
 
 // --- CONSTANTS ---
 // Cloud Functions gen 2 rejects uncompressed HTTP requests above 32MB before
@@ -16,8 +15,10 @@ const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES = 24 * 1024 * 1024;
 const MAX_REQUEST_BODY_BYTES = 28 * 1024 * 1024;
 const MAX_BASE64_LENGTH = Math.ceil(MAX_IMAGE_BYTES * 1.37);
+// image/heic and image/heif are accepted only as real HEIF containers and are
+// converted to JPEG server-side before any AI/Notion step (sync/images.js).
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
-    'image/jpeg', 'image/png', 'image/webp',
+    'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
     'audio/webm', 'audio/mp4', 'audio/m4a', 'audio/ogg', 'audio/mp3', 'audio/aac', 'audio/wav', 'audio/mpeg'
 ]);
 const ALLOWED_SYNC_TYPES = new Set(['morning', 'evening', 'night', 'journal', 'voice_note']);
@@ -26,33 +27,56 @@ const ALLOWED_BYOK_PROVIDERS = new Set([
     'groq', 'deepseek', 'mistral', 'perplexity', 'together',
     'openrouter', 'ollama', 'local', 'xai'
 ]);
-const ALLOWED_ORIGINS = new Set([
-    'https://ai-planner-project-467800.web.app',
-    'https://ai-planner-project-467800.firebaseapp.com',
-    'https://ai-planner-staging.web.app',
-    'https://ai-planner-staging.firebaseapp.com',
+// Origins allowed per environment (round 3: one project, two environments).
+// No cross-acceptance: staging never accepts the production web app and vice versa.
+const ENVIRONMENT_ORIGINS = Object.freeze({
+    production: Object.freeze([
+        'https://planner.analogdigital.tech',
+        'https://ai-planner-project-467800.web.app',
+        'https://ai-planner-project-467800.firebaseapp.com',
+    ]),
+    staging: Object.freeze([
+        'https://staging-planner.analogdigital.tech',
+        'https://ai-planner-staging.web.app',
+        'https://ai-planner-staging.firebaseapp.com',
+    ]),
+    emulator: Object.freeze([]),
+});
+// Local development origins (incl. the emulator Hosting port 5050), never in production.
+const DEV_ORIGINS = new Set([
     'http://localhost:5000',
     'http://127.0.0.1:5000',
+    'http://localhost:5050',
+    'http://127.0.0.1:5050',
     'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'https://planner.analogdigital.tech',
-    'https://staging-planner.analogdigital.tech'
+    'http://127.0.0.1:3000'
 ]);
+const CORS_ALLOWED_HEADERS = [
+    'Content-Type',
+    'X-Firebase-AppCheck',
+    'X-BYOK-Token',
+    'X-BYOK-Provider',
+    'X-BYOK-Model',
+    'X-BYOK-BaseUrl',
+    'X-BYOK-ApiVersion'
+].join(', ');
 
-function isOriginAllowed(origin) {
+/** Current APP_ENVIRONMENT ('production' when missing or unknown); see params.js. */
+function currentAppEnvironment() {
+    return require('./params').appEnvironment();
+}
+
+/** Origins accepted in `environment` (unknown → production list). */
+function allowedOriginsFor(environment) {
+    const env = Object.prototype.hasOwnProperty.call(ENVIRONMENT_ORIGINS, environment) ? environment : 'production';
+    const origins = new Set(ENVIRONMENT_ORIGINS[env]);
+    if (env !== 'production') DEV_ORIGINS.forEach(o => origins.add(o));
+    return origins;
+}
+
+function isOriginAllowed(origin, environment = currentAppEnvironment()) {
     if (!origin || typeof origin !== 'string') return false;
-    if (ALLOWED_ORIGINS.has(origin)) return true;
-
-    const projectId = process.env.GCLOUD_PROJECT;
-    if (projectId) {
-        if (origin === `https://${projectId}.web.app` || origin === `https://${projectId}.firebaseapp.com`) {
-            return true;
-        }
-    }
-    if (process.env.APP_HOSTING_URL && origin === process.env.APP_HOSTING_URL) {
-        return true;
-    }
-    return false;
+    return allowedOriginsFor(environment).has(origin);
 }
 const ALGORITHM = 'aes-256-gcm';
 const LEGACY_ALGORITHM = 'aes-256-cbc';
@@ -82,15 +106,58 @@ function decryptCurrentGcm(payload, key) {
     const iv = Buffer.from(textParts[1], 'hex');
     const encryptedText = Buffer.from(textParts[2], 'hex');
     const authTag = Buffer.from(textParts[3], 'hex');
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    if (authTag.length !== 16) throw new Error('Invalid authentication tag length');
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, { authTagLength: 16 });
     decipher.setAuthTag(authTag);
     const decrypted = Buffer.concat([decipher.update(encryptedText), decipher.final()]);
     return decrypted.toString('utf8');
 }
 
+// --- KEY BINDING (S-16) ---
+// Stored secrets are bound to their owner: the AES-GCM additional authenticated
+// data names the user and the field, so a ciphertext copied into another user's
+// document (or into another field) fails authentication instead of decrypting.
+const KEY_BINDING_FIELDS = new Set(['notionKey', 'byok']);
+// Notion keys carry a `v3:` prefix; KMS-wrapped BYOK payloads carry `version: 3`.
+const KEY_BINDING_VERSION = 3;
+
+function keyBindingAad(email, field) {
+    if (typeof email !== 'string' || !email.trim()) throw new Error('Key binding requires the owner email');
+    if (!KEY_BINDING_FIELDS.has(field)) throw new Error(`Unknown key binding field: ${field}`);
+    return Buffer.from(`aiplanner:v3:${email}:${field}`, 'utf8');
+}
+
+/** AES-256-GCM with AAD → `v3:iv:cipher:tag` (hex). */
+function encryptBound(text, key, aad) {
+    if (!text) return text;
+    if (!Buffer.isBuffer(aad) || aad.length === 0) throw new Error('Missing key binding AAD');
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv, { authTagLength: 16 });
+    cipher.setAAD(aad);
+    const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+    return `v3:${iv.toString('hex')}:${encrypted.toString('hex')}:${authTag.toString('hex')}`;
+}
+
+/** Decrypt a `v3:` payload with its AAD; null when the payload is not v3. Throws on authentication failure. */
+function decryptBoundGcm(payload, key, aad) {
+    const textParts = payload.split(':');
+    if (textParts.length !== 4 || textParts[0] !== 'v3') return null;
+    if (!Buffer.isBuffer(aad) || aad.length === 0) throw new Error('Missing key binding AAD');
+    const iv = Buffer.from(textParts[1], 'hex');
+    const encryptedText = Buffer.from(textParts[2], 'hex');
+    const authTag = Buffer.from(textParts[3], 'hex');
+    if (authTag.length !== 16) throw new Error('Invalid authentication tag length');
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, { authTagLength: 16 });
+    decipher.setAAD(aad);
+    decipher.setAuthTag(authTag);
+    return Buffer.concat([decipher.update(encryptedText), decipher.final()]).toString('utf8');
+}
+
 function decryptLegacyCbc(payload, key) {
     const textParts = payload.split(':');
     if (textParts.length !== 2) return null;
+    if (!/^[0-9a-f]{32}$/i.test(textParts[0]) || !/^(?:[0-9a-f]{32})+$/i.test(textParts[1])) return null;
 
     const iv = Buffer.from(textParts[0], 'hex');
     const encryptedText = Buffer.from(textParts[1], 'hex');
@@ -100,14 +167,28 @@ function decryptLegacyCbc(payload, key) {
     return decrypted;
 }
 
-function decryptStoredNotionKey(text, key) {
+/**
+ * Single source of truth for decoding a stored Notion key.
+ *  - `v3:iv:cipher:tag`  → AES-256-GCM bound to the owner (`aad`, see keyBindingAad)
+ *  - `v2:iv:cipher:tag`  → AES-256-GCM without binding; re-encrypted as v3 by the caller
+ *  - `iv:cipher` (hex)   → legacy AES-256-CBC; decrypted, then re-encrypted by the caller
+ *  - anything else containing ':' is treated as corrupt ciphertext (never sent to Notion)
+ *  - no ':' at all       → legacy plaintext token (Notion tokens never contain ':')
+ * Returns { value, needsMigration } where value is null when decryption failed.
+ */
+function decryptStoredNotionKey(text, key, aad = null) {
     if (!text) return text;
     try {
+        if (text.startsWith('v3:')) {
+            if (!aad) return { value: null, needsMigration: false };
+            return { value: decryptBoundGcm(text, key, aad), needsMigration: false };
+        }
         if (text.startsWith('v2:')) {
-            return { value: decryptCurrentGcm(text, key), needsMigration: false };
+            return { value: decryptCurrentGcm(text, key), needsMigration: true };
         }
         if (text.includes(':')) {
-            return { value: decryptLegacyCbc(text, key), needsMigration: true };
+            const value = decryptLegacyCbc(text, key);
+            return value ? { value, needsMigration: true } : { value: null, needsMigration: false };
         }
         // Plaintext leftover from older storage style.
         return { value: text, needsMigration: true };
@@ -120,6 +201,27 @@ function decryptStoredNotionKey(text, key) {
 function sanitizeSyncType(value) {
     const syncType = (typeof value === 'string' ? value : 'morning').toLowerCase();
     return syncType === 'night' ? 'evening' : syncType;
+}
+
+const HEIF_MIME_TYPES = new Set(['image/heic', 'image/heif']);
+const HEIF_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'mif1', 'msf1']);
+
+/**
+ * True when `bytes` start with an ISO-BMFF `ftyp` box whose major brand or one
+ * of whose compatible brands is a HEIF brand (C8). Anything else claiming to be
+ * HEIC (an MP4, a renamed JPEG, random bytes) is rejected.
+ */
+function isHeifContainer(bytes) {
+    if (!Buffer.isBuffer(bytes) || bytes.length < 16) return false;
+    if (bytes.subarray(4, 8).toString('latin1') !== 'ftyp') return false;
+    const boxSize = bytes.readUInt32BE(0);
+    if (boxSize < 16 || boxSize > bytes.length || boxSize > 4096) return false;
+    if (HEIF_BRANDS.has(bytes.subarray(8, 12).toString('latin1'))) return true;
+    // bytes 12-15 are minor_version; compatible brands follow in 4-byte steps.
+    for (let offset = 16; offset + 4 <= boxSize; offset += 4) {
+        if (HEIF_BRANDS.has(bytes.subarray(offset, offset + 4).toString('latin1'))) return true;
+    }
+    return false;
 }
 
 function hasExpectedImageSignature(mimeType, bytes) {
@@ -135,6 +237,9 @@ function hasExpectedImageSignature(mimeType, bytes) {
         return bytes.length >= 12
             && bytes.subarray(0, 4).toString('ascii') === 'RIFF'
             && bytes.subarray(8, 12).toString('ascii') === 'WEBP';
+    }
+    if (HEIF_MIME_TYPES.has(mimeType)) {
+        return isHeifContainer(bytes);
     }
     if (mimeType.startsWith('audio/')) {
         return true; // Defer audio signature validation to Gemini / parsing logic
@@ -219,20 +324,20 @@ function applyCors(req, res) {
 
     res.set('Access-Control-Allow-Origin', origin);
     res.set('Vary', 'Origin');
-    // Required so browsers send/receive cookies in cross-origin requests
-    res.set('Access-Control-Allow-Credentials', 'true');
+    res.set('Access-Control-Expose-Headers', 'Retry-After');
+    // No Access-Control-Allow-Credentials: the API never relies on cookies.
     return true;
 }
 
 function handleOptions(req, res) {
     if (req.method !== 'OPTIONS') return false;
     if (!applyCors(req, res)) {
-        res.status(403).send({ error: "Origin not allowed" });
+        res.status(403).send({ error: "Origin not allowed.", errorCode: 'ORIGIN_NOT_ALLOWED' });
         return true;
     }
     res.set('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
-    // x-byok-* headers kept for backward-compat with legacy stateless mode
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Firebase-AppCheck, x-byok-token, x-byok-provider, x-byok-model, x-byok-baseurl, x-byok-apiversion');
+    res.set('Access-Control-Allow-Headers', CORS_ALLOWED_HEADERS);
+    res.set('Access-Control-Max-Age', '3600');
     res.status(204).send('');
     return true;
 }
@@ -294,7 +399,7 @@ function ipv6InCidr(ip, network, prefix) {
 }
 
 function isPrivateOrReservedIp(rawIp) {
-    const ip = String(rawIp || '').replace(/^\[|\]$/g, '').split('%')[0];
+    const ip = String(rawIp || '').replace(/^\[|\]$/g, '').split('%')[0].toLowerCase();
     const family = net.isIP(ip);
     if (family === 4) {
         const blocked = [
@@ -314,10 +419,14 @@ function isPrivateOrReservedIp(rawIp) {
             const ipv4 = `${(value >>> 24) & 255}.${(value >>> 16) & 255}.${(value >>> 8) & 255}.${value & 255}`;
             return isPrivateOrReservedIp(ipv4);
         }
+        // Ranges that are private/reserved or that embed an IPv4 address which could
+        // point back at internal infrastructure (IPv4-compatible ::/96, NAT64,
+        // 6to4 2002::/16 and Teredo 2001::/32) are blocked outright.
         const blocked = [
-            ['::', 128], ['::1', 128], ['64:ff9b::', 96], ['100::', 64],
-            ['2001:db8::', 32], ['2001:10::', 28], ['fc00::', 7],
-            ['fe80::', 10], ['ff00::', 8]
+            ['::', 96], ['::1', 128], ['64:ff9b::', 96], ['64:ff9b:1::', 48],
+            ['100::', 64], ['2001::', 32], ['2001:db8::', 32], ['2001:10::', 28],
+            ['2001:20::', 28], ['2002::', 16], ['fc00::', 7], ['fe80::', 10],
+            ['fec0::', 10], ['ff00::', 8]
         ];
         return blocked.some(([network, prefix]) => ipv6InCidr(ip, network, prefix));
     }
@@ -334,7 +443,8 @@ function validateBYOKBaseUrl(value) {
         if (parsed.username || parsed.password) return { valid: false, error: 'Base URL credentials are not allowed.' };
         if (parsed.hash) return { valid: false, error: 'Base URL fragments are not allowed.' };
         if (parsed.port && parsed.port !== '443') return { valid: false, error: 'Only HTTPS port 443 is allowed.' };
-        const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+        // Strip IPv6 brackets and a trailing root dot ("localhost." resolves locally).
+        const hostname = parsed.hostname.replace(/^\[|\]$/g, '').replace(/\.+$/, '').toLowerCase();
         if (
             !hostname
             || hostname === 'localhost'
@@ -345,6 +455,8 @@ function validateBYOKBaseUrl(value) {
         ) {
             return { valid: false, error: 'Internal or reserved hostnames are not allowed.' };
         }
+        // IP-literal hosts (the WHATWG parser already normalises decimal/hex/octal
+        // IPv4 forms such as http://2130706433 to dotted quads).
         if (net.isIP(hostname) && isPrivateOrReservedIp(hostname)) {
             return { valid: false, error: 'Private or reserved IP addresses are not allowed.' };
         }
@@ -513,17 +625,71 @@ function computeDisplayStreak(userData, todayStr) {
     return 0;
 }
 
-/**
- * Safely parse the Cookie request header into a key→value map.
- * Uses Node's built-in 'cookie' package (ships with firebase-functions).
- * Returns an empty object if the header is absent or unparseable.
- */
-function parseCookies(req) {
+/** True when `timeZone` is accepted by this runtime's Intl implementation. */
+function isValidTimeZone(timeZone) {
+    if (typeof timeZone !== 'string' || !timeZone || timeZone.length > 64) return false;
     try {
-        return parseCookieHeader(req.headers.cookie || '');
+        new Intl.DateTimeFormat('en-US', { timeZone });
+        return true;
     } catch (_) {
-        return {};
+        return false;
     }
+}
+
+function todayInTimeZone(timeZone) {
+    return new Date().toLocaleDateString('en-CA', { timeZone: isValidTimeZone(timeZone) ? timeZone : 'Asia/Kolkata' });
+}
+
+const MIME_EXTENSIONS = [
+    ['png', 'png'], ['webp', 'webp'], ['mp4', 'mp4'], ['m4a', 'm4a'], ['webm', 'webm'],
+    ['mpeg', 'mp3'], ['mp3', 'mp3'], ['wav', 'wav'], ['ogg', 'ogg'], ['aac', 'aac']
+];
+
+/** File extension used for Notion uploads; defaults to jpg. */
+function extensionForMime(mimeType) {
+    const mime = String(mimeType || '').toLowerCase();
+    const match = MIME_EXTENSIONS.find(([needle]) => mime.includes(needle));
+    return match ? match[1] : 'jpg';
+}
+
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isValidClientRequestId(value) {
+    return typeof value === 'string' && UUID_V4_RE.test(value);
+}
+
+/**
+ * Remove URLs and key-like query parameters from error messages before logging.
+ * node-fetch errors embed the full request URL, which can carry API keys.
+ */
+function redactSensitive(value) {
+    return String(value == null ? '' : value)
+        .replace(/([?&](?:key|api[-_]?key|token|access_token)=)[^&\s"']+/gi, '$1[redacted]')
+        .replace(/https?:\/\/[^\s"')]+/gi, '[url]')
+        .slice(0, 1000);
+}
+
+/** Strip ASCII control characters (log-injection and storage hygiene). */
+function sanitizeControlCharacters(value, replacement = '') {
+    // eslint-disable-next-line no-control-regex
+    return String(value || '').replace(/[\u0000-\u001f\u007f]/g, replacement);
+}
+
+/**
+ * Split text into chunks of at most `max` UTF-16 code units without splitting
+ * surrogate pairs (Notion limits rich_text content to 2,000 characters).
+ */
+function chunkText(text, max = 2000) {
+    const chunks = [];
+    let current = '';
+    for (const ch of Array.from(String(text || ''))) {
+        if (current.length + ch.length > max) {
+            chunks.push(current);
+            current = '';
+        }
+        current += ch;
+    }
+    if (current) chunks.push(current);
+    return chunks;
 }
 
 module.exports = {
@@ -533,9 +699,13 @@ module.exports = {
     MAX_REQUEST_BODY_BYTES,
     MAX_BASE64_LENGTH,
     ALLOWED_IMAGE_MIME_TYPES,
+    HEIF_MIME_TYPES,
+    HEIF_BRANDS,
     ALLOWED_SYNC_TYPES,
     ALLOWED_BYOK_PROVIDERS,
-    ALLOWED_ORIGINS,
+    ENVIRONMENT_ORIGINS,
+    DEV_ORIGINS,
+    CORS_ALLOWED_HEADERS,
     ALGORITHM,
     LEGACY_ALGORITHM,
     RATE_LIMIT_SYNC,
@@ -547,8 +717,13 @@ module.exports = {
     decryptCurrentGcm,
     decryptLegacyCbc,
     decryptStoredNotionKey,
+    KEY_BINDING_VERSION,
+    keyBindingAad,
+    encryptBound,
+    decryptBoundGcm,
     // Validation
     sanitizeSyncType,
+    isHeifContainer,
     parseImageDataUrl,
     parseImageDataArray,
     normalizeNotionDbId,
@@ -562,10 +737,18 @@ module.exports = {
     calendarDayDiff,
     normalizeSyncDateStr,
     computeDisplayStreak,
+    isValidTimeZone,
+    todayInTimeZone,
+    extensionForMime,
+    isValidClientRequestId,
+    redactSensitive,
+    chunkText,
+    sanitizeControlCharacters,
+    currentAppEnvironment,
+    allowedOriginsFor,
     // HTTP
     setStandardHeaders,
     applyCors,
     isOriginAllowed,
     handleOptions,
-    parseCookies,
 };

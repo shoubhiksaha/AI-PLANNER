@@ -8,14 +8,20 @@
  *   - --apply also requires --confirm=SECURITY-MIGRATION-2026-06-21;
  *   - it never prints secret values.
  *
+ * The Firestore database must be named: --database=(default) for production,
+ * --database=staging for staging (both live in project ai-planner-project-467800).
+ *
  * Recommended first run:
- *   npm run migrate:security:dry-run
+ *   npm run migrate:security:dry-run -- --database=staging
  */
 
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { FieldValue, FieldPath } = require('firebase-admin/firestore');
+const { firestoreFor } = require('../services/db');
 const {
     deriveKey,
-    encrypt,
+    encryptBound,
+    keyBindingAad,
     decryptCurrentGcm,
     decryptLegacyCbc,
     RATE_LIMIT_WINDOW_MS
@@ -30,16 +36,22 @@ const args = process.argv.slice(2);
 const apply = args.includes('--apply');
 const confirmArg = args.find(arg => arg.startsWith('--confirm='));
 const confirmValue = confirmArg ? confirmArg.slice('--confirm='.length) : '';
+const databaseArg = args.find(arg => arg.startsWith('--database='));
+const databaseId = databaseArg ? databaseArg.slice('--database='.length).trim() : '';
+
+if (!databaseId) {
+    console.error('Refusing to run without --database=<id> ("(default)" for production, "staging" for staging).');
+    process.exit(2);
+}
 
 if (apply && confirmValue !== CONFIRMATION) {
     console.error(`Refusing to apply changes. Re-run with --confirm=${CONFIRMATION}`);
     process.exit(2);
 }
 
-admin.initializeApp();
-const db = admin.firestore();
-const FieldValue = admin.firestore.FieldValue;
-const FieldPath = admin.firestore.FieldPath;
+initializeApp();
+console.log(`Firestore database: ${databaseId}`);
+const db = firestoreFor(databaseId);
 
 let batch = db.batch();
 let batchCount = 0;
@@ -103,6 +115,8 @@ function distinctKeys(...keys) {
 
 function decryptNotionForMigration(text, newKey, oldKey) {
     if (!text) return { value: null, needsMigration: false, corrupted: false };
+    // v3 keys are already bound to their owner (see migrate_key_binding.js).
+    if (text.startsWith('v3:')) return { value: null, needsMigration: false, corrupted: false };
     if (!text.includes(':')) return { value: text, needsMigration: true, corrupted: false };
 
     const keys = distinctKeys(
@@ -168,13 +182,13 @@ async function migrateUsers() {
 
         if (typeof data.notionKey === 'string' && data.notionKey && data.notionKey !== 'YOUR_NOTION_KEY') {
             if (!notionKeyNew) {
-                if (!data.notionKey.startsWith('v2:')) {
+                if (!data.notionKey.startsWith('v2:') && !data.notionKey.startsWith('v3:')) {
                     console.log(`REVIEW ${doc.ref.path}: Notion key needs encryption migration, but NOTION_ENCRYPTION_KEY_V2/NOTION_ENCRYPTION_KEY is not set`);
                 }
             } else {
                 const result = decryptNotionForMigration(data.notionKey, notionKeyNew, notionKeyOld);
                 if (result?.value && result.needsMigration) {
-                    update.notionKey = encrypt(result.value, notionKeyNew);
+                    update.notionKey = encryptBound(result.value, notionKeyNew, keyBindingAad(doc.id, 'notionKey'));
                     if (data.notionKey.includes(':')) {
                         stats.legacyNotionKeysMigrated += 1;
                         reasons.push('migrate legacy Notion encryption to AES-GCM');

@@ -81,4 +81,46 @@ describe('KMS Service Tests', () => {
         expect(mockDecrypt).toHaveBeenCalledTimes(1);
         expect(result).toBe(secret);
     });
+
+    test('unwrapAndDecrypt rejects a truncated auth tag (S-16)', async () => {
+        const crypto = require('crypto');
+        const dek = crypto.randomBytes(32);
+        const iv = crypto.randomBytes(12);
+        const cipher = crypto.createCipheriv('aes-256-gcm', dek, iv);
+        let encryptedKey = cipher.update('super-secret-api-key', 'utf8', 'base64');
+        encryptedKey += cipher.final('base64');
+        const shortTag = cipher.getAuthTag().subarray(0, 4).toString('base64');
+        mockDecrypt.mockResolvedValue([{ plaintext: Buffer.from(dek) }]);
+
+        await expect(unwrapAndDecrypt(encryptedKey, 'd3JhcA==', iv.toString('base64'), shortTag))
+            .rejects.toThrow('authentication tag length');
+    });
+
+    describe('owner binding with AAD (S-16)', () => {
+        const { keyBindingAad } = require('../utils');
+        beforeEach(() => {
+            // Identity "KMS": the wrapped DEK is the DEK itself.
+            mockEncrypt.mockImplementation(async ({ plaintext }) => [{ ciphertext: Buffer.from(plaintext) }]);
+            mockDecrypt.mockImplementation(async ({ ciphertext }) => [{ plaintext: Buffer.from(ciphertext) }]);
+        });
+
+        test('v3 round-trip: bound payload carries version 3 and decrypts with the same AAD', async () => {
+            const aad = keyBindingAad('a@example.com', 'byok');
+            const p = await generateAndWrapDEK('sk-bound-key-1234567890', { aad });
+            expect(p.version).toBe(3);
+            await expect(unwrapAndDecrypt(p.encryptedKey, p.wrappedDek, p.iv, p.authTag, { aad })).resolves.toBe('sk-bound-key-1234567890');
+        });
+
+        test('a v3 payload copied to another user (different AAD) or read without AAD fails', async () => {
+            const p = await generateAndWrapDEK('sk-bound-key-1234567890', { aad: keyBindingAad('a@example.com', 'byok') });
+            await expect(unwrapAndDecrypt(p.encryptedKey, p.wrappedDek, p.iv, p.authTag, { aad: keyBindingAad('b@example.com', 'byok') })).rejects.toThrow();
+            await expect(unwrapAndDecrypt(p.encryptedKey, p.wrappedDek, p.iv, p.authTag)).rejects.toThrow();
+        });
+
+        test('unbound (legacy) payloads have no version and decrypt without AAD', async () => {
+            const p = await generateAndWrapDEK('sk-legacy-key-1234567890');
+            expect(p.version).toBeUndefined();
+            await expect(unwrapAndDecrypt(p.encryptedKey, p.wrappedDek, p.iv, p.authTag)).resolves.toBe('sk-legacy-key-1234567890');
+        });
+    });
 });

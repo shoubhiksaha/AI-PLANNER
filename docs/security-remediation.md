@@ -133,3 +133,62 @@ The audit found local ignored credential files. They were not edited by this rem
 - Wire Firebase App Check into web and native clients before setting `REQUIRE_APP_CHECK=true`.
 - Consider removing `unsafe-inline` from CSP in a separate UI hardening pass; this codebase still uses inline style/event patterns that need careful UI testing.
 - Re-onboard users with legacy plaintext BYOK credentials instead of attempting to silently reuse old plaintext data.
+
+## October 2026 audit remediation — owner actions outside the repo
+
+The code side of the October 2026 audit (finding IDs S-*, B-*, U-*, M-*, I-*, Q-*) is on branch
+`fix/audit-remediation`. These steps can't be done from the repo:
+
+1. **Revoke the Gemini API key leaked in git history** (commit `bdd433a`, `test_gemini.js`, key
+   prefix `AIzaSyA663`). GCP Console → APIs & Services → Credentials → delete or regenerate it.
+   The repo is public, so assume the key is compromised. Optional: purge history with
+   `git filter-repo` and force-push.
+2. **Run `scripts/setup-repo-governance.sh`** (staging branch, environments, branch protection,
+   merge-commit-only). See [RELEASE_FLOW.md](RELEASE_FLOW.md).
+3. **Switch deploys to Workload Identity** with `scripts/setup-gcp-oidc.sh` for both projects, set
+   `WIF_PROVIDER`/`SA_EMAIL` as environment variables, then delete the repo-level `FIREBASE_TOKEN`
+   and the unused `GEMINI_API_KEY` repo secret, and revoke the CLI token.
+4. **Delete the local `functions/.env`** (holds old secrets; `firebase deploy` would upload it).
+   `scripts/guard-deploy.sh` now refuses to deploy while it exists.
+5. **Firebase Auth:** keep Google as the only sign-in provider, or require verified email for any
+   other provider. Rules and functions now reject unverified emails.
+6. **Cashfree dashboard:** enable refund and dispute webhooks to the existing notify URL.
+7. **Staging lives in the production project** (database `staging`, functions `asia-south1`, site
+   `ai-planner-staging`). The Hosting site and Auth authorized domains are already set up; the
+   `staging` database is created by the first staging deploy (it needs an open billing account).
+8. Keep `REQUIRE_APP_CHECK=false` until the web client sends App Check tokens.
+9. Users whose Notion key was encrypted with the retired v1 key will be asked to reconnect Notion.
+
+### Mobile dependency advisories (accepted, October 2026)
+
+After upgrading to Expo SDK 58 and running `npm audit fix`, `npm audit --omit=dev` in `mobile/`
+still reports 16 high / 8 moderate advisories (no critical). All are in build and dev-server
+tooling bundled with Expo and React Native (`@expo/cli`, `metro*`, `braces`, `micromatch`,
+`node-forge` via code-signing tooling, `uuid`). npm's suggested "fix" is a downgrade to Expo 44 /
+React Native 0.72, which is not viable. None of these packages ship inside the app binary.
+Re-check after each Expo SDK release.
+
+### Round 2 (October 2026) — owner steps after the first deploy
+
+1. **Bind stored keys to their owner.** Saved Notion and BYOK keys are now encrypted with the
+   user's email as authenticated data (`v3:`), so a ciphertext copied to another account can't be
+   decrypted. Old keys migrate on their next use; to migrate everyone at once:
+   ```bash
+   node functions/scripts/migrate_key_binding.js --project=ai-planner-project-467800 --database=staging            # dry run
+   node functions/scripts/migrate_key_binding.js --project=ai-planner-project-467800 --database=staging --apply --confirm=BIND-KEYS-V3
+   ```
+   Then repeat with `--database="(default)"` for production. Needs `NOTION_ENCRYPTION_KEY_V2` and `KMS_KEY_NAME` set.
+2. **Deploy the Firestore index** for interrupted-sync refunds (`firestore.indexes.json`, collection
+   group `syncHistory`: status ↑, startedAt ↑). The normal deploy does this; the scheduled
+   `reconcileStuckSyncs` job refunds syncs stuck in "processing" for more than 15 minutes.
+3. **Turn on App Check (staging first).**
+   - Firebase Console → App Check → register the web app with reCAPTCHA Enterprise, and add both
+     hosting domains to the reCAPTCHA key.
+   - Set the GitHub environment variable `APP_CHECK_SITE_KEY` on `staging`, deploy, and confirm in the
+     App Check console that requests are verified.
+   - Set `REQUIRE_APP_CHECK=true` in `functions/.env.staging`, ship it through staging, and
+     watch for 401s. Then repeat for production.
+   - The mobile app loads the same site inside its WebView, so it uses the same reCAPTCHA provider.
+4. **Native builds** now use Expo SDK 58 (React Native 0.88). Run `npx expo prebuild --clean` before local
+   native builds, and test Google sign-in, UPI payment links and token refresh after 60+ minutes on a real
+   iPhone and Android phone. No Android emulator was available here.

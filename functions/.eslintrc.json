@@ -1,18 +1,92 @@
 {
-  "env": {
-    "es6": true,
-    "node": true,
-    "jest": true
-  },
-  "parserOptions": {
-    "ecmaVersion": 2022
-  },
-  "extends": [
-    "eslint:recommended"
-  ],
-  "rules": {
-    "no-undef": "error",
-    "no-unused-vars": "warn",
-    "no-empty": "warn"
-  }
+    "env": {
+        "es6": true,
+        "node": true,
+        "jest": true
+    },
+    "parserOptions": {
+        "ecmaVersion": 2022
+    },
+    "extends": [
+        "eslint:recommended"
+    ],
+    "rules": {
+        "no-undef": "error",
+        "no-unused-vars": "warn",
+        "no-empty": "warn",
+        "no-restricted-properties": [
+            "error",
+            {
+                "object": "admin",
+                "property": "auth",
+                "message": "firebase-admin 14 removed the namespaced API: use getFirestore/FieldValue (firebase-admin/firestore), getAuth (firebase-admin/auth), getAppCheck (firebase-admin/app-check), getMessaging (firebase-admin/messaging)."
+            },
+            {
+                "object": "admin",
+                "property": "firestore",
+                "message": "firebase-admin 14 removed the namespaced API: use getFirestore/FieldValue (firebase-admin/firestore), getAuth (firebase-admin/auth), getAppCheck (firebase-admin/app-check), getMessaging (firebase-admin/messaging)."
+            },
+            {
+                "object": "admin",
+                "property": "appCheck",
+                "message": "firebase-admin 14 removed the namespaced API: use getFirestore/FieldValue (firebase-admin/firestore), getAuth (firebase-admin/auth), getAppCheck (firebase-admin/app-check), getMessaging (firebase-admin/messaging)."
+            },
+            {
+                "object": "admin",
+                "property": "messaging",
+                "message": "firebase-admin 14 removed the namespaced API: use getFirestore/FieldValue (firebase-admin/firestore), getAuth (firebase-admin/auth), getAppCheck (firebase-admin/app-check), getMessaging (firebase-admin/messaging)."
+            },
+            {
+                "object": "admin",
+                "property": "storage",
+                "message": "firebase-admin 14 removed the namespaced API: use getFirestore/FieldValue (firebase-admin/firestore), getAuth (firebase-admin/auth), getAppCheck (firebase-admin/app-check), getMessaging (firebase-admin/messaging)."
+            },
+            {
+                "object": "admin",
+                "property": "app",
+                "message": "firebase-admin 14 removed the namespaced API: use getFirestore/FieldValue (firebase-admin/firestore), getAuth (firebase-admin/auth), getAppCheck (firebase-admin/app-check), getMessaging (firebase-admin/messaging)."
+            },
+            {
+                "object": "admin",
+                "property": "credential",
+                "message": "firebase-admin 14 removed the namespaced API: use getFirestore/FieldValue (firebase-admin/firestore), getAuth (firebase-admin/auth), getAppCheck (firebase-admin/app-check), getMessaging (firebase-admin/messaging)."
+            }
+        ],
+        "no-restricted-syntax": [
+            "error",
+            {
+                "selector": "CallExpression[callee.name='require'][arguments.0.value='firebase-admin']",
+                "message": "Import from a firebase-admin subpath (firebase-admin/app, /firestore, /auth, /app-check); the root module no longer exposes the namespaced API."
+            },
+            {
+                "selector": "CallExpression[callee.name='getFirestore']",
+                "message": "Open Firestore only through services/db.js (db() / firestoreFor(id)) so the FIRESTORE_DATABASE_ID of this environment is always honoured."
+            },
+            {
+                "selector": "CallExpression[callee.property.name='getFirestore']",
+                "message": "Open Firestore only through services/db.js (db() / firestoreFor(id)) so the FIRESTORE_DATABASE_ID of this environment is always honoured."
+            },
+            {
+                "selector": "Property[key.name='getFirestore']",
+                "message": "Open Firestore only through services/db.js (db() / firestoreFor(id)) so the FIRESTORE_DATABASE_ID of this environment is always honoured."
+            }
+        ]
+    },
+    "overrides": [
+        {
+            "files": [
+                "services/db.js",
+                "__tests__/**/*.js"
+            ],
+            "rules": {
+                "no-restricted-syntax": [
+                    "error",
+                    {
+                        "selector": "CallExpression[callee.name='require'][arguments.0.value='firebase-admin']",
+                        "message": "Import from a firebase-admin subpath (firebase-admin/app, /firestore, /auth, /app-check); the root module no longer exposes the namespaced API."
+                    }
+                ]
+            }
+        }
+    ]
 }

@@ -1,56 +1,31 @@
-# AI Planner - Production Release Checklist
+# Release checklist
 
-Use this before every merge/deploy to keep releases stable and reviewer-ready.
+The flow itself is described in [RELEASE_FLOW.md](RELEASE_FLOW.md). This is the per-release checklist.
 
-## 1) Pre-Merge Gate (Required)
+## 1. Before opening the staging PR
 
-- [ ] Run repo integrity check: `npm run check:conflicts`
-- [ ] Run frontend tests: `npm run test:frontend`
-- [ ] Run backend tests: `npm run test:backend`
-- [ ] Run Firestore rules tests: `npm run test:rules`
-- [ ] Run Playwright smoke locally (optional but recommended): `npm run test:e2e:smoke`
-- [ ] Confirm PR branch is up to date with `main` and has zero unresolved conflicts
+- [ ] Branch was cut from `main` (`git checkout -b feature/x origin/main`)
+- [ ] `npm run check:conflicts`, `npm run test:frontend`, `npm run test:backend`, `npm run test:mobile`
+- [ ] UI change? `npm run build:css` and commit `public/tailwind.css`
 
-## 2) GitHub Branch Protection (Required)
+## 2. Staging
 
-Enable branch protection on `main` with:
+- [ ] PR `feature/x → staging` is green and merged with a **merge commit**
+- [ ] Approved the `staging` deployment in Actions
+- [ ] "Post-Deploy Verification (Staging)" passed
+- [ ] Manual check on https://ai-planner-staging.web.app in a private window:
+      login → dashboard → Morning sync with a test page → History shows it
 
-1. Require pull request reviews before merging
-2. Require status checks to pass before merging
-3. Include these required checks:
-   - `Frontend Tests`
-   - `Backend Tests & Coverage`
-   - `Firestore Rules Tests`
-   - `E2E Smoke (Playwright)`
-   - `Lint Enforcer / lint`
-4. Restrict direct pushes to `main`
+## 3. Production
 
-## 3) Deployment Gate
+- [ ] `npm run promote` from the same feature branch (opens `feature/x → main`)
+- [ ] "Branch Policy" passed (every commit already on staging, no staging merges)
+- [ ] Merged with a merge commit and approved the `production` deployment
+- [ ] "Post-Deploy Verification (Production)" passed
+- [ ] Quick check on https://planner.analogdigital.tech; no new 5xx or payment alerts in Cloud Monitoring
 
-1. Merge PR into `main`
-2. Wait for `CI/CD Pipeline` to pass all jobs
-3. Verify deploy job completed:
-   - Workflow: `.github/workflows/main.yml`
-   - Job: `Deploy to Firebase`
-4. Record deployed commit SHA in release notes/changelog
+## Rollback
 
-## 4) Post-Deploy Validation (Incognito)
-
-1. Open production URL in a fresh incognito tab
-2. Verify top-left build badge shows expected `build v...`
-3. Validate critical user path:
-   - Login
-   - Notion Setup -> `Skip for now`
-   - Dashboard appears with no stacked Notion view
-4. Run one Morning/Night sync smoke with test-safe data
-5. Confirm no new 5xx spikes or latency alerts in GCP Monitoring
-
-## 5) Rollback Plan
-
-If release is bad:
-
-1. Rollback Hosting from Firebase Console -> Hosting -> Release History
-2. Revert backend commit and redeploy functions:
-   - `git revert <bad_sha>`
-   - `firebase deploy --only functions --project ai-planner-project-467800`
-3. Re-run smoke flow and confirm alerts return to baseline
+1. Firebase Console → Hosting → Release history → roll back (immediate).
+2. `git revert -m 1 <merge-sha>` on a new branch, then ship it through staging → main as usual.
+3. Functions roll forward with the revert. Never run `firebase deploy` from a laptop; `scripts/guard-deploy.sh` blocks it.
