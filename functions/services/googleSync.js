@@ -84,13 +84,10 @@ async function syncCalendarEvents(calendar, plannerData, timeZone = 'UTC', enabl
                     e.end.startsWith(eTime.slice(0, 16))
                 );
                 if (isDuplicate) {
-                    logger.info(`Skipping duplicate event: "${item.task}" at ${sTime}`);
                     counts.skippedDuplicates++;
                     continue;
                 }
             }
-
-            logger.info(`Creating Event: "${item.task}" Start: ${sTime} End: ${eTime}`);
 
             try {
                 await calendar.events.insert({
@@ -106,7 +103,7 @@ async function syncCalendarEvents(calendar, plannerData, timeZone = 'UTC', enabl
                     },
                 });
             } catch (err) {
-                logger.error("Calendar event insert failed:", { error: err?.message || String(err), task: item.task });
+                logger.error("Calendar event insert failed:", { error: err?.message || String(err) });
                 continue;
             }
 
@@ -159,7 +156,7 @@ async function syncGoogleTasks(tasks, plannerData, enableDedup = true) {
             dueMinIso = `${prevTemp.getFullYear()}-${String(prevTemp.getMonth()+1).padStart(2,'0')}-${String(prevTemp.getDate()).padStart(2,'0')}T00:00:00.000Z`;
             dueMaxIso = `${nextTemp.getFullYear()}-${String(nextTemp.getMonth()+1).padStart(2,'0')}-${String(nextTemp.getDate()).padStart(2,'0')}T23:59:59.999Z`;
         } else {
-            logger.warn("Planner date is invalid; omitting Google Tasks due date", { plannerDate: plannerData.date });
+            logger.warn("Planner date is invalid; omitting Google Tasks due date");
         }
     }
 
@@ -210,7 +207,6 @@ async function syncGoogleTasks(tasks, plannerData, enableDedup = true) {
             if (enableDedup) {
                 const titleLower = cleanTitle(item.task);
                 if (existingTasksForDate.includes(titleLower)) {
-                    logger.info(`Skipping duplicate task: "${item.task}"`);
                     skippedDuplicates++;
                     continue;
                 }
@@ -231,7 +227,7 @@ async function syncGoogleTasks(tasks, plannerData, enableDedup = true) {
                 // Add to existing list to prevent duplicates within the same sync batch
                 if (enableDedup) existingTasksForDate.push(cleanTitle(item.task));
             } catch (err) {
-                logger.error("Google Tasks insert failed:", { error: err?.message || String(err), task: item.task });
+                logger.error("Google Tasks insert failed:", { error: err?.message || String(err) });
                 continue;
             }
         }
@@ -240,13 +236,26 @@ async function syncGoogleTasks(tasks, plannerData, enableDedup = true) {
     return { tasks: count, skippedDuplicates };
 }
 
-async function updateCompletedTasks(tasks, plannerData) {
+function normalizeTitle(value) {
+    return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+/**
+ * Marks open Google Tasks as completed when the planner shows them ticked off.
+ * Only tasks due on `targetDate` (YYYY-MM-DD) or with no due date are eligible,
+ * entries without a title are ignored, and one failing patch never aborts the rest.
+ */
+async function updateCompletedTasks(tasks, plannerData, { targetDate } = {}) {
     // Get completed tasks from planner
     const completedPlannerTasks = (plannerData.todos || [])
-        .filter(todo => todo.done === true)
-        .map(todo => todo.task);
+        .filter(todo => todo && todo.done === true)
+        .map(todo => normalizeTitle(todo.task))
+        .filter(Boolean);
 
     if (completedPlannerTasks.length === 0) return 0;
+
+    const dayMatch = String(targetDate || plannerData.date || '').match(/^\d{4}-\d{2}-\d{2}$/);
+    const dayPrefix = dayMatch ? dayMatch[0] : null;
 
     // Get active tasks from Google (with pagination)
     let googleTasks = [];
@@ -264,24 +273,90 @@ async function updateCompletedTasks(tasks, plannerData) {
         pageToken = res.data.nextPageToken;
     } while (pageToken);
 
-    if (googleTasks.length === 0) return 0;
+    const eligible = googleTasks.filter(gTask => gTask && gTask.id && normalizeTitle(gTask.title)
+        && (!gTask.due || !dayPrefix || String(gTask.due).startsWith(dayPrefix)));
+    if (eligible.length === 0) return 0;
 
     let updatedCount = 0;
+    let failedCount = 0;
+    const patched = new Set();
     for (const plannerTaskTitle of completedPlannerTasks) {
-        // Exact match
-        const matchingGoogleTask = googleTasks.find(gTask => gTask.title.trim().toLowerCase() === plannerTaskTitle.trim().toLowerCase());
+        // Exact (case-insensitive) match; prefer a task due that day over an undated one.
+        const candidates = eligible.filter(gTask => !patched.has(gTask.id) && normalizeTitle(gTask.title) === plannerTaskTitle);
+        const matchingGoogleTask = candidates.find(gTask => gTask.due) || candidates[0];
+        if (!matchingGoogleTask) continue;
 
-        if (matchingGoogleTask) {
-            logger.info(`Marking task completed: "${matchingGoogleTask.title}"`);
+        try {
             await tasks.tasks.patch({
                 tasklist: '@default',
                 task: matchingGoogleTask.id,
                 requestBody: { status: 'completed' }
             });
+            patched.add(matchingGoogleTask.id);
             updatedCount++;
+        } catch (err) {
+            failedCount++;
+            logger.warn("Failed to mark a Google Task completed", { taskId: matchingGoogleTask.id, error: err?.message || String(err) });
         }
     }
+    if (failedCount > 0 && updatedCount === 0) {
+        throw new Error(`Could not update ${failedCount} completed task(s).`);
+    }
     return updatedCount;
+}
+
+function isNotFoundError(err) {
+    const status = err?.code ?? err?.status ?? err?.response?.status;
+    return Number(status) === 404;
+}
+
+/** Create the "AI Planner Data" spreadsheet with headers and formatting. */
+async function createPlannerSpreadsheet(sheets) {
+    const newSheet = await sheets.spreadsheets.create({
+        resource: {
+            properties: { title: "AI Planner Data" },
+            sheets: [
+                { properties: { title: "Expenses" } },
+                { properties: { title: "Health" } }
+            ]
+        }
+    });
+    const spreadsheetId = newSheet.data.spreadsheetId;
+    await sheets.spreadsheets.values.update({
+        spreadsheetId, range: 'Expenses!A1:C1', valueInputOption: 'RAW',
+        requestBody: { values: [["Date", "Item", "Amount"]] }
+    });
+    await sheets.spreadsheets.values.update({
+        spreadsheetId, range: 'Health!A1:E1', valueInputOption: 'RAW',
+        requestBody: { values: [["Date", "Exercise", "Water", "Sleep", "Energy"]] }
+    });
+
+    // Bold indigo headers, frozen top row and auto-sized columns. Formatting is
+    // cosmetic, so a failure here must not fail the sync.
+    const headerFormat = {
+        userEnteredFormat: {
+            backgroundColor: { red: 0.25, green: 0.31, blue: 0.71 },
+            textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } }
+        }
+    };
+    try {
+        await sheets.spreadsheets.batchUpdate({
+            spreadsheetId,
+            requestBody: {
+                requests: [
+                    { updateSheetProperties: { properties: { sheetId: 0, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } },
+                    { updateSheetProperties: { properties: { sheetId: 1, gridProperties: { frozenRowCount: 1 } }, fields: "gridProperties.frozenRowCount" } },
+                    { repeatCell: { range: { sheetId: 0, startRowIndex: 0, endRowIndex: 1 }, cell: headerFormat, fields: "userEnteredFormat(backgroundColor,textFormat)" } },
+                    { repeatCell: { range: { sheetId: 1, startRowIndex: 0, endRowIndex: 1 }, cell: headerFormat, fields: "userEnteredFormat(backgroundColor,textFormat)" } },
+                    { autoResizeDimensions: { dimensions: { sheetId: 0, dimension: "COLUMNS", startIndex: 0, endIndex: 3 } } },
+                    { autoResizeDimensions: { dimensions: { sheetId: 1, dimension: "COLUMNS", startIndex: 0, endIndex: 5 } } }
+                ]
+            }
+        });
+    } catch (err) {
+        logger.warn("Spreadsheet formatting failed", { error: err?.message || String(err) });
+    }
+    return spreadsheetId;
 }
 
 async function syncExpensesToSheet(sheets, plannerData, spreadsheetId) {
@@ -365,5 +440,7 @@ module.exports = {
     syncGoogleTasks,
     updateCompletedTasks,
     syncExpensesToSheet,
-    syncHealthToSheet
+    syncHealthToSheet,
+    createPlannerSpreadsheet,
+    isNotFoundError
 };

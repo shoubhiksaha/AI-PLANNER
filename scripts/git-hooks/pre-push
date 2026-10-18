@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# AI Planner — local pre-push guard. Install once with: npm run setup:hooks
+# Blocks direct pushes to main/staging and pushing the staging branch into main.
+# GitHub branch protection enforces the same rules server-side.
+set -euo pipefail
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    case "$remote_ref" in
+        refs/heads/main)
+            if [ "$local_ref" = "refs/heads/staging" ]; then
+                echo "❌ Pushing staging into main is not allowed." >&2
+            else
+                echo "❌ Don't push to main directly. Run scripts/promote-to-main.sh <feature-branch>." >&2
+            fi
+            exit 1
+            ;;
+        refs/heads/staging)
+            echo "❌ Don't push to staging directly. Open a PR from your feature branch into staging." >&2
+            exit 1
+            ;;
+    esac
+done
+exit 0

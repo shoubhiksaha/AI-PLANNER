@@ -1,4 +1,4 @@
-# AI Planner — Zero Storage Architecture 🌿
+# AI Planner — Zero Image Storage Architecture 🌿
 
 **A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini AI.**
 
@@ -7,25 +7,26 @@
 
 👉 **Try out yourself:** [https://planner.analogdigital.tech/](https://planner.analogdigital.tech/)
 ![Status](https://img.shields.io/badge/Status-Production-success)
-![Privacy](https://img.shields.io/badge/Privacy-Zero%20Storage-green)
+![Privacy](https://img.shields.io/badge/Privacy-Zero%20Image%20Storage-green)
 ![Security](https://img.shields.io/badge/Security-CSP%20Enforced-brightgreen)
 ![Tech](https://img.shields.io/badge/Stack-Firebase%20%7C%20Node.js%20%7C%20Gemini-blue)
-[![CI/CD](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/main.yml/badge.svg)](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/main.yml)
-![Tests](https://img.shields.io/badge/Tests-All%20Passing-brightgreen)
-![Coverage](https://img.shields.io/badge/Coverage-90%25%2B-brightgreen)
+[![Production Deploy](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/production.yml/badge.svg)](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/production.yml)
+[![Staging Deploy](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/staging.yml/badge.svg?branch=staging)](https://github.com/shoubhiksaha/AI-PLANNER/actions/workflows/staging.yml)
 
 ---
 
-## 📖 The "Zero Storage" Philosophy
+## 📖 The "Zero Image Storage" Philosophy
 
-Unlike traditional apps that store user images in an S3 bucket or database, **AI Planner** operates on a strict **Zero Storage** architecture.
+Unlike traditional apps that store user images in an S3 bucket or database, **AI Planner** never stores your planner photos.
 
 - User images are processed **in-memory** (transient RAM only).
 - Data is extracted by Gemini AI and synced to Google Calendar, Tasks, Sheets, and Notion.
 - The original image buffer is wiped immediately after processing.
 - Notion integration keys are **encrypted at rest** (AES-256-GCM) with keys managed via Google Cloud Secret Manager.
 
-**Result**: Verifiable privacy. We cannot see your journal even if we wanted to.
+What *is* stored, in Firestore: your profile (name, time zone, plan, credits, streak), a short sync history (type, status, counts — no page content), encrypted integration keys if you choose to save them, and payment order records. Everything is exportable and deletable from the app.
+
+**Result**: your journal pages are never kept on our servers.
 
 ---
 
@@ -86,8 +87,10 @@ Use these gates before any production merge:
 - `npm run test:backend` - functions unit/integration tests
 - `npm run test:rules` - Firestore rules emulator tests
 - `npm run test:e2e:smoke` - Playwright smoke path
+- `npm run test:e2e:emulator` - full-stack browser tests (Chromium, Firefox, WebKit, desktop + mobile) against the Firebase emulators with faked Gemini/Google/Notion; needs Java 21
+- `npm run test:mobile` - mobile lint + bridge unit tests
 
-Production deploy on `main` is CI-gated by the workflow in `.github/workflows/main.yml`.
+Releases go **feature branch → `staging` → (same feature branch) → `main`**, never `staging → main`. Staging and production share one Firebase project but use separate Firestore databases (`staging` / `(default)`), function regions and Hosting sites, and every deploy waits for the owner's approval. See [docs/RELEASE_FLOW.md](docs/RELEASE_FLOW.md).
 
 ---
 
@@ -123,7 +126,7 @@ Production deploy on `main` is CI-gated by the workflow in `.github/workflows/ma
 - **Notion Integration UX**: Added explicit user-friendly error messages for Notion key decryption failures.
 
 ### V7: Engineering Stability & Architecture Consolidation
-- **Massive Test Expansion**: Rewrote and expanded backend tests (`UniversalAIAdapter`, `googleSync`, `rateLimit`) to achieve >95% statement coverage across core services (261 passing backend tests).
+- **Massive Test Expansion**: Rewrote and expanded backend tests (`UniversalAIAdapter`, `googleSync`, `rateLimit`) across core services (coverage is reported by `npm run test:backend`; the CI threshold lives in `functions/package.json`).
 - **Documentation Consolidation**: Merged 10+ fragmented project architecture, audit, and roadmap documents into a single-source-of-truth `WIKI.md`.
 - **Zero-Warning Codebase**: Completely resolved all ESLint warnings via strict dead-code elimination.
 - **GDPR & Gamification**: Implemented monthly credit renewal, gamification streak milestones, cascading account deletion, and GDPR-compliant data export limits.

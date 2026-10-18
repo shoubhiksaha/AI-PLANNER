@@ -1,31 +1,25 @@
-# Branch Protection Setup (GitHub)
+# Branch protection
 
-Configure this once to prevent broken releases.
+Branch protection, environments and merge settings are applied by a script, so they stay in
+sync with the workflows:
 
-## Target Branch
+```bash
+scripts/setup-repo-governance.sh --dry-run
+scripts/setup-repo-governance.sh
+```
 
-- `main`
+It configures:
 
-## Required Settings
+- **`main` and `staging`**: PR required, 1 approving review from a code owner (`.github/CODEOWNERS`),
+  stale reviews dismissed, conversations resolved, no force-push or deletion.
+- **Required checks** (from `.github/workflows/pr-check.yml`): `Branch Policy`, plus
+  `Quality / Conflict Marker Check`, `Quality / Code Linting`, `Quality / Dependency Audit`,
+  `Quality / Frontend Tests`, `Quality / Backend Tests & Coverage`, `Quality / Firestore Rules Tests`,
+  `Quality / Mobile Lint & Tests`, `Quality / E2E Tests`.
+- **Up-to-date branches**: required on `main` only. On `staging` it is off on purpose: catching up
+  with staging would mean merging staging into the feature, which would then be refused by main.
+- **Merge method**: merge commits only. The provenance check needs each feature's commits to exist on staging.
+- **Environments** `staging` (branch `staging`) and `production` (branch `main`), each with the owner
+  as required reviewer.
 
-1. Settings -> Branches -> Add rule
-2. Branch name pattern: `main`
-3. Enable `Require a pull request before merging`
-4. Enable `Require approvals` (minimum 1)
-5. Enable `Dismiss stale pull request approvals when new commits are pushed`
-6. Enable `Require status checks to pass before merging`
-7. Select required checks:
-   - `Frontend Tests`
-   - `Backend Tests & Coverage`
-   - `Firestore Rules Tests`
-   - `E2E Smoke (Playwright)`
-   - `Lint Enforcer / lint`
-8. Enable `Require branches to be up to date before merging`
-9. Enable `Do not allow bypassing the above settings`
-10. Enable `Restrict pushes that create files larger than 100 MB` (if available)
-
-## Optional but Recommended
-
-1. Enable `Require conversation resolution before merging`
-2. Enable `Require signed commits`
-3. Enable `Lock branch`
+See [RELEASE_FLOW.md](RELEASE_FLOW.md) for the full flow.

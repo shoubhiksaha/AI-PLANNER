@@ -1,7 +1,18 @@
 {
   "projects": {
-    "default": "ai-planner-staging",
-    "staging": "ai-planner-staging",
+    "staging": "ai-planner-project-467800",
     "production": "ai-planner-project-467800"
+  },
+  "targets": {
+    "ai-planner-project-467800": {
+      "hosting": {
+        "production": [
+          "ai-planner-project-467800"
+        ],
+        "staging": [
+          "ai-planner-staging"
+        ]
+      }
+    }
   }
 }

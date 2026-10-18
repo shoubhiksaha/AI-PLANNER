@@ -1,9 +1,16 @@
-const admin = require('firebase-admin');
+const adminBacking = require('mock-firebase-admin-backing');
 
-jest.mock('firebase-admin', () => {
+jest.mock('mock-firebase-admin-backing', () => {
     const firestoreMock = { runTransaction: jest.fn() };
     return { firestore: jest.fn(() => firestoreMock), initializeApp: jest.fn() };
-});
+}, { virtual: true });
+jest.mock('firebase-admin/app', () => require('./helpers/adminMock').app());
+jest.mock('firebase-admin/firestore', () => require('./helpers/adminMock').firestore());
+jest.mock('firebase-admin/auth', () => require('./helpers/adminMock').auth());
+jest.mock('firebase-admin/app-check', () => require('./helpers/adminMock').appCheck());
+
+// firebase-functions' HTTPS module pulls in firebase-admin/auth (ESM-only jose) — not needed here.
+jest.mock('firebase-functions/v2/https', () => ({ onRequest: (_opts, handler) => handler }));
 
 process.env.NODE_ENV = 'test';
 const { applyGamificationMilestones } = require('../index');
@@ -38,7 +45,7 @@ describe('Streak logic probe', () => {
     beforeEach(() => {
         mockUserRef = { id: 'u@test.com' };
         mockTransaction = { get: jest.fn(), set: jest.fn() };
-        admin.firestore().runTransaction.mockImplementation(async (cb) => cb(mockTransaction));
+        adminBacking.firestore().runTransaction.mockImplementation(async (cb) => cb(mockTransaction));
     });
 
     async function runScenario(name, userOverrides) {

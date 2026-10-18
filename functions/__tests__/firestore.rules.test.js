@@ -34,8 +34,8 @@ describe('Firestore Security Rules', () => {
     });
 
     // Helper function to create an authenticated context
-    const getAuthDb = (email) => {
-        return testEnv.authenticatedContext('user-id', { email }).firestore();
+    const getAuthDb = (email, emailVerified = true) => {
+        return testEnv.authenticatedContext('user-id', { email, email_verified: emailVerified }).firestore();
     };
 
     // Helper function for unauthenticated context
@@ -89,6 +89,12 @@ describe('Firestore Security Rules', () => {
         const db = getAuthDb('testuser@example.com');
         const docRef = db.collection('users').doc('testuser@example.com').collection('syncHistory').doc('some-log');
         await assertFails(docRef.set({ status: 'fake-success' }));
+    });
+
+    test('User with an UNVERIFIED email CANNOT read the matching document (S-03)', async () => {
+        const db = getAuthDb('testuser@example.com', false);
+        await assertFails(db.collection('users').doc('testuser@example.com').get());
+        await assertFails(db.collection('users').doc('testuser@example.com').collection('syncHistory').doc('some-log').get());
     });
 
     test('Unknown collections are denied', async () => {

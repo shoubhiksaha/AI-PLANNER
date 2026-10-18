@@ -1,9 +1,12 @@
 import js from "@eslint/js";
 
 export default [
+    {
+        ignores: ["android/**", "ios/**", ".expo/**", "dist/**", "web-build/**", "node_modules/**"]
+    },
     js.configs.recommended,
     {
-        files: ["**/*.js", "**/*.jsx"],
+        files: ["**/*.js", "**/*.jsx", "**/*.mjs"],
         languageOptions: {
             ecmaVersion: "latest",
             sourceType: "module",

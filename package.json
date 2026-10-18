@@ -1,46 +1,44 @@
 {
-  "dependencies": {
-    "@notionhq/client": "^4.0.2",
-    "dotenv": "^17.2.1",
-    "google-auth-library": "^10.2.0",
-    "googleapis": "^154.1.0"
-  },
   "name": "ai-planner",
   "version": "1.0.0",
-  "description": "**A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini 2.0 Flash.**",
-  "main": "credentials.js",
-  "devDependencies": {
-    "jest": "^30.2.0",
-    "jest-environment-jsdom": "^30.2.0",
-    "tailwindcss": "^3.4.19"
-  },
+  "private": true,
+  "description": "AI Planner — privacy-focused PWA that digitizes handwritten planner pages with Gemini.",
+  "license": "ISC",
+  "type": "commonjs",
   "scripts": {
     "check:conflicts": "bash ./scripts/check-conflict-markers.sh",
     "test": "npm run test:all",
     "test:backend": "cd functions && npm test",
     "test:frontend": "jest --verbose --config public/jest.config.js",
     "test:e2e": "cd e2e && npx playwright test tests/sync.spec.js --project=chromium",
-    "test:e2e:smoke": "cd e2e && CI=true npx playwright test tests/sync.spec.js --project=chromium",
+    "test:e2e:smoke": "cd e2e && CI=true npx playwright test tests/sync.spec.js tests/ui.spec.js --project=chromium",
     "test:e2e:ui": "cd e2e && npx playwright test tests/ui.spec.js --project=chromium",
-    "test:e2e:full": "firebase emulators:exec 'cd e2e && npx playwright test --project=chromium'",
     "test:contract": "cd e2e && npx playwright test tests/staging-contract.spec.js --project=chromium",
     "seed:staging": "node scripts/seed-staging.js",
     "reset:staging": "node scripts/reset-staging.js",
     "quality:ci": "npm run check:conflicts && npm run test:frontend && npm run test:backend && npm run test:mobile && npm run test:e2e:smoke",
     "test:all": "npm run test:backend && npm run test:frontend && npm run test:mobile && npm run test:e2e:smoke",
-    "test:mobile": "cd mobile && npm run lint",
-    "test:rules": "cd functions && npm run test:rules"
+    "test:mobile": "cd mobile && npm run lint && npm test",
+    "test:rules": "cd functions && npm run test:rules",
+    "setup:hooks": "git config core.hooksPath scripts/git-hooks && echo \"Git hooks installed (scripts/git-hooks).\"",
+    "promote": "bash scripts/promote-to-main.sh",
+    "build:css": "tailwindcss -c tailwind.config.js -i public/styles.css -o public/tailwind.css",
+    "test:e2e:emulator": "bash scripts/e2e/run-emulator-e2e.sh"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0",
+    "jest-environment-jsdom": "^30.2.0",
+    "tailwindcss": "^3.4.19",
+    "firebase-admin": "^14.5.0"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/shoubhiksaha/AI-PLANNER.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/shoubhiksaha/AI-PLANNER/issues"
   },
-  "homepage": "https://github.com/shoubhiksaha/AI-PLANNER#readme"
+  "homepage": "https://github.com/shoubhiksaha/AI-PLANNER#readme",
+  "keywords": [],
+  "author": ""
 }

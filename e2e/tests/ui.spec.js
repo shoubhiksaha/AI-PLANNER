@@ -1,37 +1,55 @@
 const { test, expect } = require('@playwright/test');
 
+// These checks run against the static app shell without signing in. Anything
+// that needs a backend is asserted through client-side behaviour (validation,
+// "please sign in" guards) and by verifying which requests were or were not made.
 test.describe('Dashboard UI Smoke Checks', () => {
     test.beforeEach(async ({ page, baseURL }) => {
-        // Mock Firebase Auth and load index.html directly
         const targetUrl = baseURL || 'http://localhost:3000';
         await page.goto(`${targetUrl}/index.html`);
-        // Wait for app helpers & basic dom to load
-        await page.waitForFunction(() => typeof window.AppHelpers !== 'undefined');
-        // Bootstrap a real visible dashboard state for subsequent tests
-        await page.evaluate(() => {
-            window.AppHelpers.switchView('view-dashboard');
-        });
-        // Wait for potential animations to clear
-        await page.waitForTimeout(300);
-        // Explicitly check visibility
+        // Wait until app.js has applied the initial (signed-out) auth state, otherwise it
+        // can switch back to the login view after we open the dashboard shell.
+        await page.waitForFunction(() => document.documentElement.dataset.authReady === 'true');
+        await page.evaluate(() => window.AppHelpers.switchView('view-dashboard'));
         await expect(page.locator('#view-dashboard')).toBeVisible();
     });
 
-    test('Hamburger Menu opens navigation drawer', async ({ page }) => {
+    test('Hamburger Menu opens and closes the navigation drawer', async ({ page }) => {
         const drawer = page.locator('#drawer-container');
         await expect(drawer).toHaveClass(/hidden/);
 
         await page.click('#hamburger-btn');
-        
-        // Wait for the drawer out transition
-        await page.waitForTimeout(300);
-        await expect(drawer).not.toHaveClass(/hidden/);
         await expect(drawer).toHaveClass(/drawer-open/);
+        await expect(drawer).not.toHaveClass(/hidden/);
+        await expect(page.locator('#hamburger-btn')).toHaveAttribute('aria-expanded', 'true');
 
-        // Close drawer
         await page.click('#close-drawer');
-        await page.waitForTimeout(350);
         await expect(drawer).toHaveClass(/hidden/);
+        await expect(page.locator('#hamburger-btn')).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    test('Escape closes the drawer (U-04)', async ({ page }) => {
+        await page.click('#hamburger-btn');
+        await expect(page.locator('#drawer-container')).toHaveClass(/drawer-open/);
+        await expect(page.locator('#close-drawer')).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#drawer-container')).toHaveClass(/hidden/);
+    });
+
+    test('Touch targets are at least 44×44 (U-08)', async ({ page }) => {
+        for (const selector of ['#hamburger-btn', '#current-plan-badge', '#theme-btn', '#btn-sync-primary']) {
+            const box = await page.locator(selector).boundingBox();
+            expect(box, selector).not.toBeNull();
+            // Round: the view's fade-in transform can report 43.99998px mid-animation.
+            expect(Math.round(box.width), `${selector} width`).toBeGreaterThanOrEqual(44);
+            expect(Math.round(box.height), `${selector} height`).toBeGreaterThanOrEqual(44);
+        }
+    });
+
+    test('Primary sync is disabled with a reason until a page is added (UX 3)', async ({ page }) => {
+        await expect(page.locator('#btn-sync-primary')).toBeDisabled();
+        await expect(page.locator('#sync-hint')).toContainText('Add a page photo first');
+        await expect(page.locator('#drop-zone')).toContainText('free printable template');
     });
 
     test('Free Plan badge opens the outcome-first upgrade flow', async ({ page }) => {
@@ -40,7 +58,6 @@ test.describe('Dashboard UI Smoke Checks', () => {
 
         await page.click('#current-plan-badge');
 
-        await expect(pricingModal).not.toHaveClass(/hidden/);
         await expect(pricingModal).toHaveClass(/flex/);
         await expect(page.locator('#upgrade-step-1')).toBeVisible();
         await expect(page.locator('#upgrade-next-outcome')).toBeDisabled();
@@ -49,69 +66,92 @@ test.describe('Dashboard UI Smoke Checks', () => {
         await page.click('#upgrade-next-outcome');
 
         await expect(page.locator('#upgrade-step-2')).toBeVisible();
-        await expect(page.locator('#upgrade-standard-pricing-btn')).toBeVisible();
-        await expect(page.locator('#upgrade-pro-btn')).toBeVisible();
         await expect(page.locator('[data-upgrade-plan]')).toHaveCount(2);
+        // UX 13: all three durations are visible, annual preselected
+        await expect(page.locator('input[name="upgrade-billing"]')).toHaveCount(3);
+        for (const value of ['annual', 'sprint', 'monthly']) {
+            await expect(page.locator(`input[name="upgrade-billing"][value="${value}"]`)).toBeVisible();
+        }
         await expect(page.locator('input[name="upgrade-billing"][value="annual"]')).toBeChecked();
 
         await page.click('#upgrade-next-plan');
         await expect(page.locator('#upgrade-step-3')).toBeVisible();
         await expect(page.locator('#checkout-plan-name')).toContainText('Standard · Annual');
         await expect(page.locator('#checkout-selected-plan-btn')).toContainText('₹290');
+
+        await page.keyboard.press('Escape');
+        await expect(pricingModal).toHaveClass(/hidden/);
     });
 
-    test('Notion Setup save triggers backend and shows success', async ({ page }) => {
-        await page.route('**/setupNotion', async route => {
-            await route.fulfill({ json: { success: true, text: "Notion setup saved securely." }, status: 200, contentType: 'application/json' });
+    test('Notion setup validates inline and accepts a pasted Notion URL (UX 10)', async ({ page }) => {
+        const setupCalls = [];
+        await page.route('**/setupNotion', async (route) => {
+            setupCalls.push(route.request().postDataJSON());
+            await route.fulfill({ status: 200, contentType: 'application/json', json: { success: true } });
         });
 
-        // Trigger Notion setup flow (make view visible)
-        await page.evaluate(() => {
-            window.AppHelpers.switchView('view-notion-setup');
-        });
-        await page.waitForTimeout(300);
+        await page.evaluate(() => window.AppHelpers.switchView('view-notion-setup'));
         await expect(page.locator('#view-notion-setup')).toBeVisible();
 
-        await page.fill('#notion-key-input', 'secret_fake_key_123');
-        await page.fill('#notion-db-input', 'fake_db_123');
+        await page.click('#save-notion-btn');
+        await expect(page.locator('#notion-key-error')).toBeVisible();
+        await expect(page.locator('#notion-db-error')).toBeVisible();
+
+        await page.fill('#notion-db-input', 'https://www.notion.so/ws/Brain-Dump-395c1d2e3f4a5b6c7d8e9f0a1b2c38ab?v=aaaaaaaabbbbbbbbccccccccdddddddd');
+        await expect(page.locator('#notion-db-help')).toContainText('Database ID found: 395c');
+        await page.fill('#notion-key-input', 'ntn_' + 'x'.repeat(40));
         await page.click('#save-notion-btn');
 
-        await expect(page.locator('#notion-onboard-status')).toContainText('Notion Connected', { timeout: 3000 });
+        await expect(page.locator('#notion-key-error')).toBeHidden();
+        // Not signed in: the guard fires before any network call.
+        await expect(page.locator('#notion-db-error')).toContainText('sign in');
+        expect(setupCalls).toHaveLength(0);
     });
 
-    test('BYOK KMS Save interacts with backend', async ({ page }) => {
-        await page.route('**/setupBYOK', async route => {
-            await route.fulfill({ json: { success: true, text: "BYOK settings saved securely." }, status: 200, contentType: 'application/json' });
+    test('BYOK save validates and never stores the key without a validated session (C1, B-04)', async ({ page }) => {
+        const calls = [];
+        await page.route(/\/(byokSession|setupBYOK)$/, async (route) => {
+            calls.push(route.request().url());
+            await route.fulfill({ status: 200, contentType: 'application/json', json: { valid: true } });
         });
 
         await page.evaluate(() => {
             window.AppHelpers.switchView('view-setup');
-            const detailsEl = document.querySelector('#view-setup details');
-            if (detailsEl) detailsEl.open = true;
-            document.querySelector('input[name="byok-mode"][value="kms"]').checked = true;
+            document.getElementById('byok-details').open = true;
         });
-        await page.waitForTimeout(300);
         await expect(page.locator('#view-setup')).toBeVisible();
 
-        await page.fill('#byok-api-key', 'sk-test-key-1234');
         await page.click('#save-setup-btn');
+        await expect(page.locator('#byok-error')).toHaveText('Paste your API key first.');
 
-        // Since BYOK setup shows an alert natively or changes the button text, we'll wait for the network mock to be hit
-        await page.waitForResponse('**/setupBYOK');
+        await page.fill('#byok-api-key', 'sk-test-key-1234567890');
+        await page.click('#save-setup-btn');
+        await expect(page.locator('#byok-error')).toContainText('sign in');
+
+        expect(calls).toHaveLength(0);
+        const stored = await page.evaluate(() => ({
+            session: sessionStorage.getItem('byok_stateless_v2'),
+            local: Object.keys(localStorage).filter(k => k.startsWith('byok')),
+            cookie: document.cookie,
+        }));
+        expect(stored.session).toBeNull();
+        expect(stored.local).toEqual([]);
+        expect(stored.cookie).not.toContain('byok');
+        // The key input must never be pre-filled with placeholder text (B-04)
+        await expect(page.locator('#byok-api-key')).toHaveAttribute('placeholder', /Paste your API key/);
     });
 
     test('logClientError is called on unhandled errors', async ({ page }) => {
-        const reqPromise = page.waitForRequest(req => req.url().includes('logClientError'));
-        
         await page.route('**/logClientError', async route => {
             await route.fulfill({ status: 200, json: { success: true } });
         });
+        const reqPromise = page.waitForRequest(req => req.url().includes('logClientError'));
 
         await page.evaluate(() => {
-            // Trigger a manual global error
             window.dispatchEvent(new ErrorEvent('error', { error: new Error('Fake UI Error'), message: 'Fake UI Error' }));
         });
 
-        await reqPromise;
+        const req = await reqPromise;
+        expect(req.postDataJSON().message).toBe('Fake UI Error');
     });
 });

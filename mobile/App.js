@@ -1,25 +1,45 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { StyleSheet, StatusBar, View, Text, TouchableOpacity, ActivityIndicator, Platform, PermissionsAndroid } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import {
+  StyleSheet,
+  StatusBar,
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+  Platform,
+  PermissionsAndroid,
+  BackHandler,
+  Linking,
+  AccessibilityInfo,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import * as WebBrowser from 'expo-web-browser';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import * as SecureStore from 'expo-secure-store';
 import * as Haptics from 'expo-haptics';
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
+import {
+  APP_ORIGINS,
+  resolveWebBaseUrl,
+  parseUrl,
+  isAllowedAppOrigin,
+  isLoginPath,
+  classifyNavigation,
+  buildLoginScript,
+  buildTokenUpdateScript,
+  isSignInRequiredError,
+  backoffDelayMs,
+} from './bridge';
 
-// Handle notifications when the app is open
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// Base URL of the web app. Override per build with EXPO_PUBLIC_WEB_BASE_URL
+// (e.g. the staging origin); anything other than the two app origins falls back to prod.
+const WEB_BASE_URL = resolveWebBaseUrl(process.env.EXPO_PUBLIC_WEB_BASE_URL);
+const APP_ORIGIN = parseUrl(WEB_BASE_URL).origin;
+const START_URL = `${APP_ORIGIN}/`;
 
-// Tells Expo to listen for the redirect back from the secure browser
-WebBrowser.maybeCompleteAuthSession();
+// Google access tokens live ~60 min; refresh a little before that.
+const TOKEN_REFRESH_AGE_MS = 45 * 60 * 1000;
+const REFRESH_CHECK_INTERVAL_MS = 60 * 1000;
 
 // Configure the Native Google Sign-In SDK once at module load.
 GoogleSignin.configure({
@@ -35,19 +55,68 @@ GoogleSignin.configure({
   ],
 });
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const signInRequiredError = () => {
+  const err = new Error('Google sign-in required.');
+  err.signInRequired = true;
+  return err;
+};
+
+// Fetch fresh tokens from the native Google SDK without user interaction.
+async function fetchSilentTokens({ staleAccessToken } = {}) {
+  // Android caches access tokens until expiry; drop the one the web reported as rejected.
+  if (staleAccessToken && Platform.OS === 'android') {
+    try {
+      await GoogleSignin.clearCachedAccessToken(staleAccessToken);
+    } catch (e) {
+      console.warn('Clearing cached Google access token failed:', e);
+    }
+  }
+  const userInfo = await GoogleSignin.signInSilently();
+  if (userInfo?.type === 'noSavedCredentialFound') throw signInRequiredError();
+  const userTokens = await GoogleSignin.getTokens();
+  const idToken = userInfo?.data?.idToken || userInfo?.idToken || userTokens.idToken;
+  const accessToken = userTokens.accessToken;
+  if (!idToken || !accessToken) throw new Error('Google Sign-In did not return usable tokens.');
+  return { idToken, accessToken };
+}
+
+function describeLoginError(error) {
+  switch (error?.code) {
+    case statusCodes.SIGN_IN_CANCELLED:
+    case statusCodes.IN_PROGRESS:
+      return null;
+    case statusCodes.PLAY_SERVICES_NOT_AVAILABLE:
+      return 'Google Play Services is missing or out of date. Update it and try again.';
+    default:
+      return 'Sign-in failed. Check your connection and try again.';
+  }
+}
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [tokens, setTokens] = useState(null);
   const [isCheckingLogin, setIsCheckingLogin] = useState(true);
   const [isNativeLoginInProgress, setIsNativeLoginInProgress] = useState(false);
+  const [loginError, setLoginError] = useState(null);
   const [webBridgeStatus, setWebBridgeStatus] = useState('idle');
   const [appTheme, setAppTheme] = useState('light'); // Tracks website's dark/light mode
-  const [expoPushToken, setExpoPushToken] = useState(null);
-  const webviewRef = useRef(null);
-  const tokenIssuedAtRef = useRef(0);
+  const [webError, setWebError] = useState(null);
+  const [webViewKey, setWebViewKey] = useState(0);
 
-  // Memoize the base URL so state changes (like theme) don't trigger a full web reload
-  const nocacheUrl = useMemo(() => 'https://planner.analogdigital.tech/?nocache=' + Date.now(), []);
+  const webviewRef = useRef(null);
+  const tokensRef = useRef(null);
+  const tokenIssuedAtRef = useRef(0);
+  const canGoBackRef = useRef(false);
+  const currentUrlRef = useRef(START_URL);
+  const refreshInFlightRef = useRef(null);
+  const refreshFailuresRef = useRef(0);
+  const nextRefreshAttemptAtRef = useRef(0);
+  const cameraPermissionAskedRef = useRef(false);
+  const refreshSessionRef = useRef(null);
+
+  const isDark = appTheme === 'dark';
+  const themeBg = isDark ? '#0f172a' : '#ffffff';
 
   const clearStoredLogin = async () => {
     await SecureStore.deleteItemAsync('idToken');
@@ -55,12 +124,23 @@ export default function App() {
     await SecureStore.deleteItemAsync('tokenTime');
   };
 
-  const resetNativeSession = async () => {
+  const applyTokens = (nextTokens) => {
+    tokensRef.current = nextTokens;
+    tokenIssuedAtRef.current = Date.now();
+    refreshFailuresRef.current = 0;
+    nextRefreshAttemptAtRef.current = 0;
+  };
+
+  const resetNativeSession = async (message = null) => {
     await clearStoredLogin();
+    tokensRef.current = null;
     tokenIssuedAtRef.current = 0;
-    setTokens(null);
+    canGoBackRef.current = false;
     setIsAuthenticated(false);
     setWebBridgeStatus('idle');
+    setWebError(null);
+    setLoginError(message);
+    if (message) AccessibilityInfo.announceForAccessibility(message);
     try {
       await GoogleSignin.signOut();
     } catch (e) {
@@ -68,93 +148,94 @@ export default function App() {
     }
   };
 
+  // Hand a fresh access token to the page (C7). The script re-checks location.origin.
+  const injectAccessToken = (accessToken) => {
+    if (!isAllowedAppOrigin(currentUrlRef.current)) return;
+    webviewRef.current?.injectJavaScript(buildTokenUpdateScript(accessToken, APP_ORIGINS));
+  };
+
+  // Silent token refresh. 'webRequest' (GOOGLE_TOKEN_REFRESH_REQUEST) retries quickly
+  // inside the web's 15 s window; interval refreshes back off between ticks.
+  // Only a sign-in-required result ends the session; transient errors keep it.
+  const refreshSession = (reason) => {
+    if (refreshInFlightRef.current) return refreshInFlightRef.current;
+    const run = (async () => {
+      const maxAttempts = reason === 'webRequest' ? 3 : 1;
+      // Drop Android's cached token so the refresh yields a full-lifetime one.
+      const staleAccessToken = tokensRef.current?.accessToken;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const fresh = await fetchSilentTokens({ staleAccessToken: attempt === 0 ? staleAccessToken : undefined });
+          applyTokens(fresh);
+          injectAccessToken(fresh.accessToken);
+          return fresh;
+        } catch (e) {
+          if (isSignInRequiredError(e, statusCodes.SIGN_IN_REQUIRED)) {
+            await resetNativeSession('Your Google session ended. Please sign in again.');
+            return null;
+          }
+          console.warn(`Silent Google token refresh failed (${reason}, attempt ${attempt + 1}):`, e);
+          if (attempt < maxAttempts - 1) await sleep(backoffDelayMs(attempt, 1000, 4000));
+        }
+      }
+      refreshFailuresRef.current += 1;
+      nextRefreshAttemptAtRef.current =
+        Date.now() + backoffDelayMs(refreshFailuresRef.current - 1, 30 * 1000, 10 * 60 * 1000);
+      return null;
+    })();
+    refreshInFlightRef.current = run;
+    const clearInFlight = () => {
+      refreshInFlightRef.current = null;
+    };
+    run.then(clearInFlight, clearInFlight);
+    return run;
+  };
+  refreshSessionRef.current = refreshSession;
+
   // Native Login Function
   const handleNativeLogin = async () => {
     if (isNativeLoginInProgress) return;
     setIsNativeLoginInProgress(true);
+    setLoginError(null);
 
     try {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-      if (userInfo?.type && userInfo.type !== 'success') return;
+      if (userInfo?.type && userInfo.type !== 'success') return; // cancelled by the user
 
       const userTokens = await GoogleSignin.getTokens();
-      
       const idToken = userInfo.data?.idToken || userInfo.idToken || userTokens.idToken;
       const accessToken = userTokens.accessToken;
 
       if (idToken && accessToken) {
         setWebBridgeStatus('authenticating');
-        tokenIssuedAtRef.current = Date.now();
-        setTokens({ idToken, accessToken });
+        applyTokens({ idToken, accessToken });
         setIsAuthenticated(true);
       } else {
         throw new Error('Google Sign-In did not return usable tokens.');
       }
     } catch (error) {
       console.error('Google Sign-In Error:', error);
+      const message = describeLoginError(error);
+      setLoginError(message);
+      if (message) AccessibilityInfo.announceForAccessibility(message);
     } finally {
       setIsNativeLoginInProgress(false);
     }
   };
 
-  // Check for saved login on app start
+  // On app start: clear legacy app-managed token storage and attempt native silent sign-in.
+  // OAuth tokens stay in memory only; the native Google SDK manages its own account session.
   useEffect(() => {
-    // 1. Request Push Notification Permissions silently in the background
-    async function registerForPushNotificationsAsync() {
-      try {
-        if (Device.isDevice) {
-          const { status: existingStatus } = await Notifications.getPermissionsAsync();
-          let finalStatus = existingStatus;
-          if (existingStatus !== 'granted') {
-            const { status } = await Notifications.requestPermissionsAsync();
-            finalStatus = status;
-          }
-          if (finalStatus === 'granted') {
-            const token = (await Notifications.getExpoPushTokenAsync({
-              projectId: 'ai-planner-project-467800',
-            })).data;
-            setExpoPushToken(token);
-          }
-        }
-      } catch (e) {
-        console.warn('Push notification registration failed:', e);
-      }
-    }
-    registerForPushNotificationsAsync();
-
-    // 1b. Request Camera Permission so Android WebView file chooser shows the camera option
-    async function requestCameraPermission() {
-      try {
-        if (Platform.OS === 'android') {
-          await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
-        }
-      } catch (e) {
-        console.warn('Camera permission request failed:', e);
-      }
-    }
-    requestCameraPermission();
-
-    // 2. Clear legacy app-managed token storage and attempt native silent sign-in.
-    // OAuth tokens stay in React memory only; the native Google SDK manages its own
-    // account session and we request fresh short-lived tokens when needed.
     async function loadSavedTokens() {
       try {
         await clearStoredLogin();
         await GoogleSignin.hasPlayServices();
-        const userInfo = await GoogleSignin.signInSilently();
-        const userTokens = await GoogleSignin.getTokens();
-
-        const idToken = userInfo.data?.idToken || userInfo.idToken || userTokens.idToken;
-        const accessToken = userTokens.accessToken;
-
-        if (idToken && accessToken) {
-          setWebBridgeStatus('authenticating');
-          tokenIssuedAtRef.current = Date.now();
-          setTokens({ idToken, accessToken });
-          setIsAuthenticated(true);
-        }
-      } catch (e) {
+        const fresh = await fetchSilentTokens();
+        setWebBridgeStatus('authenticating');
+        applyTokens(fresh);
+        setIsAuthenticated(true);
+      } catch {
         await clearStoredLogin();
       }
       setIsCheckingLogin(false);
@@ -162,42 +243,55 @@ export default function App() {
     loadSavedTokens();
   }, []);
 
-  // Actively monitor token expiration while app is open and refresh silently
+  // Refresh the Google access token before it expires while the app is open.
   useEffect(() => {
-    if (!isAuthenticated) return;
-    const interval = setInterval(async () => {
-      if (tokenIssuedAtRef.current && (Date.now() - tokenIssuedAtRef.current) > 50 * 60 * 1000) {
-        // Token expired while using the app. Refresh it silently instead of logging out!
-        try {
-          const userInfo = await GoogleSignin.signInSilently();
-          const userTokens = await GoogleSignin.getTokens();
-          const idToken = userInfo.data?.idToken || userInfo.idToken || userTokens.idToken;
-          const accessToken = userTokens.accessToken;
-
-          if (idToken && accessToken) {
-            tokenIssuedAtRef.current = Date.now();
-            setTokens({ idToken, accessToken });
-            
-            // Re-inject the fresh token into the WebView
-            webviewRef.current?.injectJavaScript(`
-              if (window.__AI_PLANNER_NATIVE_LOGIN_COMPLETE) {
-                // Token updated under the hood
-              }
-              true;
-            `);
-          } else {
-            await resetNativeSession();
-          }
-        } catch (e) {
-          console.warn('Silent login refresh failed during active session:', e);
-          await resetNativeSession();
-        }
-      }
-    }, 60000); // Check every minute
+    if (!isAuthenticated) return undefined;
+    const interval = setInterval(() => {
+      const issuedAt = tokenIssuedAtRef.current;
+      if (!issuedAt || Date.now() - issuedAt < TOKEN_REFRESH_AGE_MS) return;
+      if (Date.now() < nextRefreshAttemptAtRef.current) return;
+      refreshSessionRef.current?.('interval');
+    }, REFRESH_CHECK_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  // Catch messages from the WebView (like Logging out, Haptics, or Theme changes)
+  // Android hardware Back navigates WebView history before leaving the app.
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !isAuthenticated) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (canGoBackRef.current && webviewRef.current) {
+        webviewRef.current.goBack();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [isAuthenticated]);
+
+  // Android only grants CAMERA at runtime, and the WebView file chooser omits the camera
+  // option without it. Ask once after sign-in (not at launch), only if not yet granted.
+  useEffect(() => {
+    if (Platform.OS !== 'android' || cameraPermissionAskedRef.current) return;
+    if (webBridgeStatus !== 'authenticated' && webBridgeStatus !== 'ready') return;
+    cameraPermissionAskedRef.current = true;
+    (async () => {
+      try {
+        const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA);
+        if (!granted) {
+          await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA, {
+            title: 'Camera access',
+            message: 'Allow camera access to photograph your notebook pages for syncing.',
+            buttonPositive: 'Allow',
+            buttonNegative: 'Not now',
+          });
+        }
+      } catch (e) {
+        console.warn('Camera permission request failed:', e);
+      }
+    })();
+  }, [webBridgeStatus]);
+
+  // Messages from the WebView (logout, haptics, theme, token refresh requests).
   const handleMessage = async (event) => {
     const data = event.nativeEvent.data;
     let parsedMessage = null;
@@ -209,174 +303,121 @@ export default function App() {
     }
 
     const messageType = parsedMessage?.type || data;
-    
-    if (messageType === 'SIGNOUT') {
+
+    if (messageType === 'GOOGLE_TOKEN_REFRESH_REQUEST') {
+      if (isAllowedAppOrigin(event.nativeEvent.url || currentUrlRef.current)) {
+        refreshSessionRef.current?.('webRequest');
+      }
+    } else if (messageType === 'SIGNOUT') {
       await resetNativeSession();
-    } 
-    else if (messageType === 'MOBILE_LOGIN_SUCCESS') {
+    } else if (messageType === 'MOBILE_LOGIN_SUCCESS') {
       setWebBridgeStatus('authenticated');
-    }
-    else if (messageType === 'MOBILE_APP_READY') {
+    } else if (messageType === 'MOBILE_APP_READY') {
       setWebBridgeStatus('ready');
-    }
-    else if (messageType === 'MOBILE_LOGIN_ERROR') {
+    } else if (messageType === 'MOBILE_LOGIN_ERROR') {
       console.warn('Mobile WebView login bridge failed:', parsedMessage?.payload || data);
-      await resetNativeSession();
-    }
-    else if (messageType === 'HAPTIC_LIGHT') {
+      await resetNativeSession("We couldn't connect your Google login to AI Planner. Please sign in again.");
+    } else if (messageType === 'HAPTIC_LIGHT') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    else if (messageType === 'HAPTIC_HEAVY') {
+    } else if (messageType === 'HAPTIC_HEAVY') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    }
-    else if (messageType === 'THEME_DARK') {
+    } else if (messageType === 'THEME_DARK') {
       setAppTheme('dark');
-    }
-    else if (messageType === 'THEME_LIGHT') {
+    } else if (messageType === 'THEME_LIGHT') {
       setAppTheme('light');
     }
   };
 
-  // Inject the token into the PWA once the WebView loads
-  const handleWebViewLoad = () => {
-    if (isAuthenticated && tokens) {
-      // Use JSON.stringify to safely inject strings and prevent XSS or parsing errors
-      const safeIdToken = tokens.idToken ? JSON.stringify(tokens.idToken) : 'null';
-      const safeAccessToken = JSON.stringify(tokens.accessToken);
-      const safePushToken = expoPushToken ? JSON.stringify(expoPushToken) : 'null';
+  // Inject the login bridge once the app shell loads (only / or /index.html on an app origin).
+  const handleWebViewLoad = (event) => {
+    const url = event?.nativeEvent?.url || currentUrlRef.current;
+    if (!isAuthenticated || !tokensRef.current) return;
+    if (!isAllowedAppOrigin(url) || !isLoginPath(parseUrl(url).pathname)) return;
+    webviewRef.current?.injectJavaScript(buildLoginScript(tokensRef.current, APP_ORIGINS));
+  };
 
-      const injectCode = `
-        (function() {
-          // Forcefully unregister ALL service workers instantly on load to fix sticky cache bugs
-          if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-              registrations.forEach(function(registration) {
-                registration.unregister();
-              });
-            });
-          }
+  const handleNavigationStateChange = (navState) => {
+    canGoBackRef.current = !!navState.canGoBack;
+    if (navState.url) currentUrlRef.current = navState.url;
+  };
 
-          // Retry mechanism: wait for mobileLogin to become available
-          var retryCount = 0;
-          var maxRetries = 20;
+  const openInBrowser = (url) => {
+    WebBrowser.openBrowserAsync(url).catch((e) => console.warn('Opening browser failed:', e));
+  };
 
-          function postNative(type, payload) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({ type: type, payload: payload || {} }));
-          }
-
-          function failBridge(message) {
-            postNative('MOBILE_LOGIN_ERROR', { message: message });
-          }
-
-          function reloadWithoutServiceWorker() {
-            var nextUrl = new URL(window.location.href);
-            if (nextUrl.searchParams.get('mobileBridgeReload') === '1') {
-              failBridge('Mobile login bridge was unavailable after a clean reload.');
-              return;
-            }
-
-            nextUrl.searchParams.set('mobileBridgeReload', '1');
-            window.location.replace(nextUrl.toString());
-          }
-          
-          function tryLogin() {
-            if (window.__AI_PLANNER_NATIVE_LOGIN_COMPLETE || window.__AI_PLANNER_NATIVE_LOGIN_PENDING) {
-              setupUI();
-              return;
-            }
-
-            if (window.mobileLogin) {
-              window.__AI_PLANNER_NATIVE_LOGIN_PENDING = true;
-              Promise.resolve(window.mobileLogin(${safeIdToken}, ${safeAccessToken}, ${safePushToken}))
-                .then(function() {
-                  window.__AI_PLANNER_NATIVE_LOGIN_COMPLETE = true;
-                  setupUI();
-                })
-                .catch(function(error) {
-                  window.__AI_PLANNER_NATIVE_LOGIN_PENDING = false;
-                  if (!window.__AI_PLANNER_NATIVE_LOGIN_ERROR_POSTED) {
-                    failBridge(error && error.message ? error.message : 'Mobile login bridge failed.');
-                  }
-                });
-            } else if (retryCount < maxRetries) {
-              retryCount++;
-              setTimeout(tryLogin, 500); // Wait 500ms and try again
-            } else {
-              // After all retries are exhausted, clear service worker cache once.
-              reloadWithoutServiceWorker();
-            }
-          }
-          
-          function setupUI() {
-            if (window.__AI_PLANNER_NATIVE_UI_READY) {
-              return;
-            }
-            window.__AI_PLANNER_NATIVE_UI_READY = true;
-
-            // --- 1. Global native feedback on interactive elements ---
-            document.addEventListener('click', function(e) {
-              var logoutTarget = e.target.closest('[data-drawer="logout"], #btn-logout');
-              if (logoutTarget) {
-                window.ReactNativeWebView.postMessage('SIGNOUT');
-                return;
-              }
-
-              var target = e.target.closest('button, a, input[type="submit"], .dash-btn');
-              if (target) {
-                var isHeavy = (target.innerText || '').toLowerCase().includes('sync');
-                window.ReactNativeWebView.postMessage(isHeavy ? 'HAPTIC_HEAVY' : 'HAPTIC_LIGHT');
-              }
-            }, true);
-
-            // --- 2. Dynamic Theme Observer (Watches website's Dark Mode) ---
-            var observer = new MutationObserver(function() {
-              var isDark = document.documentElement.classList.contains('dark-mode') || document.documentElement.classList.contains('oled-mode');
-              window.ReactNativeWebView.postMessage(isDark ? 'THEME_DARK' : 'THEME_LIGHT');
-            });
-            observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-            
-            // Initial Theme check
-            if (document.documentElement.classList.contains('dark-mode') || document.documentElement.classList.contains('oled-mode')) {
-              window.ReactNativeWebView.postMessage('THEME_DARK');
-            }
-          }
-          
-          tryLogin();
-        })();
-        true;
-      `;
-      webviewRef.current?.injectJavaScript(injectCode);
+  const openWithOS = async (url) => {
+    try {
+      if (await Linking.canOpenURL(url)) {
+        await Linking.openURL(url);
+        return;
+      }
+    } catch (e) {
+      console.warn('canOpenURL failed, trying openURL:', e);
+    }
+    // canOpenURL returns false for schemes not listed in LSApplicationQueriesSchemes /
+    // Android <queries>; openURL may still succeed, so try it directly.
+    try {
+      await Linking.openURL(url);
+    } catch (e) {
+      console.warn(`No app can open ${url.split(':')[0]}: links`, e);
     }
   };
 
-  // Intercept external links (like Privacy Policy or PDFs) and open them safely
-  const onShouldStartLoadWithRequest = (request) => {
-    const { url } = request;
-    
-    // Parse the URL safely
-    let parsedHost = '';
-    try { parsedHost = new URL(url).hostname; } catch(e) { /* invalid URL */ }
+  const routeNavigation = (request) => {
+    const decision = classifyNavigation(request, APP_ORIGIN);
+    if (decision === 'allow') return true;
+    if (decision === 'browser') openInBrowser(request.url);
+    else if (decision === 'linking') openWithOS(request.url);
+    return false;
+  };
 
-    // Force Privacy Policy and PDF files to open in the native overlay
-    if (url.includes('privacy.html') || url.toLowerCase().endsWith('.pdf')) {
-      WebBrowser.openBrowserAsync(url);
-      return false; 
-    }
+  const onShouldStartLoadWithRequest = (request) => routeNavigation(request);
 
-    // Allow normal navigation within the main app (strict hostname check)
-    if (parsedHost === 'planner.analogdigital.tech' || url.startsWith('about:blank')) {
-      return true;
+  // target="_blank" / window.open
+  const handleOpenWindow = (event) => {
+    const url = event.nativeEvent.targetUrl;
+    const decision = classifyNavigation({ url, isTopFrame: true }, APP_ORIGIN);
+    if (decision === 'linking') openWithOS(url);
+    else if (decision !== 'block') openInBrowser(url);
+  };
+
+  const handleWebError = (event) => {
+    const { description, code } = event.nativeEvent || {};
+    console.warn('WebView load error:', code, description);
+    setWebError("Couldn't load AI Planner. Check your connection and try again.");
+  };
+
+  const handleHttpError = (event) => {
+    const { statusCode, url } = event.nativeEvent || {};
+    console.warn('WebView HTTP error:', statusCode, url);
+    if (statusCode >= 500 && isAllowedAppOrigin(url)) {
+      setWebError('AI Planner is temporarily unavailable. Please try again in a moment.');
     }
-    
-    // Open any other external links natively
-    WebBrowser.openBrowserAsync(url);
-    return false; // Stop WebView
+  };
+
+  const retryWebView = () => {
+    setWebError(null);
+    canGoBackRef.current = false;
+    setWebViewKey((k) => k + 1); // remount: a failed first load has nothing to reload
+  };
+
+  // Android: the renderer died; the WebView instance can't be reused, so remount it.
+  const handleRenderProcessGone = (event) => {
+    console.warn('WebView render process gone:', event.nativeEvent?.didCrash);
+    canGoBackRef.current = false;
+    setWebViewKey((k) => k + 1);
+  };
+
+  // iOS: WKWebView content process terminated (memory pressure); reload the page.
+  const handleContentProcessDidTerminate = () => {
+    console.warn('WebView content process terminated; reloading.');
+    webviewRef.current?.reload();
   };
 
   if (isCheckingLogin) {
     return (
       <SafeAreaView style={styles.authContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#007AFF" accessibilityLabel="Checking sign-in" />
       </SafeAreaView>
     );
   }
@@ -384,15 +425,18 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <SafeAreaView style={styles.authContainer}>
-        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <StatusBar barStyle="dark-content" />
         <View style={styles.authContent}>
-          <Text style={styles.title}>AI Planner</Text>
+          <Text style={styles.title} accessibilityRole="header">AI Planner</Text>
           <Text style={styles.subtitle}>Secure Native Login</Text>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={[styles.loginBtn, isNativeLoginInProgress && styles.loginBtnDisabled]}
             onPress={handleNativeLogin}
             disabled={isNativeLoginInProgress}
+            accessibilityRole="button"
+            accessibilityLabel="Sign in with Google"
+            accessibilityState={{ disabled: isNativeLoginInProgress, busy: isNativeLoginInProgress }}
           >
             {isNativeLoginInProgress ? (
               <ActivityIndicator color="#ffffff" />
@@ -400,50 +444,92 @@ export default function App() {
               <Text style={styles.loginBtnText}>Sign in with Google</Text>
             )}
           </TouchableOpacity>
+
+          {loginError ? (
+            <Text style={styles.loginError} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              {loginError}
+            </Text>
+          ) : null}
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: appTheme === 'dark' ? '#0f172a' : '#ffffff' }]}>
-      <StatusBar 
-        barStyle={appTheme === 'dark' ? "light-content" : "dark-content"} 
-        backgroundColor={appTheme === 'dark' ? '#0f172a' : '#ffffff'} 
-      />
-      <WebView 
+    <SafeAreaView style={[styles.container, { backgroundColor: themeBg }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <WebView
+        key={webViewKey}
         ref={webviewRef}
-        source={{ uri: nocacheUrl }}
+        source={{ uri: START_URL }}
         style={styles.webview}
-        originWhitelist={['https://planner.analogdigital.tech/*', 'about:blank']}
+        // Routing is done in onShouldStartLoadWithRequest; a narrow whitelist would send
+        // Cashfree frames and UPI links to Linking before our handler runs.
+        originWhitelist={['*']}
         javaScriptEnabled={true}
         domStorageEnabled={true}
         sharedCookiesEnabled={true}
-        cacheEnabled={false}
+        cacheEnabled={true}
         incognito={false}
-        allowFileAccess={true}
+        allowFileAccess={false}
         allowFileAccessFromFileURLs={false}
         allowUniversalAccessFromFileURLs={false}
+        allowsBackForwardNavigationGestures={true}
         bounces={false}
         overScrollMode="never"
+        onLoadStart={() => setWebError(null)}
         onLoadEnd={handleWebViewLoad}
         onMessage={handleMessage}
+        onNavigationStateChange={handleNavigationStateChange}
         onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
+        onOpenWindow={handleOpenWindow}
+        onError={handleWebError}
+        onHttpError={handleHttpError}
+        renderError={() => <View style={[styles.webview, { backgroundColor: themeBg }]} />}
+        onRenderProcessGone={handleRenderProcessGone}
+        onContentProcessDidTerminate={handleContentProcessDidTerminate}
       />
-      {webBridgeStatus !== 'authenticated' && webBridgeStatus !== 'ready' && (
-        <View style={[styles.bridgeOverlay, { backgroundColor: appTheme === 'dark' ? '#0f172a' : '#ffffff' }]}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={[styles.bridgeTitle, { color: appTheme === 'dark' ? '#ffffff' : '#0f172a' }]}>
-            Authenticating secure session
+      {webError ? (
+        <View style={[styles.overlay, { backgroundColor: themeBg }]}>
+          <Text
+            style={[styles.overlayTitle, { color: isDark ? '#ffffff' : '#0f172a' }]}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+          >
+            {webError}
           </Text>
-          <Text style={[styles.bridgeSubtitle, { color: appTheme === 'dark' ? '#cbd5e1' : '#64748b' }]}>
-            Connecting your native Google login to AI Planner.
-          </Text>
-          <TouchableOpacity style={styles.bridgeResetBtn} onPress={resetNativeSession}>
-            <Text style={styles.bridgeResetText}>Refresh Login</Text>
+          <TouchableOpacity
+            style={[styles.overlayBtn, styles.retryBtn]}
+            onPress={retryWebView}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading AI Planner"
+          >
+            <Text style={styles.overlayBtnText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      )}
+      ) : webBridgeStatus !== 'authenticated' && webBridgeStatus !== 'ready' ? (
+        <View style={[styles.overlay, { backgroundColor: themeBg }]}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text
+            style={[styles.overlayTitle, { color: isDark ? '#ffffff' : '#0f172a' }]}
+            accessibilityLiveRegion="polite"
+          >
+            Authenticating secure session
+          </Text>
+          <Text style={[styles.overlaySubtitle, { color: isDark ? '#cbd5e1' : '#64748b' }]}>
+            Connecting your native Google login to AI Planner.
+          </Text>
+          <TouchableOpacity
+            style={[styles.overlayBtn, styles.resetBtn]}
+            onPress={() => resetNativeSession()}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh login"
+            accessibilityHint="Signs out so you can sign in with Google again"
+          >
+            <Text style={styles.overlayBtnText}>Refresh Login</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -479,11 +565,13 @@ const styles = StyleSheet.create({
   },
   loginBtn: {
     backgroundColor: '#007AFF',
+    minHeight: 48,
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 8,
     width: '100%',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   loginBtnDisabled: {
     backgroundColor: '#A0C8FF',
@@ -493,32 +581,48 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  bridgeOverlay: {
+  loginError: {
+    marginTop: 16,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#b91c1c',
+    textAlign: 'center',
+  },
+  overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 28,
   },
-  bridgeTitle: {
+  overlayTitle: {
     marginTop: 18,
     fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
   },
-  bridgeSubtitle: {
+  overlaySubtitle: {
     marginTop: 8,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
   },
-  bridgeResetBtn: {
+  overlayBtn: {
     marginTop: 24,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
+    minHeight: 44,
+    minWidth: 44,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resetBtn: {
     backgroundColor: '#ef4444',
   },
-  bridgeResetText: {
+  retryBtn: {
+    backgroundColor: '#007AFF',
+  },
+  overlayBtnText: {
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '700',

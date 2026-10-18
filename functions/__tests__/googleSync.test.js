@@ -8,6 +8,7 @@
 // Pull in services under isolated module scope where logger is mocked
 // ──────────────────────────────────────────────────────────────────────────────
 let syncCalendarEvents, syncGoogleTasks, updateCompletedTasks, syncExpensesToSheet, syncHealthToSheet;
+let createPlannerSpreadsheet, isNotFoundError, mockLogger;
 
 beforeAll(() => {
     jest.isolateModules(() => {
@@ -27,8 +28,11 @@ beforeAll(() => {
             syncGoogleTasks,
             updateCompletedTasks,
             syncExpensesToSheet,
-            syncHealthToSheet
+            syncHealthToSheet,
+            createPlannerSpreadsheet,
+            isNotFoundError
         } = require('../services/googleSync'));
+        ({ logger: mockLogger } = require('firebase-functions/logger'));
     });
 });
 
@@ -265,6 +269,75 @@ describe('updateCompletedTasks', () => {
         });
         expect(count).toBe(2);
         expect(mockTasks.tasks.patch).toHaveBeenCalledTimes(2);
+    });
+
+    test('ignores Google tasks without a title and planner todos without text (B-11)', async () => {
+        mockTasks.tasks.list.mockResolvedValue({ data: { items: [{ id: 'x' }, { id: 'y', title: null }, { id: 't1', title: 'Task A' }] } });
+        const count = await updateCompletedTasks(mockTasks, { todos: [{ done: true }, { task: 'Task A', done: true }] });
+        expect(count).toBe(1);
+        expect(mockTasks.tasks.patch).toHaveBeenCalledWith(expect.objectContaining({ task: 't1' }));
+    });
+
+    test('only matches tasks due on the target day or undated (B-11)', async () => {
+        mockTasks.tasks.list.mockResolvedValue({
+            data: {
+                items: [
+                    { id: 'old', title: 'Task A', due: '2024-01-01T00:00:00.000Z' },
+                    { id: 'today', title: 'Task A', due: '2025-01-01T00:00:00.000Z' },
+                    { id: 'undated', title: 'Task B' },
+                    { id: 'future', title: 'Task C', due: '2025-02-01T00:00:00.000Z' }
+                ]
+            }
+        });
+        const count = await updateCompletedTasks(mockTasks, {
+            date: '2025-01-01',
+            todos: [{ task: 'Task A', done: true }, { task: 'Task B', done: true }, { task: 'Task C', done: true }]
+        });
+        expect(count).toBe(2);
+        const patched = mockTasks.tasks.patch.mock.calls.map(c => c[0].task);
+        expect(patched).toEqual(['today', 'undated']);
+    });
+
+    test('one failing patch does not stop the others (B-11)', async () => {
+        mockTasks.tasks.list.mockResolvedValue({ data: { items: [{ id: 't1', title: 'A' }, { id: 't2', title: 'B' }] } });
+        mockTasks.tasks.patch.mockRejectedValueOnce(new Error('boom'));
+        const count = await updateCompletedTasks(mockTasks, { todos: [{ task: 'A', done: true }, { task: 'B', done: true }] });
+        expect(count).toBe(1);
+        expect(mockTasks.tasks.patch).toHaveBeenCalledTimes(2);
+    });
+
+    test('throws only when every matching patch failed', async () => {
+        mockTasks.tasks.list.mockResolvedValue({ data: { items: [{ id: 't1', title: 'A' }] } });
+        mockTasks.tasks.patch.mockRejectedValueOnce(new Error('boom'));
+        await expect(updateCompletedTasks(mockTasks, { todos: [{ task: 'A', done: true }] })).rejects.toThrow('Could not update 1');
+    });
+
+    test('never logs task titles (S-14)', async () => {
+        mockTasks.tasks.list.mockResolvedValue({ data: { items: [{ id: 't1', title: 'Secret medical appointment' }] } });
+        await updateCompletedTasks(mockTasks, { todos: [{ task: 'Secret medical appointment', done: true }] });
+        const logged = JSON.stringify([...mockLogger.info.mock.calls, ...mockLogger.warn.mock.calls, ...mockLogger.error.mock.calls]);
+        expect(logged).not.toContain('Secret medical appointment');
+    });
+});
+
+describe('createPlannerSpreadsheet / isNotFoundError (B-12)', () => {
+    test('creates the sheet with headers and tolerates formatting failures', async () => {
+        const sheets = {
+            spreadsheets: {
+                create: jest.fn().mockResolvedValue({ data: { spreadsheetId: 'sid' } }),
+                batchUpdate: jest.fn().mockRejectedValue(new Error('format failed')),
+                values: { update: jest.fn().mockResolvedValue({}) }
+            }
+        };
+        await expect(createPlannerSpreadsheet(sheets)).resolves.toBe('sid');
+        expect(sheets.spreadsheets.values.update).toHaveBeenCalledTimes(2);
+    });
+
+    test('detects 404 errors from googleapis', () => {
+        expect(isNotFoundError({ code: 404 })).toBe(true);
+        expect(isNotFoundError({ response: { status: 404 } })).toBe(true);
+        expect(isNotFoundError({ code: 403 })).toBe(false);
+        expect(isNotFoundError(null)).toBe(false);
     });
 });
 

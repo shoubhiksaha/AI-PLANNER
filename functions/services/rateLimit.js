@@ -1,14 +1,14 @@
-const admin = require("firebase-admin");
+const { db } = require('./db');
 const { RATE_LIMIT_WINDOW_MS } = require('../utils');
 
 async function checkRateLimit(email, endpoint, limit) {
-    const db = admin.firestore();
+    const firestore = db();
     const docId = `${email}_${endpoint}`;
-    const ref = db.collection('rateLimits').doc(docId);
+    const ref = firestore.collection('rateLimits').doc(docId);
     const now = Date.now();
     const expiresAt = new Date(now + (RATE_LIMIT_WINDOW_MS * 2));
 
-    return await db.runTransaction(async (transaction) => {
+    return await firestore.runTransaction(async (transaction) => {
         const doc = await transaction.get(ref);
         if (doc.exists) {
             const data = doc.data();

@@ -1,4 +1,13 @@
 {
-    "indexes": [],
+    "indexes": [
+        {
+            "collectionGroup": "syncHistory",
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [
+                { "fieldPath": "status", "order": "ASCENDING" },
+                { "fieldPath": "startedAt", "order": "ASCENDING" }
+            ]
+        }
+    ],
     "fieldOverrides": []
 }

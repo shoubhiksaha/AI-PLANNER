@@ -1,46 +1,85 @@
-// Service Worker Registration — Cache Buster v6
+// Service Worker registration (B-18)
 //
-// Key design decisions:
-// 1. controllerchange listener is attached SYNCHRONOUSLY (before 'load')
-//    so we never miss an activation event.
-// 2. We only auto-reload when UPDATING from an old SW to a new one.
-//    On first install (no prior controller), the page already has fresh
-//    content from the network, so reloading would be wasteful/harmful.
+// A new deploy never reloads the page by itself. When an updated worker is
+// installed we show an "Update available — Reload" banner. The banner is held
+// back while a sync, recording or payment is in progress (app.js sets
+// <html data-busy="true"> and fires "ai-planner:idle" when work finishes).
+(function () {
+    if (!('serviceWorker' in navigator)) return;
 
-if ('serviceWorker' in navigator) {
+    var waitingWorker = null;
+    var reloadRequested = false;
 
-    // Snapshot: was there already a SW controlling this page?
-    const hadPriorController = !!navigator.serviceWorker.controller;
+    var isBusy = function () {
+        return document.documentElement.dataset.busy === 'true';
+    };
 
-    // 1. Reload listener — only when upgrading from a previous version
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (hadPriorController && !refreshing) {
-            refreshing = true;
+    var banner = function () { return document.getElementById('update-banner'); };
+
+    var showBanner = function () {
+        var el = banner();
+        if (!el) return;
+        if (isBusy()) {
+            window.addEventListener('ai-planner:idle', showBanner, { once: true });
+            return;
+        }
+        el.classList.remove('hidden');
+        el.classList.add('flex');
+    };
+
+    var hideBanner = function () {
+        var el = banner();
+        if (!el) return;
+        el.classList.add('hidden');
+        el.classList.remove('flex');
+    };
+
+    var onUpdateReady = function (worker) {
+        waitingWorker = worker;
+        showBanner();
+    };
+
+    // Reload only when the user asked for the update.
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!reloadRequested) return;
+        reloadRequested = false;
+        window.location.reload();
+    });
+
+    document.addEventListener('click', function (e) {
+        var target = e.target && e.target.closest ? e.target.closest('#update-reload-btn') : null;
+        if (!target) return;
+        if (isBusy()) {
+            hideBanner();
+            window.addEventListener('ai-planner:idle', showBanner, { once: true });
+            return;
+        }
+        hideBanner();
+        if (waitingWorker) {
+            reloadRequested = true;
+            waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+        } else {
             window.location.reload();
         }
     });
 
-    // 2. Register + auto-apply updates on load
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(reg => {
-            console.log('SW registered');
-
-            // If a waiting worker already exists (from a prior visit that left
-            // an unapplied update), tell it to take over right now.
-            if (reg.waiting) {
-                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(function (reg) {
+            if (!reg) return;
+            if (reg.waiting && navigator.serviceWorker.controller) {
+                onUpdateReady(reg.waiting);
             }
-
-            reg.addEventListener('updatefound', () => {
-                const newWorker = reg.installing;
-                newWorker.addEventListener('statechange', () => {
+            reg.addEventListener('updatefound', function () {
+                var newWorker = reg.installing;
+                if (!newWorker) return;
+                newWorker.addEventListener('statechange', function () {
                     if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        // New version ready — activate immediately.
-                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                        onUpdateReady(newWorker);
                     }
                 });
             });
-        }).catch(e => console.log('SW registration failed', e));
+            // Long-lived tabs (and the mobile WebView) check for new deploys hourly.
+            setInterval(function () { reg.update().catch(function () { }); }, 60 * 60 * 1000);
+        }).catch(function (e) { console.log('SW registration failed', e); });
     });
-}
+})();

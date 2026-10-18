@@ -78,6 +78,64 @@ describe('UniversalAIAdapter', () => {
             await expect(adapter.chat('s', 'u', [], 'req')).rejects.toThrow('SSRF blocked');
         });
 
+        test('validates IP-literal hosts without DNS (S-18)', async () => {
+            const dns = require('dns');
+            dns.promises.resolve4.mockClear();
+            const literal = new UniversalAIAdapter({ apiKey: 'k', provider: 'openai', baseUrl: 'https://93.184.216.34/v1' });
+            global.fetch.mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: '{}' } }] }) });
+            await expect(literal.chat('s', 'u', [], 'req')).resolves.toBe('{}');
+            expect(dns.promises.resolve4).not.toHaveBeenCalled();
+            expect(() => new UniversalAIAdapter({ apiKey: 'k', provider: 'openai', baseUrl: 'https://[2002:a00:1::1]/v1' }))
+                .toThrow('Invalid BYOK Base URL');
+        });
+
+        test('pinned agent lookup honours options.all and rejects other hosts (B-19)', async () => {
+            const dns = require('dns');
+            dns.promises.resolve4.mockResolvedValue(['93.184.216.34']);
+            dns.promises.resolve6.mockResolvedValue(['2606:2800:220:1:248:1893:25c8:1946']);
+            const adapter = new UniversalAIAdapter({ apiKey: 'k', provider: 'openai', baseUrl: 'https://pinned.example.com/v1' });
+            await adapter._validateBaseUrlDns();
+            const agent = adapter._getPinnedHttpsAgent();
+            const lookup = agent.options.lookup;
+
+            const all = await new Promise((resolve, reject) => lookup('pinned.example.com', { all: true }, (err, addrs) => err ? reject(err) : resolve(addrs)));
+            expect(all).toEqual([
+                { address: '93.184.216.34', family: 4 },
+                { address: '2606:2800:220:1:248:1893:25c8:1946', family: 6 }
+            ]);
+
+            const single = await new Promise((resolve, reject) => lookup('pinned.example.com', { family: 4 }, (err, address, family) => err ? reject(err) : resolve({ address, family })));
+            expect(single).toEqual({ address: '93.184.216.34', family: 4 });
+
+            const legacy = await new Promise((resolve, reject) => lookup('pinned.example.com', (err, address, family) => err ? reject(err) : resolve({ address, family })));
+            expect(legacy).toEqual({ address: '93.184.216.34', family: 4 });
+
+            await expect(new Promise((resolve, reject) => lookup('evil.example.com', { all: true }, (err) => err ? reject(err) : resolve())))
+                .rejects.toThrow('unexpected outbound hostname');
+        });
+
+        test('pinned agent drives a real https.request lookup with all:true (B-19)', async () => {
+            const https = require('https');
+            const dns = require('dns');
+            dns.promises.resolve4.mockResolvedValue(['127.0.0.1']);
+            dns.promises.resolve6.mockRejectedValue({ code: 'ENODATA' });
+            const adapter = new UniversalAIAdapter({ apiKey: 'k', provider: 'openai', baseUrl: 'https://agent.example.com/v1' });
+            // Bypass the private-IP check to observe how Node consumes the lookup result.
+            adapter._validatedAddresses = [{ address: '127.0.0.1', family: 4 }];
+            adapter._dnsValidated = true;
+            const agent = adapter._getPinnedHttpsAgent();
+            const outcome = await new Promise((resolve) => {
+                const req = https.request({ host: 'agent.example.com', port: 1, path: '/', agent, timeout: 2000 }, () => resolve('response'));
+                req.on('error', (err) => resolve(err));
+                req.on('timeout', () => { req.destroy(new Error('timeout')); });
+                req.end();
+            });
+            // Connection is refused on port 1, but the lookup itself must not fail
+            // with "Invalid IP address: undefined" as it did before the fix.
+            expect(String(outcome && outcome.message)).not.toMatch(/Invalid IP address/);
+            expect(outcome.code).toBe('ECONNREFUSED');
+        });
+
         test('allows public IPv4 addresses', async () => {
             const dns = require('dns');
             dns.promises.resolve4.mockResolvedValue(['93.184.216.34']);
@@ -229,15 +287,17 @@ describe('UniversalAIAdapter', () => {
             expect(result).toBe('{"date":"2025-01-01"}');
         });
 
-        test('appends API key to URL as query param', async () => {
+        test('sends API key in x-goog-api-key header, never in the URL (S-06)', async () => {
             const adapter = new UniversalAIAdapter({ apiKey: 'my-secret-key', provider: 'google', modelName: 'gemini-pro' });
             global.fetch.mockResolvedValue({
                 ok: true,
                 json: async () => ({ candidates: [{ content: { parts: [{ text: '{}' }] } }] })
             });
             await adapter.chat('s', 'u', [], 'req');
-            const calledUrl = global.fetch.mock.calls[0][0];
-            expect(calledUrl).toContain('key=my-secret-key');
+            const [calledUrl, options] = global.fetch.mock.calls[0];
+            expect(calledUrl).not.toContain('my-secret-key');
+            expect(calledUrl).not.toContain('key=');
+            expect(options.headers['x-goog-api-key']).toBe('my-secret-key');
         });
 
         test('throws "No extraction returned" when candidates array is empty', async () => {
