@@ -14,7 +14,11 @@ async function seriousViolations(page) {
     const results = await new AxeBuilder({ page }).options({ preload: false }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
     return results.violations
         .filter(v => ['serious', 'critical'].includes(v.impact))
-        .map(v => `${v.id} (${v.impact}): ${v.nodes.slice(0, 3).map(n => n.target.join(' ')).join(' | ')}`);
+        .map(v => `${v.id} (${v.impact}): ${v.nodes.slice(0, 3).map(n => {
+            const d = (n.any && n.any[0] && n.any[0].data) || {};
+            const colours = d.fgColor ? ` [fg ${d.fgColor} on ${d.bgColor}, ${d.contrastRatio}:1]` : '';
+            return n.target.join(' ') + colours;
+        }).join(' | ')}`);
 }
 
 async function noHorizontalOverflow(page) {
