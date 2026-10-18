@@ -2172,7 +2172,8 @@ video {
   --bg-main: #f8fafc;
   --bg-card: rgba(255, 255, 255, 0.25);
   --text-main: #334155;
-  --text-muted: #64748b;
+  --text-muted: #475569;
+  /* slate-600: >=4.5:1 on every light surface (WCAG AA) */
   --border-color: #e2e8f0;
   --glass-bg: rgba(255, 255, 255, 0.25);
 }
