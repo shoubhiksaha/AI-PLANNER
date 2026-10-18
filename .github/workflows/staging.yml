@@ -42,7 +42,7 @@ jobs:
         working-directory: ./functions
         run: npm ci
       - name: Install Firebase CLI
-        run: npm install -g firebase-tools@13.35.1
+        run: npm install -g firebase-tools@15.30.1
       - name: Authenticate to Google Cloud (Workload Identity)
         if: ${{ vars.WIF_PROVIDER != '' && vars.SA_EMAIL != '' }}
         uses: google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193 # v2.1.10

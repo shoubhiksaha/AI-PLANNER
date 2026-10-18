@@ -21,7 +21,7 @@ if ! java -version >/dev/null 2>&1; then
 fi
 
 FIREBASE="${FIREBASE_BIN:-firebase}"
-command -v "$FIREBASE" >/dev/null || FIREBASE="npx -y firebase-tools@13.35.1"
+command -v "$FIREBASE" >/dev/null || FIREBASE="npx -y firebase-tools@15.30.1"
 
 [ -d functions/node_modules ] || (cd functions && npm ci)
 [ -d e2e/node_modules ] || (cd e2e && npm ci)
