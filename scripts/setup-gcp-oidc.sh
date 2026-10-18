@@ -69,11 +69,17 @@ echo "[3/5] Assigning deployment roles..."
 # secretmanager.viewer lets `firebase deploy` confirm the functions' secret bindings without
 # being able to read secret values. serviceAccountUser is granted only on the runtime
 # service account below, not project-wide.
+# artifactregistry.admin: the CLI sets a cleanup policy on the gcf-artifacts repository;
+# cloudscheduler.admin: scheduled functions (reconcileStuckSyncs) create Scheduler jobs;
+# serviceusage.serviceUsageViewer: the CLI checks that required APIs are enabled.
 ROLES=(
     "roles/firebase.admin"
     "roles/cloudfunctions.admin"
     "roles/run.admin"
     "roles/secretmanager.viewer"
+    "roles/artifactregistry.admin"
+    "roles/cloudscheduler.admin"
+    "roles/serviceusage.serviceUsageViewer"
 )
 
 for ROLE in "${ROLES[@]}"; do

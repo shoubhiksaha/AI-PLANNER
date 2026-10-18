@@ -14,7 +14,11 @@ async function seriousViolations(page) {
     const results = await new AxeBuilder({ page }).options({ preload: false }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
     return results.violations
         .filter(v => ['serious', 'critical'].includes(v.impact))
-        .map(v => `${v.id} (${v.impact}): ${v.nodes.slice(0, 3).map(n => n.target.join(' ')).join(' | ')}`);
+        .map(v => `${v.id} (${v.impact}): ${v.nodes.slice(0, 3).map(n => {
+            const d = (n.any && n.any[0] && n.any[0].data) || {};
+            const colours = d.fgColor ? ` [fg ${d.fgColor} on ${d.bgColor}, ${d.contrastRatio}:1]` : '';
+            return n.target.join(' ') + colours;
+        }).join(' | ')}`);
 }
 
 async function noHorizontalOverflow(page) {
@@ -22,6 +26,10 @@ async function noHorizontalOverflow(page) {
 }
 
 test.describe('Browser quality', () => {
+    // Accessibility checks run with reduced motion (which the app honours), so axe never
+    // measures a view mid-fade on slower CI machines. Motion itself is covered by the other specs.
+    test.use({ reducedMotion: 'reduce' });
+
     test.beforeEach(async ({ request }) => {
         await h.resetEmulators(request);
     });
@@ -62,7 +70,6 @@ test.describe('Browser quality', () => {
 
         for (const action of ['history', 'reports', 'settings']) {
             await h.openDrawerItem(page, action);
-            await page.waitForTimeout(350); // drawer close animation
             expect(await seriousViolations(page), `axe on ${action}`).toEqual([]);
             expect(await noHorizontalOverflow(page), `overflow on ${action}`).toBe(true);
         }
