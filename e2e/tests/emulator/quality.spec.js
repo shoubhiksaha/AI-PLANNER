@@ -5,8 +5,19 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const h = require('./helpers');
 
 // Wait for view fade-ins to finish so axe measures final colours, not mid-animation blends.
+// Axe judges final colours, so freeze the page first: finish every running animation,
+// disable further animations/transitions, then wait two frames for styles to apply.
 async function settle(page) {
-    await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== 'running'), null, { timeout: 5000 }).catch(() => {});
+    await page.evaluate(async () => {
+        if (!document.getElementById('e2e-no-motion')) {
+            const style = document.createElement('style');
+            style.id = 'e2e-no-motion';
+            style.textContent = '*, *::before, *::after { animation: none !important; transition: none !important; }';
+            document.head.appendChild(style);
+        }
+        document.getAnimations().forEach(a => { try { a.finish(); } catch (_) { a.cancel(); } });
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    });
 }
 
 async function seriousViolations(page) {
