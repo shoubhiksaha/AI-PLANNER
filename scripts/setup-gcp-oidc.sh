@@ -68,7 +68,8 @@ fi
 echo "[3/5] Assigning deployment roles..."
 # secretmanager.viewer lets `firebase deploy` confirm the functions' secret bindings without
 # being able to read secret values. serviceAccountUser is granted only on the runtime
-# service account below, not project-wide.
+# service accounts below (Gen2 functions run as the compute account; the CLI also checks
+# actAs on the App Engine default account), not project-wide.
 # artifactregistry.admin: the CLI sets a cleanup policy on the gcf-artifacts repository;
 # cloudscheduler.admin: scheduled functions (reconcileStuckSyncs) create Scheduler jobs;
 # serviceusage.serviceUsageViewer: the CLI checks that required APIs are enabled.
@@ -91,13 +92,15 @@ for ROLE in "${ROLES[@]}"; do
 done
 
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)")
-RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-echo "  Granting serviceAccountUser on the functions runtime account only ($RUNTIME_SA)"
-gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
-    --project="$PROJECT_ID" \
-    --member="serviceAccount:$SA_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
-    --role="roles/iam.serviceAccountUser" \
-    --quiet >/dev/null
+for RUNTIME_SA in "${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" "${PROJECT_ID}@appspot.gserviceaccount.com"; do
+    echo "  Granting serviceAccountUser on runtime account $RUNTIME_SA"
+    gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
+        --project="$PROJECT_ID" \
+        --member="serviceAccount:$SA_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
+        --role="roles/iam.serviceAccountUser" \
+        --condition=None \
+        --quiet >/dev/null
+done
 
 # 4. Create Workload Identity Pool
 echo "[4/5] Setting up Workload Identity Pool..."
