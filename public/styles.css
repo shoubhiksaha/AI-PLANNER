@@ -8,7 +8,7 @@
     --bg-main: #f8fafc;
     --bg-card: rgba(255, 255, 255, 0.25);
     --text-main: #334155;
-    --text-muted: #64748b;
+    --text-muted: #475569; /* slate-600: >=4.5:1 on every light surface (WCAG AA) */
     --border-color: #e2e8f0;
     --glass-bg: rgba(255, 255, 255, 0.25);
 }
@@ -101,7 +101,7 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: 999px;
     padding: 4px;
-    width: 44px;
+    width: 52px;
     box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.15);
     backdrop-filter: saturate(500%) blur(25px);
     -webkit-backdrop-filter: saturate(500%) blur(25px);
@@ -128,8 +128,10 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    background: transparent;
     border-radius: 50%;
     cursor: pointer;
     font-size: 1.1rem;
@@ -138,7 +140,8 @@ body {
     position: relative;
 }
 
-.theme-item:hover::after {
+.theme-item:hover::after,
+.theme-item:focus-visible::after {
     content: attr(data-label);
     position: absolute;
     right: 120%;
@@ -156,7 +159,8 @@ body {
 }
 
 .dark-mode .theme-item:hover::after,
-.oled-mode .theme-item:hover::after {
+.oled-mode .theme-item:hover::after,
+.theme-item:focus-visible::after {
     background: rgba(255, 255, 255, 0.9);
     color: black;
 }

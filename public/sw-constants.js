@@ -8,7 +8,7 @@
  * Keep this file free of DOM/SW APIs — constants only.
  */
 (function (exports) {
-    exports.CACHE_NAME = 'ai-planner-v44';
+    exports.CACHE_NAME = 'ai-planner-v46';
 
     exports.ASSETS_TO_CACHE = [
         '/',
@@ -23,10 +23,12 @@
         '/privacy.html',
         '/pricing-policy.html',
         '/refund-policy.html',
-        '/gear.html',
         '/planner.html',
+        '/theme-init.js',
         '/icon-192.png',
-        '/icon-512.png'
+        '/icon-512.png',
+        '/icon-maskable-512.png',
+        '/apple-touch-icon.png'
     ];
 
 })(typeof module !== 'undefined' && module.exports ? module.exports : (self.SW_CONSTANTS = {}));

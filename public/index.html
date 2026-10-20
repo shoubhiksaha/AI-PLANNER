@@ -3,37 +3,43 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>AI Planner Sync</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2921/2921226.png">
-    <meta name="theme-color" content="#ffffff">
-    <link rel="stylesheet" href="tailwind.css">
-    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" integrity="sha256-CWPPpQ6eHn5q+SmkCoHj6Jimc/EnDq+mkX3RN+SWgWQ=" crossorigin="anonymous"></script>
-    <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+    <script src="theme-init.js?v=1"></script>
+    <link rel="stylesheet" href="tailwind.css?v=27">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://unpkg.com/aos@2.3.4/dist/aos.css" rel="stylesheet">
-    <script src="sw-register.js" defer></script>
+    <script src="sw-register.js?v=27" defer></script>
     <style>
-        @keyframes tagWiggle {
-            0%, 100% { transform: rotate(6deg); }
-            5% { transform: rotate(2deg) scale(1.05); }
-            15% { transform: rotate(10deg) scale(1.05); }
-            25% { transform: rotate(4deg) scale(1.05); }
-            35% { transform: rotate(8deg) scale(1.05); }
-            45%, 100% { transform: rotate(6deg); }
+        /* Respect users who ask for less motion (UX 13) */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
         }
-        .price-tag-wiggle {
-            animation: tagWiggle 4s infinite ease-in-out;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            transform: rotate(6deg);
+
+        /* Visually hidden but available to screen readers / keyboard focus */
+        .sr-only-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
-        button:hover .price-tag-wiggle {
-            animation: none;
-            transform: rotate(12deg) scale(1.15) !important;
-            box-shadow: 0 0 25px rgba(255, 242, 0, 0.7), 0 5px 15px rgba(0,0,0,0.2) !important;
-            filter: brightness(1.15);
-            background-color: #fffb00 !important;
+        .upload-label:focus-within {
+            outline: 3px solid #10b981;
+            outline-offset: 2px;
         }
 
         /* Hamburger Drawer */
@@ -61,6 +67,7 @@
             width: 100%;
             max-width: 32rem;
             max-height: 92vh;
+            max-height: calc(92dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
             overflow-y: auto;
             border-radius: 24px;
             background: rgba(255, 255, 255, 0.95);
@@ -212,7 +219,8 @@
         .oled-mode .payment-details-shell input::placeholder { color: #94a3b8; }
 
         /* Tooltip */
-        [data-tooltip]:hover::after {
+        [data-tooltip]:hover::after,
+        [data-tooltip]:focus-visible::after {
             content: attr(data-tooltip);
             position: absolute;
             bottom: 120%;
@@ -292,28 +300,22 @@
 <body class="min-h-screen flex items-center justify-center p-4">
 
     <!-- MAIN CONTAINER -->
-    <div class="w-full max-w-lg mx-auto glass rounded-2xl shadow-xl p-8 relative overflow-hidden" data-aos="zoom-in" data-aos-duration="600">
+    <main class="w-full max-w-lg mx-auto glass rounded-2xl shadow-xl p-5 sm:p-8 relative">
 
         <!-- HEADER -->
         <div class="text-center mb-10 relative">
-            <!-- Build marker for support/debugging -->
-            <div class="absolute -top-4 -left-4 z-40">
-                <span id="build-version"
-                    class="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border border-theme-border text-theme-muted bg-theme-bg/70">
-                    build v?
-                </span>
-            </div>
             <!-- Theme Toggle (top-right) -->
-            <div class="absolute -top-4 -right-4 z-40">
-                <button id="theme-btn"
-                    class="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-xl">
-                    ☀️
+            <div class="absolute -top-2 -right-2 sm:-top-4 sm:-right-4 z-40">
+                <button id="theme-btn" type="button" aria-label="Change theme" aria-haspopup="true" aria-expanded="false"
+                    aria-controls="theme-dropdown"
+                    class="w-11 h-11 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-xl">
+                    <span aria-hidden="true">⚙️</span>
                 </button>
-                <div id="theme-dropdown" class="theme-menu">
-                    <div class="theme-item" data-theme="light" data-label="Light">☀️</div>
-                    <div class="theme-item" data-theme="dark" data-label="Dark">🌙</div>
-                    <div class="theme-item" data-theme="oled" data-label="OLED">🖤</div>
-                    <div class="theme-item" data-theme="auto" data-label="Auto">⚙️</div>
+                <div id="theme-dropdown" class="theme-menu" role="group" aria-label="Theme">
+                    <button type="button" class="theme-item" data-theme="light" data-label="Light" aria-label="Light theme" aria-pressed="false">☀️</button>
+                    <button type="button" class="theme-item" data-theme="dark" data-label="Dark" aria-label="Dark theme" aria-pressed="false">🌙</button>
+                    <button type="button" class="theme-item" data-theme="oled" data-label="OLED" aria-label="OLED black theme" aria-pressed="false">🖤</button>
+                    <button type="button" class="theme-item" data-theme="auto" data-label="Auto" aria-label="Match device theme" aria-pressed="false">⚙️</button>
                 </div>
             </div>
 
@@ -323,15 +325,15 @@
         </div>
 
         <!-- VIEW 1: LOGIN -->
-        <div id="view-login" class="flex flex-col items-center" data-aos="fade-up" data-aos-delay="200">
+        <div id="view-login" class="flex flex-col items-center">
 
             <!-- TRUST BADGE -->
             <div
                 class="mb-8 flex items-center space-x-2 bg-theme-glass px-4 py-1.5 rounded-full border border-theme-border">
-                <span class="text-xs font-semibold text-emerald-600 tracking-wide uppercase">🔒 Private & Secure</span>
+                <span class="text-xs font-semibold text-emerald-700 dark:text-emerald-400 tracking-wide uppercase">🔒 Private &amp; Secure</span>
             </div>
 
-            <button id="login-btn"
+            <button id="login-btn" type="button"
                 class="w-full max-w-sm py-3.5 px-6 bg-theme-card hover:bg-theme-bg border border-theme-border rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-center group mb-4">
                 <svg class="w-6 h-6 mr-3 group-hover:scale-110 transition-transform" viewBox="0 0 24 24"
                     aria-hidden="true" focusable="false">
@@ -351,7 +353,7 @@
             <div class="w-full text-left mb-8 space-y-4">
                 
                 <!-- Hero Pitch -->
-                <div class="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-blue-500/10 border border-emerald-500/20 dark:border-emerald-500/10 rounded-2xl p-5 shadow-sm relative overflow-hidden" data-aos="fade-up" data-aos-delay="300">
+                <div class="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-blue-500/10 border border-emerald-500/20 dark:border-emerald-500/10 rounded-2xl p-5 shadow-sm relative overflow-hidden">
                     <div class="absolute -top-4 -right-4 text-6xl opacity-10 blur-[2px] pointer-events-none">✨</div>
                     <h3 class="font-bold text-theme-text text-[17px] tracking-tight mb-2">Love your paper planner? <span class="text-emerald-600 dark:text-emerald-400">Upgrade it with AI.</span></h3>
                     <p class="text-[13px] text-theme-muted leading-relaxed">
@@ -361,7 +363,7 @@
 
                 <!-- Feature Cards -->
                 <div class="grid grid-cols-1 gap-3">
-                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default" data-aos="fade-up" data-aos-delay="400">
+                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default">
                         <div class="text-2xl pt-0.5 group-hover:scale-110 transition-transform">📅</div>
                         <div>
                             <h4 class="font-bold text-theme-text text-[13px]">Schedule It</h4>
@@ -369,11 +371,11 @@
                         </div>
                     </div>
 
-                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default" data-aos="fade-up" data-aos-delay="500">
+                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default">
                         <div class="text-2xl pt-0.5 group-hover:scale-110 transition-transform">✅</div>
                         <div>
                             <h4 class="font-bold text-theme-text text-[13px]">Crush Your To-Dos</h4>
-                            <p class="text-[12px] text-theme-muted mt-1 leading-relaxed">We digitize your tasks. Do an "Evening Sync" to scan what you crossed out on paper, and we'll auto-complete them in Google Tasks.</p>
+                            <p class="text-[12px] text-theme-muted mt-1 leading-relaxed">We digitize your tasks. Do an "Evening review" to scan what you crossed out on paper, and we'll auto-complete them in Google Tasks.</p>
                         </div>
                     </div>
 
@@ -396,253 +398,252 @@
 
             </div>
 
+            <!-- Login errors (U-11): plain text, never raw Firebase codes -->
+            <div id="login-error" class="hidden w-full max-w-sm -mt-2 mb-6 p-3 rounded-xl border border-red-200 bg-red-50 text-red-700 dark:bg-red-900/20 dark:border-red-800/40 dark:text-red-300 text-sm" role="alert">
+                <p id="login-error-text"></p>
+                <button id="login-retry-btn" type="button" class="mt-2 min-h-[44px] px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm">Try again</button>
+            </div>
+
             <!-- FOOTER LINKS -->
             <div
-                class="w-full grid grid-cols-2 gap-y-6 gap-x-4 text-xs text-theme-muted border-t border-theme-border pt-8">
-                <a href="privacy.html" target="_blank"
-                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
-                    <span class="group-hover:scale-110 transition-transform">🛡️</span> Privacy Policy
+                class="w-full grid grid-cols-2 gap-y-2 gap-x-4 text-xs text-theme-muted border-t border-theme-border pt-6">
+                <a href="privacy.html" target="_blank" rel="noopener"
+                    class="min-h-[44px] hover:text-emerald-700 transition-colors flex items-center justify-center gap-2 group">
+                    <span aria-hidden="true" class="group-hover:scale-110 transition-transform">🛡️</span> Privacy Policy
                 </a>
-                <a href="pricing-policy.html" target="_blank"
-                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
-                    <span class="group-hover:scale-110 transition-transform">💳</span> Pricing Policy
+                <a href="pricing-policy.html" target="_blank" rel="noopener"
+                    class="min-h-[44px] hover:text-emerald-700 transition-colors flex items-center justify-center gap-2 group">
+                    <span aria-hidden="true" class="group-hover:scale-110 transition-transform">💳</span> Pricing Policy
                 </a>
-                <a href="refund-policy.html" target="_blank"
-                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
-                    <span class="group-hover:scale-110 transition-transform">💸</span> Refund Policy
+                <a href="refund-policy.html" target="_blank" rel="noopener"
+                    class="min-h-[44px] hover:text-emerald-700 transition-colors flex items-center justify-center gap-2 group">
+                    <span aria-hidden="true" class="group-hover:scale-110 transition-transform">💸</span> Refund Policy
                 </a>
-                <a href="planner.html" target="_blank"
-                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
-                    <span class="group-hover:scale-110 transition-transform">📄</span> Planner PDF
+                <a href="planner.html" target="_blank" rel="noopener"
+                    class="min-h-[44px] hover:text-emerald-700 transition-colors flex items-center justify-center gap-2 group">
+                    <span aria-hidden="true" class="group-hover:scale-110 transition-transform">📄</span> Free Planner Template
                 </a>
-                <a href="gear.html" target="_blank"
-                    class="hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 group">
-                    <span class="group-hover:scale-110 transition-transform">🛍️</span> Best Gear List
-                </a>
-                <div class="opacity-50 flex items-center justify-center gap-1 cursor-not-allowed" title="Coming Soon">
+                <div class="col-span-2 min-h-[44px] flex items-center justify-center gap-1 text-theme-muted">
                     <span>⌚ Health Sync</span>
                     <span
-                        class="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Soon</span>
+                        class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Soon</span>
                 </div>
             </div>
         </div>
 
-        <!-- VIEW 1.5: NAME PROMPT (New Users Only) -->
+        <!-- VIEW 1.5: EDIT NAME (opened from the menu; new users use their Google name automatically) -->
         <div id="view-name-prompt" class="view-hidden fade-in flex flex-col items-center space-y-6">
             <div class="text-center">
-                <div class="text-4xl mb-3">👋</div>
-                <h2 class="text-2xl font-bold text-theme-text">Welcome!</h2>
-                <p class="text-sm text-theme-muted mt-2">What should we call you?</p>
+                <div class="text-4xl mb-3" aria-hidden="true">👋</div>
+                <h2 class="text-2xl font-bold text-theme-text">Your name</h2>
+                <p class="text-sm text-theme-muted mt-2">This is how AI Planner greets you.</p>
             </div>
             <div class="w-full max-w-xs">
-                <label class="block text-xs font-bold text-theme-muted uppercase mb-1">Your Name</label>
-                <input type="text" id="user-display-name-input"
+                <label for="user-display-name-input" class="block text-xs font-bold text-theme-muted uppercase mb-1">Your Name</label>
+                <input type="text" id="user-display-name-input" maxlength="100"
                     class="w-full rounded-xl border border-theme-border bg-theme-bg p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center text-lg font-medium text-theme-text"
-                    placeholder="e.g., Shoubhik" autocomplete="name">
+                    placeholder="e.g., Shoubhik" autocomplete="name" aria-describedby="name-error">
+                <p id="name-error" class="hidden text-xs text-red-600 dark:text-red-400 mt-1" role="alert"></p>
             </div>
-            <button id="save-name-btn"
-                class="w-full max-w-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md transition-all">
-                Continue →
+            <button id="save-name-btn" type="button"
+                class="w-full max-w-xs min-h-[44px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md transition-all">
+                Save name
+            </button>
+            <button id="cancel-name-btn" type="button"
+                class="w-full max-w-xs min-h-[44px] text-theme-muted hover:text-theme-text text-sm transition-colors">
+                ← Back to Dashboard
             </button>
         </div>
 
-        <!-- VIEW 2: NOTION SETUP (First-Time Onboarding) -->
-        <div id="view-notion-setup" class="view-hidden fade-in space-y-6">
-            <!-- Premium Header -->
+        <!-- VIEW 2: NOTION SETUP (asked for only when Journal or Voice is used) -->
+        <div id="view-notion-setup" class="view-hidden fade-in space-y-5">
             <div class="notion-onboard-header text-center py-6 rounded-2xl relative overflow-hidden">
                 <div
                     class="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 animate-gradient-shift">
                 </div>
                 <div class="relative z-10">
-                    <div class="text-5xl mb-3">📝</div>
+                    <div class="text-5xl mb-3" aria-hidden="true">📝</div>
                     <h2 class="text-2xl font-black text-theme-text tracking-tight">Connect Notion</h2>
-                    <p class="text-sm text-theme-muted mt-1">Your planner entries will sync to your Notion workspace.
-                    </p>
+                    <p class="text-sm text-theme-muted mt-1 px-4">Journal pages and voice notes are saved to a Notion database you choose.</p>
                 </div>
             </div>
 
-            <!-- Step Guide -->
-            <div
-                class="text-center p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-800/20">
-                <p class="text-sm text-theme-muted">Need help? Tap the guide below to get your Notion keys in 4 easy
-                    steps.</p>
-            </div>
+            <p id="notion-setup-context" class="hidden text-sm p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 text-blue-800 dark:text-blue-200"></p>
 
-            <!-- Input Fields -->
+            <!-- Guide first (UX 10) -->
+            <ol class="text-sm text-theme-muted space-y-1.5 list-decimal list-inside p-4 rounded-xl border border-theme-border bg-theme-bg">
+                <li>Create an integration at <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener" class="text-blue-600 dark:text-blue-400 underline">notion.so/my-integrations</a> and copy its token.</li>
+                <li>Open your journal database in Notion → <strong>•••</strong> → <strong>Connections</strong> → add your integration.</li>
+                <li>Copy the database link (<strong>Share → Copy link</strong>) and paste it below.</li>
+            </ol>
+            <button id="open-guide-onboard" type="button"
+                class="min-h-[44px] text-blue-600 dark:text-blue-400 text-sm hover:underline flex items-center gap-1 mx-auto">
+                <span aria-hidden="true">📚</span> Show the detailed step-by-step guide
+            </button>
+
             <div class="space-y-4">
                 <div>
-                    <label class="block text-xs font-bold text-theme-muted uppercase mb-1.5 tracking-wider">Integration
-                        Key</label>
-                    <input type="password" id="notion-key-input"
+                    <label for="notion-key-input" class="block text-xs font-bold text-theme-muted uppercase mb-1.5 tracking-wider">Integration token</label>
+                    <input type="password" id="notion-key-input" autocomplete="off" spellcheck="false"
+                        aria-describedby="notion-key-error"
                         class="w-full rounded-xl border border-theme-border bg-theme-bg p-3.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-theme-text font-mono placeholder:font-sans"
-                        placeholder="ntn_... or secret_...">
+                        placeholder="ntn_… or secret_…">
+                    <p id="notion-key-error" class="hidden text-xs text-red-600 dark:text-red-400 mt-1" role="alert"></p>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-theme-muted uppercase mb-1.5 tracking-wider">Database
-                        ID</label>
-                    <input type="text" id="notion-db-input"
+                    <label for="notion-db-input" class="block text-xs font-bold text-theme-muted uppercase mb-1.5 tracking-wider">Database link or ID</label>
+                    <input type="text" id="notion-db-input" autocomplete="off" spellcheck="false"
+                        aria-describedby="notion-db-help notion-db-error"
                         class="w-full rounded-xl border border-theme-border bg-theme-bg p-3.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-theme-text font-mono placeholder:font-sans"
-                        placeholder="Paste your 32-character database ID">
+                        placeholder="https://www.notion.so/…  or the 32-character ID">
+                    <p id="notion-db-help" class="text-[11px] text-theme-muted mt-1">Paste the whole link — we’ll pick out the ID.</p>
+                    <p id="notion-db-error" class="hidden text-xs text-red-600 dark:text-red-400 mt-1" role="alert"></p>
                 </div>
             </div>
-
-            <button id="open-guide-onboard"
-                class="text-blue-500 text-sm hover:underline flex items-center gap-1 mx-auto">
-                <span>📚</span> How to find these keys? (Step-by-Step Guide)
-            </button>
 
             <!-- Notion Connected Badge (shown when revisiting) -->
             <div id="notion-onboard-status"
                 class="hidden items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/30 rounded-xl p-3">
-                <span class="text-emerald-600 font-bold text-sm">✅ Notion Connected</span>
-                <button id="change-notion-onboard-btn" class="text-xs text-blue-500 hover:underline ml-auto">Change
-                    Keys</button>
+                <span class="text-emerald-700 dark:text-emerald-300 font-bold text-sm">✅ Notion Connected</span>
+                <button id="change-notion-onboard-btn" type="button" class="min-h-[44px] px-2 text-xs text-blue-600 dark:text-blue-400 hover:underline ml-auto">Change keys</button>
             </div>
 
             <button id="save-notion-btn" type="button"
-                class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all transform hover:scale-[1.01] active:scale-[0.99]">
+                class="w-full min-h-[44px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all">
                 Connect Notion →
             </button>
             <button id="skip-notion-btn" type="button"
-                class="w-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm py-2 transition-colors">
-                Skip for now → Go to Dashboard
+                class="w-full min-h-[44px] text-theme-muted hover:text-theme-text text-sm py-2 transition-colors">
+                Not now — back to Dashboard
             </button>
         </div>
 
-        <!-- VIEW 3: ADVANCED SETTINGS (BYOK Only) -->
+        <!-- VIEW 3: ADVANCED SETTINGS -->
         <div id="view-setup" class="view-hidden fade-in space-y-6">
             <div class="flex items-center justify-between">
-                <h3 class="font-bold text-lg text-theme-text">⚙️ Advanced Settings</h3>
-                <button id="back-to-dash-from-setup"
-                    class="text-xs font-medium text-theme-text hover:bg-theme-border/50 px-3 py-1.5 rounded-full transition-colors border border-theme-border hidden">
+                <h2 class="font-bold text-lg text-theme-text">⚙️ Advanced Settings</h2>
+                <button id="back-to-dash-from-setup" type="button"
+                    class="min-h-[44px] text-xs font-medium text-theme-text hover:bg-theme-border/50 px-4 rounded-full transition-colors border border-theme-border">
                     ← Back
                 </button>
             </div>
 
             <!-- Notion Connection Status Card -->
             <div id="adv-notion-status"
-                class="flex items-center justify-between p-3 rounded-xl border border-theme-border bg-theme-bg">
+                class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl border border-theme-border bg-theme-bg">
                 <div class="flex items-center gap-2">
-                    <span class="text-lg">📝</span>
+                    <span class="text-lg" aria-hidden="true">📝</span>
                     <div>
                         <span id="adv-notion-label" class="text-sm font-semibold text-theme-text">Notion</span>
                         <span id="adv-notion-badge" class="text-xs text-theme-muted ml-1">Not connected</span>
                     </div>
                 </div>
-                <button id="adv-notion-configure"
-                    class="text-xs font-medium text-blue-500 hover:underline">Configure</button>
+                <div class="flex items-center gap-1">
+                    <button id="adv-notion-configure" type="button"
+                        class="min-h-[44px] px-3 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">Configure</button>
+                    <button id="adv-notion-disconnect" type="button"
+                        class="hidden min-h-[44px] px-3 text-xs font-medium text-red-600 dark:text-red-400 hover:underline">Disconnect</button>
+                </div>
             </div>
 
             <!-- SECTION: Sync Preferences -->
-            <details class="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden" open>
+            <details class="group bg-theme-bg border border-theme-border rounded-xl overflow-hidden" open>
                 <summary
-                    class="flex items-center justify-between p-4 cursor-pointer font-bold text-slate-700 select-none">
+                    class="flex items-center justify-between p-4 min-h-[44px] cursor-pointer font-bold text-theme-text select-none">
                     <span class="flex items-center gap-2">🔄 Sync Preferences</span>
-                    <svg class="w-4 h-4 transition-transform group-open:rotate-180 text-slate-400" fill="none"
-                        stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 transition-transform group-open:rotate-180 text-theme-muted" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </summary>
-                <div class="p-4 pt-0 space-y-4 border-t border-slate-200 mt-2">
-                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                        <p class="text-xs text-blue-800 leading-relaxed">
-                            <strong>ℹ️ What is Duplicate Prevention?</strong> When enabled, the app checks your
-                            existing Google Calendar events and Tasks before adding new ones. If an entry with the
-                            same title already exists for that date, it skips it — preventing duplicates when you
-                            re-sync the same planner page. For Calendar events, it checks for the same title on the same date with the exact same start and end time.
-                        </p>
-                    </div>
+                <div class="p-4 pt-0 space-y-4 border-t border-theme-border mt-2">
+                    <p class="text-xs text-theme-muted leading-relaxed pt-3">
+                        <strong class="text-theme-text">Duplicate prevention</strong> checks your existing Google Calendar
+                        events and Tasks before adding new ones, so re-syncing the same page doesn’t create copies.
+                    </p>
 
-                    <!-- Calendar Dedup Toggle -->
-                    <div class="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white">
+                    <div class="flex items-center justify-between p-3 rounded-lg border border-theme-border">
                         <div class="flex-1 pr-3">
-                            <span class="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-                                📅 Calendar Duplicate Prevention
+                            <span id="dedup-calendar-label" class="text-sm font-semibold text-theme-text flex items-center gap-1.5">
+                                📅 Calendar duplicate prevention
                             </span>
-                            <span class="text-[10px] text-slate-500 mt-0.5 block">
-                                Skips creating events that already exist at the same time on that date.
+                            <span class="text-[11px] text-theme-muted mt-0.5 block">
+                                Skips events that already exist with the same title and time on that date.
                             </span>
                         </div>
                         <label class="toggle-switch" for="dedup-calendar">
-                            <input type="checkbox" id="dedup-calendar" checked>
+                            <input type="checkbox" id="dedup-calendar" name="dedupCalendar" aria-labelledby="dedup-calendar-label" checked>
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
 
-                    <!-- Tasks Dedup Toggle -->
-                    <div class="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white">
+                    <div class="flex items-center justify-between p-3 rounded-lg border border-theme-border">
                         <div class="flex-1 pr-3">
-                            <span class="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-                                ✅ Tasks Duplicate Prevention
+                            <span id="dedup-tasks-label" class="text-sm font-semibold text-theme-text flex items-center gap-1.5">
+                                ✅ Tasks duplicate prevention
                             </span>
-                            <span class="text-[10px] text-slate-500 mt-0.5 block">
-                                Skips creating tasks that already exist with the same name on that date.
+                            <span class="text-[11px] text-theme-muted mt-0.5 block">
+                                Skips tasks that already exist with the same name on that date.
                             </span>
                         </div>
                         <label class="toggle-switch" for="dedup-tasks">
-                            <input type="checkbox" id="dedup-tasks" checked>
+                            <input type="checkbox" id="dedup-tasks" name="dedupTasks" aria-labelledby="dedup-tasks-label" checked>
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
+                    <p id="dedup-error" class="hidden text-xs text-red-600 dark:text-red-400" role="alert"></p>
                 </div>
             </details>
 
-            <!-- BYOK Section -->
-
             <!-- SECTION: AI Provider (BYOK) -->
-            <details class="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+            <details id="byok-details" class="group bg-theme-bg border border-theme-border rounded-xl overflow-hidden">
                 <summary
-                    class="flex items-center justify-between p-4 cursor-pointer font-bold text-slate-700 select-none">
-                    <span class="flex items-center gap-2">🔒 AI Provider (BYOK) <span
-                            class="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded text-slate-500 uppercase">Power
-                            Users</span></span>
-                    <svg class="w-4 h-4 transition-transform group-open:rotate-180 text-slate-400" fill="none"
-                        stroke="currentColor" viewBox="0 0 24 24">
+                    class="flex items-center justify-between p-4 min-h-[44px] cursor-pointer font-bold text-theme-text select-none">
+                    <span class="flex items-center gap-2">🔒 Your own AI key (BYOK) <span
+                            class="text-[10px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-200 uppercase">Power
+                            users</span></span>
+                    <svg class="w-4 h-4 transition-transform group-open:rotate-180 text-theme-muted" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </summary>
-                <div class="p-4 pt-0 space-y-4 border-t border-slate-200 mt-2">
-                    <!-- Disclaimer -->
-                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                        <p class="text-xs text-amber-800 leading-relaxed">
-                            <strong>⚠️ Data Routing Disclaimer:</strong> When using BYOK, your planner images are sent
-                            to your chosen AI provider for processing.
-                            Your API key is either kept in-memory only (Session Mode) or encrypted via GCP KMS (Cloud
-                            Mode). We never store your key in plaintext.
+                <div class="p-4 pt-0 space-y-4 border-t border-theme-border mt-2">
+                    <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg p-3 mt-3">
+                        <p class="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                            <strong>How your key is handled:</strong> your planner images are sent to the AI provider you choose.
+                            In <strong>This tab only</strong> mode the key stays in this browser tab’s <code>sessionStorage</code>
+                            and is sent with each sync over HTTPS; it is never stored on our servers and is erased when you
+                            close the tab or sign out. It is stored on our servers only if you choose
+                            <strong>Save encrypted</strong>, which envelope-encrypts it with Google Cloud KMS.
                         </p>
                     </div>
 
-                    <!-- Storage Mode -->
-                    <div class="space-y-3">
-                        <label
-                            class="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-white transition-colors">
-                            <input type="radio" name="byok-mode" value="stateless" class="mt-0.5 accent-emerald-500"
-                                checked>
-                            <div class="flex flex-col">
-                                <span class="text-sm font-bold text-slate-700 flex items-center gap-1.5"><span
-                                        class="w-2 h-2 rounded-full bg-emerald-500"></span>Session-Only (Maximum
-                                    Privacy)</span>
-                                <span class="text-[10px] text-slate-500 mt-0.5">Key is saved ONLY to your device and
-                                    deleted from RAM instantly after sync.</span>
-                            </div>
-                        </label>
-                        <label
-                            class="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-white transition-colors">
-                            <input type="radio" name="byok-mode" value="kms" class="mt-0.5 accent-blue-500">
-                            <div class="flex flex-col">
-                                <span class="text-sm font-bold text-slate-700 flex items-center gap-1.5"><span
-                                        class="w-2 h-2 rounded-full bg-blue-500"></span>Save Securely (Cloud KMS)</span>
-                                <span class="text-[10px] text-slate-500 mt-0.5">Key is envelope-encrypted via GCP KMS.
-                                    Enables background batch syncing.</span>
-                            </div>
-                        </label>
-                    </div>
+                    <p id="byok-status" class="hidden text-xs p-3 rounded-lg border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200" role="status"></p>
 
-                    <!-- Provider Dropdown -->
+                    <fieldset class="space-y-3">
+                        <legend class="sr-only">Where to keep your key</legend>
+                        <label
+                            class="flex items-start gap-3 p-3 border border-theme-border rounded-lg cursor-pointer hover:bg-theme-border/20 transition-colors">
+                            <input type="radio" name="byok-mode" value="stateless" class="mt-0.5 accent-emerald-600 w-5 h-5" checked>
+                            <span class="flex flex-col">
+                                <span class="text-sm font-bold text-theme-text">This tab only (most private)</span>
+                                <span class="text-[11px] text-theme-muted mt-0.5">Kept in this tab’s sessionStorage and sent with each sync. Never stored on our servers. Closing the tab erases it.</span>
+                            </span>
+                        </label>
+                        <label
+                            class="flex items-start gap-3 p-3 border border-theme-border rounded-lg cursor-pointer hover:bg-theme-border/20 transition-colors">
+                            <input type="radio" name="byok-mode" value="kms" class="mt-0.5 accent-blue-600 w-5 h-5">
+                            <span class="flex flex-col">
+                                <span class="text-sm font-bold text-theme-text">Save encrypted (Cloud KMS)</span>
+                                <span class="text-[11px] text-theme-muted mt-0.5">Stored on our servers, envelope-encrypted with Google Cloud KMS, so it works on every device. Remove it any time below.</span>
+                            </span>
+                        </label>
+                    </fieldset>
+
                     <div class="space-y-3">
-                        <label class="block text-xs font-bold text-gray-600 uppercase mb-1">AI Provider & Model</label>
+                        <label for="byok-provider" class="block text-xs font-bold text-theme-muted uppercase mb-1">AI Provider &amp; Model</label>
                         <select id="byok-provider"
-                            class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none">
+                            class="w-full min-h-[44px] rounded-lg border border-theme-border bg-theme-bg text-theme-text p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none">
                             <optgroup label="🌐 Major Cloud Providers">
                                 <option value="openai:gpt-4.1">OpenAI — GPT-4.1</option>
                                 <option value="openai:gpt-4o">OpenAI — GPT-4o</option>
@@ -693,160 +694,172 @@
                                 <option value="custom:azure">Custom — Azure OpenAI Endpoint</option>
                             </optgroup>
                         </select>
-                        <!-- Provider-specific API key hint -->
-                        <p id="byok-key-hint" class="text-[11px] text-slate-400 leading-snug hidden"></p>
+                        <p id="byok-key-hint" class="text-[11px] text-theme-muted leading-snug hidden"></p>
 
-                        <!-- Custom Sub-Category Fields -->
                         <div id="byok-custom-fields"
-                            class="space-y-3 hidden mt-3 bg-slate-100 p-4 rounded-lg border border-slate-200 border-dashed">
-                            <div id="custom-type-label" class="text-xs font-bold text-indigo-700 mb-2"></div>
+                            class="space-y-3 hidden mt-3 p-4 rounded-lg border border-theme-border border-dashed">
+                            <div id="custom-type-label" class="text-xs font-bold text-indigo-700 dark:text-indigo-300 mb-2"></div>
                             <div id="custom-url-group">
-                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Base URL</label>
+                                <label for="byok-custom-url" class="block text-xs font-bold text-theme-muted uppercase mb-1">API Base URL</label>
                                 <input type="url" id="byok-custom-url"
-                                    class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
+                                    class="w-full rounded-lg border border-theme-border bg-theme-bg text-theme-text p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
                                     placeholder="https://api.example.com/v1/chat/completions">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Model Name</label>
+                                <label for="byok-custom-model" class="block text-xs font-bold text-theme-muted uppercase mb-1">Model Name</label>
                                 <input type="text" id="byok-custom-model"
-                                    class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
+                                    class="w-full rounded-lg border border-theme-border bg-theme-bg text-theme-text p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
                                     placeholder="my-model-name">
                             </div>
                             <div id="custom-api-version-group" class="hidden">
-                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Version (Azure only)</label>
+                                <label for="byok-custom-api-version" class="block text-xs font-bold text-theme-muted uppercase mb-1">API Version (Azure only)</label>
                                 <input type="text" id="byok-custom-api-version"
-                                    class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
+                                    class="w-full rounded-lg border border-theme-border bg-theme-bg text-theme-text p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
                                     placeholder="2023-05-15">
                             </div>
                         </div>
                     </div>
 
-                    <!-- API Key -->
                     <div>
-                        <label class="block text-xs font-bold text-gray-600 uppercase mb-1">API Key</label>
-                        <input type="password" id="byok-api-key"
-                            class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
+                        <label for="byok-api-key" class="block text-xs font-bold text-theme-muted uppercase mb-1">API Key</label>
+                        <input type="password" id="byok-api-key" autocomplete="off" spellcheck="false"
+                            aria-describedby="byok-error"
+                            class="w-full rounded-lg border border-theme-border bg-theme-bg text-theme-text p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
                             placeholder="Paste your API key here…">
+                        <p id="byok-error" class="hidden text-xs text-red-600 dark:text-red-400 mt-1" role="alert"></p>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                        <button id="byok-clear-session" type="button"
+                            class="hidden min-h-[44px] px-3 text-xs font-semibold rounded-lg border border-theme-border text-theme-text hover:bg-theme-border/30">
+                            Forget key in this tab
+                        </button>
+                        <button id="byok-delete-stored" type="button"
+                            class="hidden min-h-[44px] px-3 text-xs font-semibold rounded-lg border border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20">
+                            Remove saved key from server
+                        </button>
                     </div>
                 </div>
             </details>
 
-            <button id="save-setup-btn"
-                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all">
-                Save BYOK Settings
+            <button id="save-setup-btn" type="button"
+                class="w-full min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all">
+                Save AI key settings
             </button>
-            <button id="back-to-dash-from-adv"
-                class="w-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm py-2 transition-colors">
+            <button id="back-to-dash-from-adv" type="button"
+                class="w-full min-h-[44px] text-theme-muted hover:text-theme-text text-sm py-2 transition-colors">
                 ← Back to Dashboard
             </button>
         </div>
 
         <!-- VIEW 3: DASHBOARD -->
-        <div id="view-dashboard" class="view-hidden fade-in space-y-6">
-            <!-- User Info & Navigation -->
-            <div class="flex items-center justify-between text-xs text-theme-muted border-b border-theme-border pb-3">
-                <div class="flex items-center gap-3">
-                    <!-- Hamburger Menu Button -->
-                    <button id="hamburger-btn" class="text-xl hover:opacity-70 transition-opacity"
-                        title="Menu">☰</button>
-                    <div class="flex flex-col">
-                        <span id="user-display-name" class="font-semibold text-sm text-theme-text"></span>
-                        <div id="gamification-bars" class="flex gap-2 mt-1 hidden">
+        <div id="view-dashboard" class="view-hidden fade-in space-y-5">
+            <div class="flex items-center justify-between gap-2 text-xs text-theme-muted border-b border-theme-border pb-3">
+                <div class="flex items-center gap-2 min-w-0">
+                    <button id="hamburger-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="drawer-panel"
+                        class="w-11 h-11 shrink-0 flex items-center justify-center rounded-xl text-xl text-theme-text hover:bg-theme-border/40 transition-colors">
+                        <span aria-hidden="true">☰</span>
+                    </button>
+                    <div class="flex flex-col min-w-0">
+                        <span id="user-display-name" class="font-semibold text-sm text-theme-text truncate"></span>
+                        <div id="gamification-bars" class="flex flex-wrap gap-1.5 mt-1 hidden">
                             <span id="streak-badge"
-                                class="font-bold text-orange-500 px-1.5 py-0.5 rounded bg-orange-500/10 cursor-default"
-                                data-tooltip="Current Streak (days)">🔥 0</span>
+                                class="font-bold text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded bg-orange-500/10"
+                                aria-label="Current streak in days">🔥 …</span>
                             <span id="credits-badge"
-                                class="font-bold text-yellow-500 px-1.5 py-0.5 rounded bg-yellow-500/10 cursor-default"
-                                data-tooltip="Sync Credits Remaining">🪙 0</span>
+                                class="font-bold text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded bg-amber-500/10"
+                                aria-label="Sync credits remaining">🪙 …</span>
                             <span id="freezes-badge"
-                                class="font-bold text-cyan-500 px-1.5 py-0.5 rounded bg-cyan-500/10 cursor-default"
-                                data-tooltip="Streak Freezes Remaining">❄️ 0</span>
+                                class="font-bold text-cyan-800 dark:text-cyan-300 px-1.5 py-0.5 rounded bg-cyan-500/10"
+                                aria-label="Streak freezes remaining">❄️ …</span>
                         </div>
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button id="current-plan-badge"
-                        class="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-                        title="View Plans & Pricing">
-                        Free Plan
+                <button id="current-plan-badge" type="button"
+                    class="shrink-0 min-h-[44px] text-[11px] font-bold uppercase tracking-wider px-3 rounded-full border border-theme-border text-theme-text hover:bg-theme-border/30 transition-colors"
+                    aria-label="Your plan. View plans and pricing">
+                    Free Plan
+                </button>
+            </div>
+            <p id="hud-caption" class="hidden text-[11px] text-theme-muted -mt-3"></p>
+
+            <div id="drop-zone"
+                class="w-full min-h-[10rem] border-2 border-dashed border-theme-border rounded-xl flex items-center justify-center transition-all bg-theme-bg relative group">
+                <!-- Upload UI and previews are rendered by app.js -->
+            </div>
+
+            <!-- Primary action (UX 3) -->
+            <div class="space-y-2">
+                <button id="btn-sync-primary" type="button" disabled
+                    class="dash-btn w-full min-h-[56px] px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-white shadow-md transition-colors flex flex-col items-center justify-center">
+                    <span class="font-bold text-base">Sync page</span>
+                    <span id="primary-sync-sub" class="text-xs opacity-90">☀️ Morning plan → Calendar &amp; Tasks</span>
+                </button>
+                <p id="sync-hint" class="text-xs text-theme-muted text-center">Add a page photo first.</p>
+                <p id="credit-cost-line" class="text-xs text-theme-muted text-center"></p>
+            </div>
+
+            <!-- Secondary modes -->
+            <div>
+                <p class="text-[11px] font-bold uppercase tracking-wider text-theme-muted mb-2">Or choose what to sync</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button id="btn-morning" type="button" data-mode="morning"
+                        class="dash-btn mode-btn min-h-[44px] p-3 text-left rounded-xl border border-theme-border bg-theme-bg hover:bg-orange-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-start gap-2">
+                        <span class="text-lg" aria-hidden="true">☀️</span>
+                        <span><span class="block font-bold text-sm text-theme-text">Morning plan</span>
+                            <span class="block text-[11px] text-theme-muted leading-snug">Adds events &amp; to-dos to Calendar and Tasks.</span></span>
+                    </button>
+                    <button id="btn-night" type="button" data-mode="evening"
+                        class="dash-btn mode-btn min-h-[44px] p-3 text-left rounded-xl border border-theme-border bg-theme-bg hover:bg-indigo-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-start gap-2">
+                        <span class="text-lg" aria-hidden="true">🌙</span>
+                        <span><span class="block font-bold text-sm text-theme-text">Evening review</span>
+                            <span class="block text-[11px] text-theme-muted leading-snug">Ticks off done tasks; logs expenses &amp; health to Sheets.</span></span>
+                    </button>
+                    <button id="btn-journal" type="button" data-mode="journal"
+                        class="dash-btn mode-btn min-h-[44px] p-3 text-left rounded-xl border border-theme-border bg-theme-bg hover:bg-emerald-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-start gap-2">
+                        <span class="text-lg" aria-hidden="true">📖</span>
+                        <span><span class="block font-bold text-sm text-theme-text">Journal</span>
+                            <span class="block text-[11px] text-theme-muted leading-snug">Saves handwritten journal pages to Notion.</span></span>
+                    </button>
+                    <button id="btn-voice-note" type="button" data-mode="voice_note"
+                        class="dash-btn mode-btn min-h-[44px] p-3 text-left rounded-xl border border-theme-border bg-theme-bg hover:bg-red-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-start gap-2 relative overflow-hidden">
+                        <span id="voice-note-icon" class="text-lg" aria-hidden="true">🎤</span>
+                        <span><span class="flex items-center gap-1.5 font-bold text-sm text-theme-text"><span id="voice-note-label">Voice note</span>
+                                <span id="voice-pro-lock" class="hidden text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-indigo-600 text-white">🔒 Pro</span></span>
+                            <span id="voice-note-desc" class="block text-[11px] text-theme-muted leading-snug">Record a thought; it’s transcribed into Notion.</span></span>
+                        <span id="voice-recording-pulse" class="hidden absolute inset-0 rounded-xl bg-red-500 opacity-20 animate-ping" aria-hidden="true"></span>
                     </button>
                 </div>
             </div>
 
-            <div id="drop-zone"
-                class="block w-full h-40 border-2 border-dashed border-theme-border rounded-xl flex items-center justify-center transition-all bg-theme-bg relative group overflow-hidden">
-                <div id="upload-ui" class="w-full h-full flex items-center justify-center gap-4 sm:gap-6 relative z-10">
-                    <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
-                        <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" class="upload-input hidden">
-                        <span class="text-3xl mb-1.5 pointer-events-none">📷</span>
-                        <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Camera</span>
-                    </label>
-                    <div class="w-px h-14 bg-theme-border/60"></div>
-                    <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
-                        <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" class="upload-input hidden">
-                        <span class="text-3xl mb-1.5 pointer-events-none">🖼️</span>
-                        <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Gallery</span>
-                    </label>
-                    <div class="w-px h-14 bg-theme-border/60"></div>
-                    <label class="flex flex-col items-center p-3 sm:p-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
-                        <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" class="upload-input hidden">
-                        <span class="text-3xl mb-1.5 pointer-events-none">📁</span>
-                        <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">Files</span>
-                    </label>
-                </div>
-                <!-- Previews injected via JS -->
+            <!-- Progress (UX 7) -->
+            <div id="dash-loader" class="hidden flex-col items-center gap-2 py-2" role="status" aria-live="polite">
+                <div class="spinner" aria-hidden="true"></div>
+                <p id="dash-loader-text" class="text-sm font-medium text-theme-text text-center">Syncing…</p>
+                <p class="text-xs text-theme-muted">This usually takes 10–30 s. Keep this tab open.</p>
             </div>
 
-            <!-- Buttons -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <button id="btn-morning"
-                    class="dash-btn disabled:opacity-50 p-3 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl flex flex-col items-center justify-center transition-all">
-                    <span class="text-xl">☀️</span>
-                    <span class="font-bold text-orange-900 text-sm mt-1 text-center leading-tight">Morning</span>
-                </button>
-                <button id="btn-night"
-                    class="dash-btn disabled:opacity-50 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl flex flex-col items-center justify-center transition-all">
-                    <span class="text-xl">🌙</span>
-                    <span class="font-bold text-indigo-900 text-sm mt-1 text-center leading-tight">Night Sync</span>
-                </button>
-                <button id="btn-journal"
-                    class="dash-btn disabled:opacity-50 p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl flex flex-col items-center justify-center transition-all">
-                    <span class="text-xl">📖</span>
-                    <span class="font-bold text-emerald-900 text-sm mt-1 text-center leading-tight">Journal</span>
-                </button>
-                <button id="btn-voice-note"
-                    class="dash-btn disabled:opacity-50 p-3 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl flex flex-col items-center justify-center transition-all relative overflow-hidden">
-                    <span id="voice-note-icon" class="text-xl transition-transform duration-300">🎤</span>
-                    <span id="voice-note-label" class="font-bold text-red-900 text-sm mt-1 text-center leading-tight">Voice Note</span>
-                    <!-- Pulse effect when recording -->
-                    <div id="voice-recording-pulse" class="hidden absolute inset-0 rounded-xl bg-red-500 opacity-25 animate-ping"></div>
-                </button>
-            </div>
-
-            <!-- Loading/Status -->
-            <div id="status-area" class="hidden p-3 bg-gray-50 rounded-lg text-sm border text-center"></div>
-            <div id="dash-loader" class="hidden flex justify-center">
-                <div class="spinner"></div>
-            </div>
+            <!-- Result cards (UX 5, 6) -->
+            <div id="status-area" class="hidden" role="status" aria-live="polite"></div>
         </div>
 
         <!-- VIEW 4: HISTORY -->
         <div id="view-history" class="view-hidden fade-in space-y-4">
             <div class="flex items-center justify-between border-b border-theme-border pb-3">
                 <h2 class="text-lg font-bold text-theme-text flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
                     Sync History
                 </h2>
-                <button id="back-to-dash-btn"
-                    class="text-xs font-medium text-theme-text hover:bg-theme-border/50 px-3 py-1.5 rounded-full transition-colors border border-theme-border">
+                <button id="back-to-dash-btn" type="button"
+                    class="min-h-[44px] text-xs font-medium text-theme-text hover:bg-theme-border/50 px-4 rounded-full transition-colors border border-theme-border">
                     ← Back
                 </button>
             </div>
 
-            <div id="history-list" class="max-h-[60vh] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+            <div id="history-list" class="max-h-[60vh] overflow-y-auto pr-1 space-y-2 custom-scrollbar" aria-live="polite">
                 <!-- History injected via app.js -->
             </div>
         </div>
@@ -857,130 +870,129 @@
                 <h2 class="text-lg font-bold text-theme-text flex items-center gap-2">
                     📊 Reports
                 </h2>
-                <button id="back-to-dash-btn-reports"
-                    class="text-xs font-medium text-theme-text hover:bg-theme-border/50 px-3 py-1.5 rounded-full transition-colors border border-theme-border">
+                <button id="back-to-dash-btn-reports" type="button"
+                    class="min-h-[44px] text-xs font-medium text-theme-text hover:bg-theme-border/50 px-4 rounded-full transition-colors border border-theme-border">
                     ← Back
                 </button>
             </div>
 
             <div class="bg-theme-card border border-theme-border rounded-xl p-4 space-y-4">
                 <div
-                    class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
-                    <span class="text-xs uppercase tracking-widest font-bold text-gray-500">Current Streak</span>
-                    <span id="reports-current-streak" class="text-2xl font-black text-orange-500">🔥 0</span>
+                    class="flex justify-between items-center bg-slate-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
+                    <span class="text-xs uppercase tracking-widest font-bold text-theme-muted">Current Streak</span>
+                    <span id="reports-current-streak" class="text-2xl font-black text-orange-700 dark:text-orange-300">🔥 0</span>
                 </div>
                 <div
-                    class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
-                    <span class="text-xs uppercase tracking-widest font-bold text-gray-500">Highest Streak</span>
+                    class="flex justify-between items-center bg-slate-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
+                    <span class="text-xs uppercase tracking-widest font-bold text-theme-muted">Highest Streak</span>
                     <span id="reports-highest-streak" class="text-lg font-bold text-theme-text">0</span>
                 </div>
                 <div
-                    class="flex justify-between items-center bg-gray-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
-                    <span class="text-xs uppercase tracking-widest font-bold text-gray-500">Streak Freezes</span>
-                    <span id="reports-streak-freezes" class="text-lg font-bold text-cyan-500">❄️ 0</span>
+                    class="flex justify-between items-center bg-slate-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
+                    <span class="text-xs uppercase tracking-widest font-bold text-theme-muted">Streak Freezes</span>
+                    <span id="reports-streak-freezes" class="text-lg font-bold text-cyan-800 dark:text-cyan-300">❄️ 0</span>
                 </div>
 
-                <!-- Streak Rewards Explanation -->
-                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-                    <h4 class="text-xs font-bold text-amber-900 uppercase tracking-wide">🏆 Streak Rewards</h4>
-                    <ul class="text-xs text-amber-800 space-y-1">
+                <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg p-3 space-y-2">
+                    <h3 class="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wide">🏆 Streak Rewards</h3>
+                    <ul class="text-xs text-amber-900 dark:text-amber-200 space-y-1">
                         <li>🔥 <strong>7-day streak</strong> → +5 bonus credits</li>
                         <li>🔥 <strong>30-day streak</strong> → +20 bonus credits + ❄️ 1 freeze</li>
                         <li>🔥 <strong>90-day streak</strong> → +50 bonus credits + ❄️ 3 freezes</li>
                         <li>❄️ <strong>Streak Freeze</strong> → Protects your streak if you miss a day</li>
                     </ul>
-                    <p class="text-[10px] text-amber-700">Credits remain valid as long as your plan is active.</p>
+                    <p class="text-[11px] text-amber-800 dark:text-amber-300">Credits remain valid as long as your plan is active.</p>
                 </div>
 
                 <div class="pt-4 border-t border-theme-border">
-                    <h4 class="text-xs uppercase tracking-widest font-bold text-gray-500 mb-3 text-center">Sync Heatmap
-                        (Last 30 Days)</h4>
+                    <h3 class="text-xs uppercase tracking-widest font-bold text-theme-muted mb-3 text-center">Sync Heatmap
+                        (Last 30 Days)</h3>
                     <div id="heatmap-grid" class="flex flex-wrap gap-1.5 justify-center mt-2">
                         <div class="w-full text-center text-xs text-theme-muted">Loading heatmap data...</div>
                     </div>
                 </div>
 
-                <button id="buy-booster-btn"
-                    class="w-full py-3 bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-300 hover:to-orange-400 text-white font-bold rounded-xl shadow-lg transition-all flex justify-center items-center gap-2 mt-4 border border-yellow-500/50">
+                <button id="buy-booster-btn" type="button"
+                    class="w-full min-h-[44px] py-3 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-xl shadow-lg transition-colors flex justify-center items-center gap-2 mt-4">
                     <span>🪙 Buy 50 Booster Credits (₹19)</span>
                 </button>
             </div>
         </div>
 
-    </div>
+    </main>
 
     <!-- HAMBURGER DRAWER (slides in from left) -->
     <div id="drawer-container" class="fixed inset-0 z-50 hidden">
         <div class="drawer-overlay fixed inset-0 bg-black/40 opacity-0 pointer-events-none" id="drawer-overlay"></div>
-        <div id="drawer-panel" style="background-color: var(--bg-main);"
-            class="drawer-panel fixed left-0 top-0 bottom-0 w-72 shadow-2xl p-6 overflow-y-auto">
-            <div class="flex items-center justify-between mb-6">
-                <h3 class="font-bold text-lg text-theme-text">Menu</h3>
-                <button id="close-drawer" class="text-xl hover:opacity-70 transition-opacity" style="color: var(--text-main);">✕</button>
+        <div id="drawer-panel" style="background-color: var(--bg-main);" role="dialog" aria-modal="true" aria-labelledby="drawer-title"
+            class="drawer-panel fixed left-0 top-0 bottom-0 w-72 max-w-[85vw] shadow-2xl p-6 overflow-y-auto overscroll-contain">
+            <div class="flex items-center justify-between mb-4">
+                <h2 id="drawer-title" class="font-bold text-lg text-theme-text">Menu</h2>
+                <button id="close-drawer" type="button" aria-label="Close menu"
+                    class="w-11 h-11 flex items-center justify-center rounded-xl text-xl text-theme-text hover:bg-theme-border/40 transition-colors">✕</button>
             </div>
-            <nav class="space-y-1">
-                <button data-drawer="upgrade"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span>👑</span> Upgrade
+            <nav class="space-y-1" aria-label="Main menu">
+                <button type="button" data-drawer="upgrade"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
+                    <span aria-hidden="true">👑</span> Upgrade
                 </button>
-                <button data-drawer="reports"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span>📊</span> Reports
+                <button type="button" data-drawer="reports"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
+                    <span aria-hidden="true">📊</span> Reports
                 </button>
-                <button data-drawer="notion"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span>📝</span> Notion Settings
+                <button type="button" data-drawer="history"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
+                    <span aria-hidden="true">🕐</span> History
                 </button>
-                <button data-drawer="history"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span>🕐</span> History
+                <button type="button" data-drawer="notion"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
+                    <span aria-hidden="true">📝</span> Notion Settings
                 </button>
-                <button data-drawer="settings"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span>⚙️</span> Advanced Settings
+                <button type="button" data-drawer="name"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
+                    <span aria-hidden="true">👋</span> Edit name
                 </button>
-                <hr class="border-theme-border my-2">
-                <a href="privacy.html" target="_blank"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>🛡️</span> Privacy Policy
-                </a>
-                <a href="pricing-policy.html" target="_blank"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>💳</span> Pricing Policy
-                </a>
-                <a href="refund-policy.html" target="_blank"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>💸</span> Refund Policy
-                </a>
-                <a href="planner.html" target="_blank"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>📄</span> Planner PDF
-                </a>
-                <a href="gear.html" target="_blank"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>🛍️</span> Gear List
-                </a>
-                <button data-drawer="export"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-theme-muted">
-                    <span>📦</span> Export Data
+                <button type="button" data-drawer="settings"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
+                    <span aria-hidden="true">⚙️</span> Advanced Settings
                 </button>
                 <hr class="border-theme-border my-2">
-                <button data-drawer="delete"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-sm text-red-500">
-                    <span>🗑️</span> Delete Account
+                <a href="planner.html" target="_blank" rel="noopener"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-theme-muted">
+                    <span aria-hidden="true">📄</span> Free Planner Template
+                </a>
+                <a href="privacy.html" target="_blank" rel="noopener"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-theme-muted">
+                    <span aria-hidden="true">🛡️</span> Privacy Policy
+                </a>
+                <a href="pricing-policy.html" target="_blank" rel="noopener"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-theme-muted">
+                    <span aria-hidden="true">💳</span> Pricing Policy
+                </a>
+                <a href="refund-policy.html" target="_blank" rel="noopener"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-theme-muted">
+                    <span aria-hidden="true">💸</span> Refund Policy
+                </a>
+                <button type="button" data-drawer="export"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-theme-muted">
+                    <span aria-hidden="true">📦</span> Export Data
                 </button>
-                <div class="flex items-center gap-3 px-3 py-2.5 text-sm text-gray-400 opacity-50 cursor-not-allowed">
-                    <span>⌚</span> Health <span
-                        class="text-[10px] bg-slate-100 px-1 py-0.5 rounded font-bold uppercase">Soon</span>
-                </div>
                 <hr class="border-theme-border my-2">
-                <button data-drawer="logout"
-                    class="drawer-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-left text-sm text-red-400">
-                    <span>↪️</span> Sign Out
+                <button type="button" data-drawer="delete"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-sm text-red-700 dark:text-red-400">
+                    <span aria-hidden="true">🗑️</span> Delete Account
+                </button>
+                <hr class="border-theme-border my-2">
+                <button type="button" data-drawer="logout"
+                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-red-700 dark:text-red-400">
+                    <span aria-hidden="true">↪️</span> Sign Out
                 </button>
             </nav>
-            <div class="mt-6 pt-4 border-t border-theme-border text-xs text-theme-muted">
+            <div class="mt-6 pt-4 border-t border-theme-border text-xs text-theme-muted space-y-1">
                 <span id="drawer-user-email" class="truncate block"></span>
+                <span class="flex items-center gap-2">⌚ Health sync <span class="text-[10px] bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded font-bold uppercase">Soon</span></span>
+                <!-- Build marker for support/debugging (moved off the landing page, UX 15) -->
+                <span id="build-version" class="block text-[10px] uppercase tracking-wider">build v?</span>
             </div>
         </div>
     </div>
@@ -988,10 +1000,10 @@
     <!-- ACTIONABLE ERROR MODAL -->
     <div id="actionable-error-modal"
         class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-[60]"
-        role="alertdialog" aria-labelledby="actionable-error-title" aria-modal="true">
+        role="alertdialog" aria-labelledby="actionable-error-title" aria-describedby="actionable-error-summary" aria-modal="true">
         <div
-            class="bg-theme-bg border border-theme-border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <h3 id="actionable-error-title" class="font-bold text-lg text-theme-text">Something went wrong</h3>
+            class="bg-theme-bg border border-theme-border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl" style="background-color: var(--bg-main);">
+            <h2 id="actionable-error-title" class="font-bold text-lg text-theme-text">Something went wrong</h2>
             <p id="actionable-error-summary" class="text-sm text-theme-muted"></p>
             <div id="actionable-error-details" class="hidden">
                 <p class="text-xs font-bold text-theme-muted uppercase tracking-wider mb-1.5">Error details</p>
@@ -1000,26 +1012,26 @@
             </div>
             <div class="flex gap-2">
                 <button type="button" id="actionable-error-know-more"
-                    class="flex-1 text-sm font-semibold text-blue-600 hover:text-blue-700 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800/40 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                    aria-expanded="false">Know more</button>
+                    class="flex-1 min-h-[44px] text-sm font-semibold text-blue-700 dark:text-blue-300 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800/40 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                    aria-expanded="false" aria-controls="actionable-error-details">Know more</button>
                 <button type="button" id="actionable-error-close"
-                    class="flex-1 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 py-2.5 rounded-xl transition-colors">Close</button>
+                    class="flex-1 min-h-[44px] text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 py-2.5 rounded-xl transition-colors">Close</button>
             </div>
         </div>
     </div>
 
     <!-- GUIDE MODAL -->
-    <div id="guide-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
-        <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[80vh]">
-            <h3 class="font-bold text-xl text-gray-900 border-b pb-2">Notion Setup Guide</h3>
+    <div id="guide-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50"
+        role="dialog" aria-modal="true" aria-labelledby="guide-title">
+        <div class="rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[80vh] max-h-[80dvh] border border-theme-border text-theme-text" style="background-color: var(--bg-main);">
+            <h2 id="guide-title" class="font-bold text-xl text-theme-text border-b border-theme-border pb-2">Notion Setup Guide</h2>
 
-            <div class="space-y-4 text-sm text-gray-600">
-
+            <div class="space-y-4 text-sm text-theme-muted">
                 <section>
-                    <h4 class="font-bold text-gray-800">Step 1: Get Access Token</h4>
+                    <h3 class="font-bold text-theme-text">Step 1: Get Access Token</h3>
                     <ol class="list-decimal list-inside space-y-1 ml-2">
-                        <li>Go to <a href="https://www.notion.so/my-integrations" target="_blank"
-                                class="text-blue-600 underline hover:text-blue-800">notion.so/my-integrations</a>.</li>
+                        <li>Go to <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener"
+                                class="text-blue-600 dark:text-blue-400 underline">notion.so/my-integrations</a>.</li>
                         <li>Click <strong>+ New integration</strong> (or open your existing <strong>AI Planner</strong> connection).</li>
                         <li>Name it <strong>"AI Planner"</strong> and submit.</li>
                         <li>Open <strong>Manage connection</strong> and copy the <strong>Access token</strong>
@@ -1028,7 +1040,7 @@
                 </section>
 
                 <section>
-                    <h4 class="font-bold text-gray-800">Step 2: Create Your Journal Page</h4>
+                    <h3 class="font-bold text-theme-text">Step 2: Create Your Journal Database</h3>
                     <ol class="list-decimal list-inside space-y-1 ml-2">
                         <li>Open Notion and create a new empty page.</li>
                         <li>Type <code>/database</code> and select <strong>"Database - Full page"</strong>.</li>
@@ -1037,7 +1049,7 @@
                 </section>
 
                 <section>
-                    <h4 class="font-bold text-gray-800">Step 3: Connect AI Planner</h4>
+                    <h3 class="font-bold text-theme-text">Step 3: Connect AI Planner</h3>
                     <ol class="list-decimal list-inside space-y-1 ml-2">
                         <li>Stay on your new Database page.</li>
                         <li>Click the <strong>... (three dots)</strong> at the very top-right of the Notion window.</li>
@@ -1047,20 +1059,18 @@
                 </section>
 
                 <section>
-                    <h4 class="font-bold text-gray-800">Step 4: Get Database ID</h4>
-                    <ul class="list-disc list-inside space-y-1 ml-2 text-xs bg-gray-50 p-2 rounded border">
-                        <li>Look at the URL of your database page:</li>
-                        <li class="font-mono text-xs break-all text-gray-500">https://app.notion.com/p/<span
+                    <h3 class="font-bold text-theme-text">Step 4: Copy the Database Link</h3>
+                    <ul class="list-disc list-inside space-y-1 ml-2 text-xs p-2 rounded border border-theme-border">
+                        <li>Click <strong>Share → Copy link</strong> (or copy the address bar). It looks like:</li>
+                        <li class="font-mono text-xs break-all">https://www.notion.so/<span
                                 class="bg-yellow-200 text-black px-1 font-bold">395c...38ab</span>?v=...</li>
-                        <li>Copy the <strong>32-character database ID</strong> after <code>/p/</code> and before
-                            <code>?</code> (do not paste the full URL or the <code>?v=</code> view ID).</li>
+                        <li>Paste the whole link — AI Planner picks out the 32-character database ID for you.</li>
                     </ul>
                 </section>
-
             </div>
 
-            <button id="close-guide"
-                class="w-full bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold py-3 rounded-xl transition-colors">
+            <button id="close-guide" type="button"
+                class="w-full min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 font-bold py-3 rounded-xl transition-colors">
                 Got it, let's go!
             </button>
         </div>
@@ -1068,31 +1078,32 @@
 
     <!-- OUTCOME-FIRST UPGRADE FLOW -->
     <div id="pricing-modal"
-        class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
+        class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm"
+        role="dialog" aria-modal="true" aria-labelledby="upgrade-title">
         <div
             class="upgrade-shell">
-            <button id="close-pricing"
+            <button id="close-pricing" type="button"
                 aria-label="Close upgrade options"
-                class="absolute top-4 right-4 text-theme-muted hover:text-theme-text text-xl z-10 transition-colors">✕</button>
+                class="absolute top-2 right-2 w-11 h-11 flex items-center justify-center text-theme-muted hover:text-theme-text text-xl z-10 transition-colors">✕</button>
 
             <div class="px-6 pt-6 pb-4 border-b border-theme-border">
                 <p class="upgrade-eyebrow text-[10px] font-bold uppercase tracking-widest">Upgrade AI Planner</p>
-                <h2 class="text-2xl font-bold text-theme-text tracking-tight mt-1">Turn more handwritten plans into action.</h2>
+                <h2 id="upgrade-title" class="text-2xl font-bold text-theme-text tracking-tight mt-1 pr-8">Turn more handwritten plans into action.</h2>
                 <p id="upgrade-context-message" class="text-sm text-theme-muted mt-2">Choose the result you want, then see the plan that fits.</p>
                 <div class="flex items-center gap-2 mt-5" aria-label="Upgrade progress">
-                    <button type="button" data-upgrade-progress="1" id="step-nav-1"
+                    <button type="button" data-upgrade-progress="1" id="step-nav-1" aria-label="Step 1: goal"
                         class="upgrade-progress-active w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center cursor-pointer transition-colors hover:border-indigo-500">1</button>
                     <span class="flex-1 border-t border-theme-border"></span>
-                    <button type="button" data-upgrade-progress="2" id="step-nav-2"
+                    <button type="button" data-upgrade-progress="2" id="step-nav-2" aria-label="Step 2: plan"
                         class="w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center cursor-pointer transition-colors hover:border-indigo-500">2</button>
                     <span class="flex-1 border-t border-theme-border"></span>
-                    <button type="button" data-upgrade-progress="3" id="step-nav-3"
+                    <button type="button" data-upgrade-progress="3" id="step-nav-3" aria-label="Step 3: checkout"
                         class="w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center cursor-pointer transition-colors hover:border-indigo-500">3</button>
                 </div>
             </div>
 
             <!-- Step 1: desired outcome -->
-            <div id="upgrade-step-1" class="p-6 pb-12">
+            <div id="upgrade-step-1" class="p-6">
                 <h3 class="font-bold text-theme-text">What would help most right now?</h3>
                 <p class="text-xs text-theme-muted mt-1 mb-4">We’ll use this only to recommend a plan.</p>
                 <div class="space-y-3">
@@ -1113,34 +1124,26 @@
                     </button>
                 </div>
                 <button id="upgrade-next-outcome" type="button" disabled
-                    class="upgrade-primary mt-5 py-3 font-bold text-sm transition-colors opacity-50">
+                    class="upgrade-primary mt-5 py-3 min-h-[44px] font-bold text-sm transition-colors opacity-50">
                     Compare plans
                 </button>
                 <button id="buy-booster-btn-modal" type="button"
-                    class="w-full mt-6 p-4 border border-theme-border bg-theme-bg/50 hover:bg-theme-bg rounded-xl flex items-center justify-between transition-all group shadow-sm hover:shadow-md relative overflow-visible">
-                    
-                    <!-- Best Buy Style Hanging Tag -->
-                    <div class="absolute z-10 font-black uppercase tracking-wider flex items-center justify-center price-tag-wiggle" 
-                         style="bottom: -12px; right: -12px; background-color: #FFF200; color: #000; font-size: 11px; padding: 4px 12px 4px 16px; border-radius: 3px; clip-path: polygon(15% 0, 100% 0, 100% 100%, 15% 100%, 0 50%); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
-                        <div class="absolute rounded-full" style="left: 4px; top: 50%; transform: translateY(-50%); width: 6px; height: 6px; background-color: rgba(0,0,0,0.4);"></div>
-                        BUY NOW
-                    </div>
-                    
-                    <div class="text-left w-full">
-                        <span class="block text-sm font-bold text-theme-text group-hover:text-indigo-500 transition-colors">Only need more credits?</span>
-                        <span class="block text-xs text-theme-muted mt-0.5">Buy 50 once for ₹19</span>
-                    </div>
+                    class="w-full mt-4 min-h-[44px] p-4 border border-theme-border bg-theme-bg/50 hover:bg-theme-bg rounded-xl flex items-center justify-between transition-all group shadow-sm hover:shadow-md">
+                    <span class="text-left w-full">
+                        <span class="block text-sm font-bold text-theme-text group-hover:text-indigo-600 transition-colors">Only need more credits?</span>
+                        <span class="block text-xs text-theme-muted mt-0.5">Buy 50 credits once for ₹19</span>
+                    </span>
                 </button>
             </div>
 
             <!-- Step 2: plan comparison -->
-            <div id="upgrade-step-2" class="hidden p-6 pb-12">
+            <div id="upgrade-step-2" class="hidden p-6">
                 <div class="flex items-start justify-between gap-3 mb-4">
                     <div>
                         <h3 class="font-bold text-theme-text">Choose your capacity</h3>
                         <p id="upgrade-recommendation" class="text-xs text-theme-muted mt-1">Annual access is selected by default.</p>
                     </div>
-                    <button id="upgrade-back-outcome" type="button" class="text-xs font-bold text-theme-muted hover:text-theme-text">Back</button>
+                    <button id="upgrade-back-outcome" type="button" class="min-h-[44px] px-2 text-xs font-bold text-theme-muted hover:text-theme-text">Back</button>
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">
@@ -1148,7 +1151,7 @@
                         class="upgrade-plan-choice bg-theme-bg border border-theme-border rounded-xl p-4 text-left transition-all">
                         <span class="font-bold text-theme-text">Standard</span>
                         <span class="block text-xl font-black text-theme-text mt-2">₹290<span class="text-[10px] font-medium text-theme-muted"> /year</span></span>
-                        <span class="block text-[10px] text-theme-muted mt-1">₹24.17/month equivalent</span>
+                        <span class="block text-[10px] text-theme-muted mt-1">or ₹29 / 30 days</span>
                         <span class="block text-xs text-theme-muted mt-3">100 credits every 30 days</span>
                         <span class="block text-xs text-theme-muted mt-1">Up to 3 journal pages</span>
                     </button>
@@ -1156,9 +1159,9 @@
                         class="upgrade-plan-choice bg-theme-bg border border-theme-border rounded-xl p-4 text-left transition-all">
                         <span class="font-bold text-theme-text">Pro</span>
                         <span class="block text-xl font-black text-theme-text mt-2">₹490<span class="text-[10px] font-medium text-theme-muted"> /year</span></span>
-                        <span class="block text-[10px] text-theme-muted mt-1">₹40.83/month equivalent</span>
+                        <span class="block text-[10px] text-theme-muted mt-1">or ₹49 / 30 days</span>
                         <span class="block text-xs text-theme-muted mt-3">250 credits every 30 days</span>
-                        <span class="block text-xs text-theme-muted mt-1">5-page batches + advanced AI</span>
+                        <span class="block text-xs text-theme-muted mt-1">5-page batches + voice notes</span>
                     </button>
                 </div>
 
@@ -1180,40 +1183,41 @@
                     </div>
                 </div>
 
-                <p class="text-[10px] text-theme-muted mt-2">*Standard allows up to 3 pages for journal syncs and 1 page for morning/evening syncs.</p>
+                <p class="text-[11px] text-theme-muted mt-2">*Standard allows up to 3 pages for journal syncs and 1 page for morning/evening syncs.</p>
 
-                <details id="other-billing-options" class="mt-4 border border-theme-border rounded-xl p-3">
-                    <summary class="text-xs font-bold text-theme-text cursor-pointer">View monthly and 90-day options</summary>
-                    <div class="space-y-3 mt-3">
-                        <label class="flex items-center justify-between cursor-pointer text-xs text-theme-muted">
-                            <span><input type="radio" name="upgrade-billing" value="annual" checked class="mr-2 accent-indigo-500">Annual, paid once</span>
+                <!-- All three durations visible (UX 13) -->
+                <fieldset id="other-billing-options" class="mt-4 border border-theme-border rounded-xl p-3">
+                    <legend class="px-1 text-xs font-bold text-theme-text">How long?</legend>
+                    <div class="space-y-1">
+                        <label class="flex items-center justify-between min-h-[44px] cursor-pointer text-sm text-theme-text">
+                            <span class="flex items-center"><input type="radio" name="upgrade-billing" value="annual" checked class="mr-2 w-5 h-5 accent-indigo-600">12 months, paid once</span>
                             <span id="annual-option-price" class="font-bold text-theme-text">₹290</span>
                         </label>
-                        <label class="flex items-center justify-between cursor-pointer text-xs text-theme-muted">
-                            <span><input type="radio" name="upgrade-billing" value="monthly" class="mr-2 accent-indigo-500">30 days</span>
-                            <span id="monthly-option-price" class="font-bold text-theme-text">₹29</span>
-                        </label>
-                        <label class="flex items-center justify-between cursor-pointer text-xs text-theme-muted">
-                            <span><input type="radio" name="upgrade-billing" value="sprint" class="mr-2 accent-indigo-500">90 days, paid once</span>
+                        <label class="flex items-center justify-between min-h-[44px] cursor-pointer text-sm text-theme-text">
+                            <span class="flex items-center"><input type="radio" name="upgrade-billing" value="sprint" class="mr-2 w-5 h-5 accent-indigo-600">90 days, paid once</span>
                             <span id="sprint-option-price" class="font-bold text-theme-text">₹79</span>
                         </label>
+                        <label class="flex items-center justify-between min-h-[44px] cursor-pointer text-sm text-theme-text">
+                            <span class="flex items-center"><input type="radio" name="upgrade-billing" value="monthly" class="mr-2 w-5 h-5 accent-indigo-600">30 days, paid once</span>
+                            <span id="monthly-option-price" class="font-bold text-theme-text">₹29</span>
+                        </label>
                     </div>
-                </details>
+                </fieldset>
 
                 <button id="upgrade-next-plan" type="button" disabled
-                    class="upgrade-primary mt-5 py-3 font-bold text-sm transition-colors opacity-50">
+                    class="upgrade-primary mt-5 py-3 min-h-[44px] font-bold text-sm transition-colors opacity-50">
                     Review checkout
                 </button>
             </div>
 
             <!-- Step 3: risk-reducing checkout review -->
-            <div id="upgrade-step-3" class="hidden p-6 pb-12">
+            <div id="upgrade-step-3" class="hidden p-6">
                 <div class="flex items-start justify-between gap-3">
                     <div>
                         <h3 class="font-bold text-theme-text">Know exactly what happens next</h3>
                         <p class="text-xs text-theme-muted mt-1">No hidden trial or surprise charge.</p>
                     </div>
-                    <button id="upgrade-back-plan" type="button" class="text-xs font-bold text-theme-muted hover:text-theme-text">Back</button>
+                    <button id="upgrade-back-plan" type="button" class="min-h-[44px] px-2 text-xs font-bold text-theme-muted hover:text-theme-text">Back</button>
                 </div>
 
                 <div class="upgrade-summary-card mt-5 border border-theme-border rounded-xl p-4 flex items-center justify-between">
@@ -1226,63 +1230,75 @@
 
                 <ol class="mt-5 space-y-4">
                     <li class="flex gap-3">
-                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-500 text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
+                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
                         <div><p class="text-sm font-bold text-theme-text">Today</p><p id="checkout-charge-copy" class="text-xs text-theme-muted">You pay once through Cashfree. This is not an auto-debit.</p></div>
                     </li>
                     <li class="flex gap-3">
-                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-500 text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
+                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
                         <div><p class="text-sm font-bold text-theme-text">Right after payment</p><p class="text-xs text-theme-muted">Your plan and full credit allowance unlock after payment confirmation.</p></div>
                     </li>
                     <li class="flex gap-3">
-                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-500 text-xs font-bold flex items-center justify-center flex-shrink-0">3</span>
+                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center flex-shrink-0">3</span>
                         <div><p class="text-sm font-bold text-theme-text">Every 30 days while active</p><p id="checkout-renewal-copy" class="text-xs text-theme-muted">Your included credits refresh. Unused tier credits do not roll over.</p></div>
                     </li>
                 </ol>
 
                 <button id="checkout-selected-plan-btn" type="button"
-                    class="upgrade-primary mt-6 py-3 font-bold text-sm transition-colors">
+                    class="upgrade-primary mt-6 py-3 min-h-[44px] font-bold text-sm transition-colors">
                     Continue securely — ₹290
                 </button>
-                <p class="text-center text-[10px] text-theme-muted mt-3">
+                <p class="text-center text-[11px] text-theme-muted mt-3">
                     Payments are processed by Cashfree. We never store card, UPI, or phone details.
                 </p>
-                <p class="text-center text-[10px] text-theme-muted mt-2">
+                <p class="text-center text-[11px] text-theme-muted mt-2">
                     <a href="pricing-policy.html" target="_blank" rel="noopener" class="underline">Pricing terms</a>
                     <span aria-hidden="true"> · </span>
                     <a href="refund-policy.html" target="_blank" rel="noopener" class="underline">Refund policy</a>
                 </p>
+            </div>
+
+            <!-- Payment outcome (UX 12, B-17) -->
+            <div id="payment-result" class="hidden p-6 space-y-4 text-center" role="status" aria-live="polite">
+                <div id="payment-result-icon" class="text-4xl" aria-hidden="true">⏳</div>
+                <h3 id="payment-result-title" class="font-bold text-lg text-theme-text">Confirming your payment…</h3>
+                <p id="payment-result-text" class="text-sm text-theme-muted"></p>
+                <button id="payment-result-close" type="button"
+                    class="upgrade-primary py-3 min-h-[44px] font-bold text-sm">Done</button>
             </div>
         </div>
     </div>
 
     <!-- PHONE NUMBER MODAL (Cashfree Compliance) -->
     <div id="phone-modal" style="z-index: 9999;"
-        class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
+        class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm"
+        role="dialog" aria-modal="true" aria-labelledby="phone-modal-title">
         <div class="payment-details-shell rounded-2xl max-w-sm w-full p-7 shadow-2xl relative overflow-hidden transform scale-95 opacity-0 transition-all duration-300" id="phone-modal-content">
-            <!-- Decorative icon -->
-            <div class="w-12 h-12 rounded-full flex items-center justify-center text-xl mx-auto mb-4" style="background-color: rgba(37, 99, 235, 0.1); color: #2563eb;">
+            <div class="w-12 h-12 rounded-full flex items-center justify-center text-xl mx-auto mb-4" style="background-color: rgba(37, 99, 235, 0.1); color: #2563eb;" aria-hidden="true">
                 📱
             </div>
-            
-            <h3 class="font-bold text-xl text-center mb-2" style="color: var(--text-main);">Billing Details</h3>
+
+            <h2 id="phone-modal-title" class="font-bold text-xl text-center mb-2" style="color: var(--text-main);">Billing Details</h2>
             <p class="text-center mb-4 leading-relaxed text-[13px]" style="color: var(--text-muted);">
-                For RBI billing compliance, Cashfree requires a mobile number. 
+                For RBI billing compliance, Cashfree requires a mobile number.
             </p>
 
-            <form id="phone-form" class="space-y-4">
+            <form id="phone-form" class="space-y-4" novalidate>
                 <div>
+                    <label for="user-phone" class="sr-only">Mobile number</label>
                     <div class="flex items-center w-full rounded-xl px-4 py-3 border transition-all" style="background-color: var(--glass-bg); border-color: var(--border-color);">
                         <span class="font-medium mr-2" style="color: var(--text-muted);">+91</span>
-                        <input type="tel" id="user-phone" required pattern="[0-9]{10}"
+                        <input type="tel" id="user-phone" required pattern="[6-9][0-9]{9}" inputmode="numeric" autocomplete="tel-national" maxlength="10"
+                            aria-describedby="phone-error"
                             style="background-color: transparent; color: var(--text-main);"
                             class="flex-1 outline-none font-medium p-0 border-0 focus:ring-0"
                             placeholder="10-digit mobile number">
                     </div>
+                    <p id="phone-error" class="hidden text-xs text-red-600 dark:text-red-400 mt-1" role="alert">Enter a 10-digit Indian mobile number starting with 6–9.</p>
                 </div>
 
                 <div class="text-center pb-2 leading-relaxed text-[13px]" style="color: var(--text-muted);">
-                    <span style="background-color: rgba(16, 185, 129, 0.1); color: #10b981;" class="inline-flex items-center gap-1 font-medium px-2 py-1 rounded">
-                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path></svg>
+                    <span style="background-color: rgba(16, 185, 129, 0.1);" class="inline-flex items-center gap-1 font-medium px-2 py-1 rounded text-emerald-700 dark:text-emerald-300">
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path></svg>
                         Zero-Storage Promise
                     </span>
                     <div class="mt-1 text-[11px]">Passed directly to the gateway. Never saved.</div>
@@ -1290,11 +1306,11 @@
 
                 <div class="flex gap-3 pt-2">
                     <button type="button" id="close-phone-modal"
-                        class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-colors" style="color: var(--text-muted);">
+                        class="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl text-sm font-bold transition-colors" style="color: var(--text-muted);">
                         Cancel
                     </button>
                     <button type="submit" id="submit-phone-btn"
-                        class="flex-[2] py-2.5 px-4 rounded-xl text-sm font-bold transition-colors active:scale-95 flex items-center justify-center" style="background-color: #2563eb; color: white;">
+                        class="flex-[2] min-h-[44px] py-2.5 px-4 rounded-xl text-sm font-bold transition-colors active:scale-95 flex items-center justify-center" style="background-color: #2563eb; color: white;">
                         Continue
                     </button>
                 </div>
@@ -1302,19 +1318,16 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            AOS.init({
-                once: true,
-                offset: 50,
-                duration: 600
-            });
-        });
-    </script>
+    <!-- "Update available" banner (B-18) — shown by sw-register.js, never while syncing or paying -->
+    <div id="update-banner" class="hidden fixed left-1/2 -translate-x-1/2 z-[70] items-center gap-3 px-4 py-2 rounded-full shadow-xl bg-slate-900 text-white text-sm"
+        style="bottom: calc(1rem + env(safe-area-inset-bottom, 0px));" role="status" aria-live="polite">
+        <span>Update available</span>
+        <button id="update-reload-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold">Reload</button>
+    </div>
+
     <script src="env-config.js"></script>
-    <script src="app-helpers.js?v=12"></script>
-    <script type="module" src="app.js?v=25"></script>
+    <script src="app-helpers.js?v=27"></script>
+    <script type="module" src="app.js?v=27"></script>
 </body>
 
 </html>

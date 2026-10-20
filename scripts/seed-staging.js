@@ -1,73 +1,90 @@
 #!/usr/bin/env node
 /**
  * AI Planner — Staging Synthetic Data Seeder
- * Populates staging Firestore with isolated mock users, sync histories, and test streak states.
- * 
- * Usage:
- *   node scripts/seed-staging.js [--project=ai-planner-staging]
+ * Populates the staging Firestore database with isolated mock users and sync history.
+ * The schema matches the gamification defaults written by functions/index.js.
+ *
+ * Usage (from the repo root, with credentials for ai-planner-project-467800):
+ *   node scripts/seed-staging.js
+ *
+ * Staging is the Firestore database "staging" inside ai-planner-project-467800.
+ * This script only ever writes to that database, never to "(default)" (production).
  */
 
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
-const targetProject = process.argv.find(arg => arg.startsWith('--project='))?.split('=')[1] || 'ai-planner-staging';
+const PROJECT_ID = 'ai-planner-project-467800';
+const STAGING_DATABASE = 'staging';
+const requestedDb = process.argv.find(arg => arg.startsWith('--database='))?.split('=')[1];
 
-if (targetProject === 'ai-planner-project-467800') {
-    console.error("❌ SAFETY BLOCK: Refusing to run seed script against production (ai-planner-project-467800)!");
+if (requestedDb && requestedDb !== STAGING_DATABASE) {
+    console.error(`❌ SAFETY BLOCK: this script only seeds the "${STAGING_DATABASE}" database (got --database=${requestedDb}).`);
     process.exit(1);
 }
 
-console.log(`🌱 Seeding synthetic test data into Firestore project: ${targetProject}`);
+console.log(`🌱 Seeding synthetic test data into ${PROJECT_ID} / database "${STAGING_DATABASE}"`);
 
-admin.initializeApp({
-    projectId: targetProject
-});
+initializeApp({ projectId: process.env.FIRESTORE_EMULATOR_HOST ? (process.env.GCLOUD_PROJECT || PROJECT_ID) : PROJECT_ID });
 
-const db = admin.firestore();
+const db = getFirestore(STAGING_DATABASE);
+
+function todayIn(timeZone) {
+    return new Date().toLocaleDateString('en-CA', { timeZone });
+}
 
 async function seed() {
+    const timeZone = 'Asia/Kolkata';
     const testUsers = [
         {
             email: 'staging-tester-free@aiplanner.local',
             tier: 'free',
-            credits: 25,
+            tierCredits: 15,
+            boosterCredits: 0,
             currentStreak: 3,
-            longestStreak: 5,
-            lastSyncDate: new Date().toISOString().split('T')[0],
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            highestStreak: 5,
         },
         {
             email: 'staging-tester-pro@aiplanner.local',
             tier: 'pro',
-            credits: 100,
+            tierCredits: 250,
+            boosterCredits: 10,
             currentStreak: 12,
-            longestStreak: 20,
-            lastSyncDate: new Date().toISOString().split('T')[0],
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            highestStreak: 20,
         }
     ];
 
     for (const user of testUsers) {
-        const userRef = db.collection('users').doc(user.email);
-        await userRef.set(user, { merge: true });
-        console.log(`  ✓ Seeded mock user: ${user.email} (tier: ${user.tier}, credits: ${user.credits})`);
+        const { email, ...fields } = user;
+        const userRef = db.collection('users').doc(email);
+        await userRef.set({
+            ...fields,
+            streakFreezes: 0,
+            dailySyncCount: 0,
+            lastAwardedStreak: 0,
+            lastSyncDate: todayIn(timeZone),
+            subscriptionRenewalDate: null,
+            timeZone,
+            displayName: email.split('@')[0],
+            createdAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        console.log(`  ✓ Seeded mock user: ${email} (tier: ${fields.tier}, credits: ${fields.tierCredits})`);
 
-        // Add sample sync history item
-        const historyRef = userRef.collection('syncHistory').doc('mock-sync-001');
-        await historyRef.set({
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        await userRef.collection('syncHistory').doc('mock-sync-001').set({
+            timestamp: FieldValue.serverTimestamp(),
             syncType: 'morning',
             status: 'success',
+            imageCount: 1,
             eventsCreated: 3,
-            tasksCreated: 4,
-            streakIncremented: true
+            tasksCreated: 4
         });
-        console.log(`    ✓ Seeded sample sync history for ${user.email}`);
+        console.log(`    ✓ Seeded sample sync history for ${email}`);
     }
 
-    console.log(`\n✅ Staging Firestore seeding complete!`);
+    console.log('\n✅ Staging Firestore seeding complete!');
 }
 
 seed().catch(err => {
-    console.error("Failed to seed staging database:", err);
+    console.error('Failed to seed staging database:', err);
     process.exit(1);
 });

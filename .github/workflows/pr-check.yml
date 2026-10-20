@@ -1,164 +1,42 @@
-name: PR Quality Gate
+name: PR Check
 
+# Runs on every PR into staging or main.
+#   PR → staging : full quality gate; merging deploys the staging environment (staging DB, asia-south1) after owner approval.
+#   PR → main    : full quality gate + "Branch Policy": the head must not be `staging`, must not
+#                  contain staging merges, and every commit must already be on staging.
 on:
   pull_request:
-    branches: [ "main", "staging" ]
+    branches: [main, staging]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  # ─────────────────────────────────────────────
-  # JOB 1: Guard unresolved merge conflicts
-  # ─────────────────────────────────────────────
-  conflict_check:
-    name: Conflict Marker Check
+  branch_policy:
+    name: Branch Policy
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Guard unresolved merge conflicts
-        run: bash ./scripts/check-conflict-markers.sh
-
-  # ─────────────────────────────────────────────
-  # JOB 2: ESLint Check
-  # ─────────────────────────────────────────────
-  lint:
-    name: Code Linting
-    runs-on: ubuntu-latest
-    needs: [conflict_check]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: functions/package-lock.json
-      - name: Install Functions Dependencies
-        working-directory: ./functions
-        run: npm ci
-      - name: Run ESLint
-        working-directory: ./functions
-        run: npm run lint
-
-  # ─────────────────────────────────────────────
-  # JOB 3: Frontend Tests
-  # ─────────────────────────────────────────────
-  frontend_tests:
-    name: Frontend Tests
-    runs-on: ubuntu-latest
-    needs: [conflict_check]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-      - name: Install Root Dependencies
-        run: npm ci
-      - name: Run Frontend Tests
-        run: npm run test:frontend
-
-  # ─────────────────────────────────────────────
-  # JOB 4: Backend Tests with Coverage
-  # ─────────────────────────────────────────────
-  backend_tests:
-    name: Backend Tests & Coverage
-    runs-on: ubuntu-latest
-    needs: [conflict_check]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: functions/package-lock.json
-      - name: Install Functions Dependencies
-        working-directory: ./functions
-        run: npm ci
-      - name: Run Unit & Integration Tests
-        working-directory: ./functions
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Enforce release flow
         env:
-          NODE_OPTIONS: --max-old-space-size=4096
-        run: npm test
-
-  # ─────────────────────────────────────────────
-  # JOB 5: Firestore Rules Tests (Emulator)
-  # ─────────────────────────────────────────────
-  firestore_rules:
-    name: Firestore Rules Tests
-    runs-on: ubuntu-latest
-    needs: [conflict_check]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: functions/package-lock.json
-      - name: Setup Java 21 (Firebase Emulator prerequisite)
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-      - name: Install Firebase CLI
-        run: npm install -g firebase-tools@13
-      - name: Install Functions Dependencies
-        working-directory: ./functions
-        run: npm ci
-      - name: Run Firestore Rules Tests via Emulator
-        working-directory: ./functions
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
-          firebase emulators:exec \
-            --project ai-planner-staging \
-            --only firestore \
-            "npx jest __tests__/firestore.rules.test.js --verbose"
+          if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::PRs into $BASE_REF must come from a branch in $GITHUB_REPOSITORY, not a fork."
+            exit 1
+          fi
+          bash scripts/ci/branch-policy.sh pr "$BASE_REF" "$HEAD_REF" "$HEAD_SHA"
 
-  # ─────────────────────────────────────────────
-  # JOB 6: Playwright Smoke Test
-  # ─────────────────────────────────────────────
-  e2e_smoke:
-    name: E2E Smoke Test
-    runs-on: ubuntu-latest
-    needs: [frontend_tests]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: e2e/package-lock.json
-      - name: Install E2E Dependencies
-        working-directory: ./e2e
-        run: npm ci
-      - name: Install Chromium
-        working-directory: ./e2e
-        run: npx playwright install --with-deps chromium
-      - name: Run Smoke Test
-        env:
-          BASE_URL: http://localhost:3000
-          CI: true
-        run: |
-          cd public
-          python3 -m http.server 3000 >/tmp/ai-planner-e2e-http.log 2>&1 &
-          SERVER_PID=$!
-          sleep 3
-          cd ../e2e
-          npx playwright test tests/sync.spec.js --project=chromium
-          EXIT_CODE=$?
-          kill $SERVER_PID >/dev/null 2>&1 || true
-          exit $EXIT_CODE
-      - name: Upload Playwright Artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-pr-report
-          path: e2e/playwright-report/
-          retention-days: 30
+  quality:
+    name: Quality
+    uses: ./.github/workflows/quality.yml

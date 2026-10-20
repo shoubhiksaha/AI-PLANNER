@@ -1,13 +1,20 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Data is keyed by email, so only a VERIFIED email may claim a document.
+    function isOwner(email) {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == email;
+    }
+
     match /users/{email} {
-      allow read: if request.auth != null && request.auth.token.email == email;
+      allow read: if isOwner(email);
       // User profile writes are server-managed via Admin SDK functions.
       allow write: if false;
-      
+
       match /syncHistory/{docId} {
-          allow read: if request.auth != null && request.auth.token.email == email;
+          allow read: if isOwner(email);
           allow write: if false;
       }
     }

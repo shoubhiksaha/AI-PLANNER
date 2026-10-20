@@ -2,6 +2,8 @@ const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './tests',
+  // Emulator end-to-end specs need the Firebase emulators: npm run test:e2e:emulator
+  testIgnore: ['**/emulator/**'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

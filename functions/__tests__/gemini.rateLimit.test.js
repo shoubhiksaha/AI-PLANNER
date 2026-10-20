@@ -13,15 +13,21 @@ const mockCollection = jest.fn(() => ({ doc: mockDoc }));
 
 const mockRunTransaction = jest.fn();
 
-jest.mock('firebase-admin', () => ({
+jest.mock('mock-firebase-admin-backing', () => ({
     initializeApp: jest.fn(),
     firestore: jest.fn(() => ({ collection: mockCollection, runTransaction: mockRunTransaction })),
-}));
+}), { virtual: true });
+jest.mock('firebase-admin/app', () => require('./helpers/adminMock').app());
+jest.mock('firebase-admin/firestore', () => require('./helpers/adminMock').firestore());
+jest.mock('firebase-admin/auth', () => require('./helpers/adminMock').auth());
+jest.mock('firebase-admin/app-check', () => require('./helpers/adminMock').appCheck());
 
 // We import the utils up here so they don't get trapped if needed
 const { RATE_LIMIT_WINDOW_MS } = require('../utils');
 
 let getPlannerDataFromImages;
+let getCountWarnings;
+let geminiLogger;
 let checkRateLimit;
 
 beforeAll(() => {
@@ -44,7 +50,8 @@ beforeAll(() => {
             defineSecret: jest.fn(() => ({ value: () => 'test-secret' })),
         }));
 
-        ({ getPlannerDataFromImages } = require('../services/gemini'));
+        ({ getPlannerDataFromImages, getCountWarnings } = require('../services/gemini'));
+        ({ logger: geminiLogger } = require('firebase-functions/logger'));
         ({ checkRateLimit } = require('../services/rateLimit'));
     });
 });
@@ -166,6 +173,89 @@ describe('gemini.js — getPlannerDataFromImages', () => {
             .rejects.toThrow('All Gemini models failed');
         // Gemini standard fallback list is 4 models
         expect(global.fetch).toHaveBeenCalledTimes(4);
+    });
+
+    const img = [{ mimeType: 'image/jpeg', base64Data: 'abc' }];
+
+    test('sends the key in x-goog-api-key, never in the URL (S-06)', async () => {
+        global.fetch.mockResolvedValue(makeGeminiSuccess({ date: '2025-01-01', schedule: [], todos: [] }));
+        await getPlannerDataFromImages(img, 'morning');
+        const [url, options] = global.fetch.mock.calls[0];
+        expect(url).not.toContain('key=');
+        expect(options.headers['x-goog-api-key']).toBe('test-secret');
+    });
+
+    test('an image rejection stops the cascade with AI_INPUT_REJECTED (B-08)', async () => {
+        global.fetch.mockResolvedValue({ ok: false, status: 400, text: async () => '{"error":{"status":"INVALID_ARGUMENT","message":"Unable to process input image."}}' });
+        await expect(getPlannerDataFromImages(img, 'morning')).rejects.toMatchObject({ code: 'AI_INPUT_REJECTED' });
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    test('an invalid server key is AI_CONFIG_ERROR, not a client error (B-08)', async () => {
+        global.fetch.mockResolvedValue({ ok: false, status: 400, text: async () => '{"error":{"message":"API key not valid.","details":[{"reason":"API_KEY_INVALID"}]}}' });
+        await expect(getPlannerDataFromImages(img, 'morning')).rejects.toMatchObject({ code: 'AI_CONFIG_ERROR' });
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    test('a retired model (404) falls through to the next model', async () => {
+        global.fetch
+            .mockResolvedValueOnce({ ok: false, status: 404, text: async () => 'models/x is not found' })
+            .mockResolvedValueOnce(makeGeminiSuccess({ date: '2025-01-01', schedule: [], todos: [] }));
+        await expect(getPlannerDataFromImages(img, 'morning')).resolves.toHaveProperty('date', '2025-01-01');
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    test('an expired deadline stops before calling the model (B-20)', async () => {
+        await expect(getPlannerDataFromImages(img, 'morning', null, { deadline: Date.now() + 1000 }))
+            .rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+        expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('429 retries stop when the deadline would be exceeded (B-20)', async () => {
+        global.fetch.mockResolvedValue({ ok: false, status: 429 });
+        const started = Date.now();
+        await expect(getPlannerDataFromImages(img, 'morning', null, { deadline: Date.now() + 7000 }))
+            .rejects.toMatchObject({ code: 'AI_UNAVAILABLE' });
+        expect(Date.now() - started).toBeLessThan(7000);
+    });
+
+    test('BYOK JSON failure never logs the raw model output (S-14)', async () => {
+        global.fetch.mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'My private diary entry' } }] }) });
+        await expect(getPlannerDataFromImages(img, 'morning', { apiKey: 'sk-byok', provider: 'openai', modelName: 'gpt-4o' })).rejects.toThrow();
+        const logged = JSON.stringify([...geminiLogger.error.mock.calls, ...geminiLogger.warn.mock.calls, ...geminiLogger.info.mock.calls]);
+        expect(logged).not.toContain('My private diary entry');
+    });
+
+    test('BYOK provider 401 is classified as BYOK_REJECTED', async () => {
+        global.fetch.mockResolvedValue({ ok: false, status: 401, text: async () => 'bad key' });
+        await expect(getPlannerDataFromImages(img, 'morning', { apiKey: 'sk-byok', provider: 'openai', modelName: 'gpt-4o' }))
+            .rejects.toMatchObject({ code: 'BYOK_REJECTED' });
+    });
+
+    test('morning totals are normalised and absent totals become null (UX #4)', async () => {
+        global.fetch.mockResolvedValue(makeGeminiSuccess({ date: '2025-01-01', schedule: [], todos: [], totals: { blocks: 2 } }));
+        const result = await getPlannerDataFromImages(img, 'morning');
+        expect(result.totals).toEqual({ blocks: 2, reminders: null, todos: null });
+    });
+
+    test('evening "error" with extracted data becomes a warning', async () => {
+        global.fetch.mockResolvedValue(makeGeminiSuccess({ error: 'Total does not add up', expenses: [{ item: 'Tea', amount: 2 }] }));
+        const result = await getPlannerDataFromImages(img, 'evening');
+        expect(result.error).toBeUndefined();
+        expect(result.warning).toBe('Total does not add up');
+    });
+
+    test('getCountWarnings skips absent totals and reports mismatches', () => {
+        const page = {
+            schedule: [{ task: 'a', block: true }, { task: 'b', reminder: true }],
+            todos: [{ task: 'x' }],
+            totals: { blocks: 1, reminders: 2, todos: null }
+        };
+        const warnings = getCountWarnings(page, 'morning');
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain('2 reminders but we found 1');
+        expect(getCountWarnings({ schedule: [], todos: [], totals: {} }, 'morning')).toEqual([]);
+        expect(getCountWarnings({ warning: 'Expenses total differs' }, 'evening')[0]).toContain('Expenses total differs');
     });
 
     test('throws when candidates text field is missing (INVALID_RESPONSE)', async () => {

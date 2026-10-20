@@ -9,6 +9,9 @@ const {
     decryptCurrentGcm,
     decryptLegacyCbc,
     decryptStoredNotionKey,
+    keyBindingAad,
+    encryptBound,
+    decryptBoundGcm,
     sanitizeSyncType,
     parseImageDataUrl,
     normalizeNotionDbId,
@@ -26,9 +29,18 @@ const {
     MAX_TOTAL_IMAGE_BYTES,
     MAX_REQUEST_BODY_BYTES,
     MAX_BASE64_LENGTH,
-    ALLOWED_ORIGINS,
+    ENVIRONMENT_ORIGINS,
+    allowedOriginsFor,
+    currentAppEnvironment,
     ALLOWED_SYNC_TYPES,
     computeDisplayStreak,
+    isValidTimeZone,
+    chunkText,
+    redactSensitive,
+    extensionForMime,
+    isValidClientRequestId,
+    isOriginAllowed,
+    DEV_ORIGINS,
 } = require('../utils');
 
 // Shared test key (32 bytes from hashing a test secret)
@@ -116,11 +128,20 @@ describe('Encryption', () => {
 // DECRYPT STORED NOTION KEY (Migration Logic)
 // ============================================
 describe('decryptStoredNotionKey', () => {
-    test('decrypts v2 (GCM) encrypted keys', () => {
+    test('decrypts v2 (GCM) encrypted keys and marks them for v3 re-encryption', () => {
         const encrypted = encrypt('secret_mykey123456789', testKey);
         const result = decryptStoredNotionKey(encrypted, testKey);
         expect(result.value).toBe('secret_mykey123456789');
-        expect(result.needsMigration).toBe(false);
+        expect(result.needsMigration).toBe(true);
+    });
+
+    test('decrypts v3 (bound GCM) keys only with the owner AAD', () => {
+        const aad = keyBindingAad('a@example.com', 'notionKey');
+        const encrypted = encryptBound('secret_mykey123456789', testKey, aad);
+        expect(encrypted).toMatch(/^v3:/);
+        expect(decryptStoredNotionKey(encrypted, testKey, aad)).toEqual({ value: 'secret_mykey123456789', needsMigration: false });
+        expect(decryptStoredNotionKey(encrypted, testKey, keyBindingAad('b@example.com', 'notionKey'))).toEqual({ value: null, needsMigration: false });
+        expect(decryptStoredNotionKey(encrypted, testKey)).toEqual({ value: null, needsMigration: false });
     });
 
     test('returns plaintext with needsMigration=true for unencrypted keys', () => {
@@ -354,9 +375,9 @@ describe('applyCors', () => {
         expect(applyCors(req, res)).toBe(false);
     });
 
-    test('localhost origins are allowed', () => {
+    test('localhost origins are rejected in production (APP_ENVIRONMENT unset)', () => {
         const { req, res } = mockReqRes('http://localhost:5000');
-        expect(applyCors(req, res)).toBe(true);
+        expect(applyCors(req, res)).toBe(false);
     });
 
     test('firebaseapp.com origin is allowed', () => {
@@ -364,9 +385,15 @@ describe('applyCors', () => {
         expect(applyCors(req, res)).toBe(true);
     });
 
-    test('127.0.0.1 origin is allowed', () => {
-        const { req, res } = mockReqRes('http://127.0.0.1:5000');
-        expect(applyCors(req, res)).toBe(true);
+    test('127.0.0.1 origin is allowed in staging', () => {
+        const before = process.env.APP_ENVIRONMENT;
+        process.env.APP_ENVIRONMENT = 'staging';
+        try {
+            const { req, res } = mockReqRes('http://127.0.0.1:5000');
+            expect(applyCors(req, res)).toBe(true);
+        } finally {
+            if (before === undefined) delete process.env.APP_ENVIRONMENT; else process.env.APP_ENVIRONMENT = before;
+        }
     });
 
     test('rejects localhost on wrong port', () => {
@@ -407,15 +434,17 @@ describe('handleOptions', () => {
         expect(handleOptions(req, res)).toBe(true);
         expect(getStatus()).toBe(204);
         expect(headers['Access-Control-Allow-Methods']).toBe('POST, DELETE, OPTIONS');
-        expect(headers['Access-Control-Allow-Headers']).toContain('x-byok-token');
-        expect(headers['Access-Control-Allow-Headers']).toContain('Authorization');
+        expect(headers['Access-Control-Allow-Headers']).toContain('X-BYOK-Token');
+        expect(headers['Access-Control-Allow-Headers']).toContain('X-BYOK-ApiVersion');
+        expect(headers['Access-Control-Allow-Headers']).toContain('X-Firebase-AppCheck');
+        expect(headers['Access-Control-Allow-Credentials']).toBeUndefined();
     });
 
     test('rejects OPTIONS from disallowed origin with 403', () => {
         const { req, res, getStatus, getBody } = createMockReqRes('OPTIONS', 'https://evil.com');
         expect(handleOptions(req, res)).toBe(true);
         expect(getStatus()).toBe(403);
-        expect(getBody()).toEqual({ error: "Origin not allowed" });
+        expect(getBody()).toEqual({ error: "Origin not allowed.", errorCode: 'ORIGIN_NOT_ALLOWED' });
     });
 });
 
@@ -459,7 +488,14 @@ describe('BYOK security validation', () => {
         '::1',
         'fc00::1',
         'fe80::1',
-        '::ffff:127.0.0.1'
+        '::ffff:127.0.0.1',
+        '::127.0.0.1',          // IPv4-compatible (::/96)
+        '::a00:1',              // IPv4-compatible 10.0.0.1
+        '2002:a00:1::1',        // 6to4 embedding 10.0.0.1
+        '2002:7f00:1::',        // 6to4 embedding 127.0.0.1
+        '2001:0:4136:e378::1',  // Teredo
+        '64:ff9b::a00:1',       // NAT64
+        'FE80::1'               // upper-case literal
     ])('blocks private or reserved address %s', (ip) => {
         expect(isPrivateOrReservedIp(ip)).toBe(true);
     });
@@ -467,6 +503,16 @@ describe('BYOK security validation', () => {
     test('allows a public address', () => {
         expect(isPrivateOrReservedIp('93.184.216.34')).toBe(false);
         expect(isPrivateOrReservedIp('2606:2800:220:1:248:1893:25c8:1946')).toBe(false);
+    });
+
+    test('rejects IP-literal and trailing-dot hosts that point inward (S-18)', () => {
+        expect(validateBYOKBaseUrl('https://[::1]/v1').valid).toBe(false);
+        expect(validateBYOKBaseUrl('https://[2002:a00:1::1]/v1').valid).toBe(false);
+        expect(validateBYOKBaseUrl('https://[::ffff:10.0.0.1]/v1').valid).toBe(false);
+        expect(validateBYOKBaseUrl('https://2130706433/v1').valid).toBe(false); // 127.0.0.1
+        expect(validateBYOKBaseUrl('https://0x7f.1/v1').valid).toBe(false);
+        expect(validateBYOKBaseUrl('https://localhost./v1').valid).toBe(false);
+        expect(validateBYOKBaseUrl('https://93.184.216.34/v1').valid).toBe(true);
     });
 
     test('rejects unsafe custom URLs', () => {
@@ -521,16 +567,19 @@ describe('Constants', () => {
         expect(ALLOWED_SYNC_TYPES.size).toBe(5);
     });
 
-    test('ALLOWED_ORIGINS contains production, staging and dev origins', () => {
-        expect(ALLOWED_ORIGINS.has('https://ai-planner-project-467800.web.app')).toBe(true);
-        expect(ALLOWED_ORIGINS.has('https://ai-planner-project-467800.firebaseapp.com')).toBe(true);
-        expect(ALLOWED_ORIGINS.has('https://ai-planner-staging.web.app')).toBe(true);
-        expect(ALLOWED_ORIGINS.has('https://ai-planner-staging.firebaseapp.com')).toBe(true);
-        expect(ALLOWED_ORIGINS.has('https://planner.analogdigital.tech')).toBe(true);
-        expect(ALLOWED_ORIGINS.has('https://staging-planner.analogdigital.tech')).toBe(true);
-        expect(ALLOWED_ORIGINS.has('http://localhost:5000')).toBe(true);
-        expect(ALLOWED_ORIGINS.has('http://127.0.0.1:5000')).toBe(true);
-        expect(ALLOWED_ORIGINS.size).toBe(10);
+    test('ENVIRONMENT_ORIGINS lists exactly the contract origins per environment', () => {
+        expect(ENVIRONMENT_ORIGINS.production).toEqual([
+            'https://planner.analogdigital.tech',
+            'https://ai-planner-project-467800.web.app',
+            'https://ai-planner-project-467800.firebaseapp.com',
+        ]);
+        expect(ENVIRONMENT_ORIGINS.staging).toEqual([
+            'https://staging-planner.analogdigital.tech',
+            'https://ai-planner-staging.web.app',
+            'https://ai-planner-staging.firebaseapp.com',
+        ]);
+        expect(DEV_ORIGINS.has('http://localhost:5000')).toBe(true);
+        expect(DEV_ORIGINS.has('http://127.0.0.1:5050')).toBe(true);
     });
 });
 
@@ -862,5 +911,171 @@ describe('computeDisplayStreak', () => {
             streakFreezes: 0,
             timeZone: 'Asia/Kolkata',
         }, '2026-06-14')).toBe(0);
+    });
+});
+
+// ============================================
+// AUDIT REMEDIATION HELPERS
+// ============================================
+describe('per-environment origin allowlist (round 3, S-15)', () => {
+    const before = process.env.APP_ENVIRONMENT;
+    afterEach(() => {
+        if (before === undefined) delete process.env.APP_ENVIRONMENT; else process.env.APP_ENVIRONMENT = before;
+    });
+    const PROD = ENVIRONMENT_ORIGINS.production;
+    const STAGING = ENVIRONMENT_ORIGINS.staging;
+
+    test('production accepts only the production origins (no staging, no localhost)', () => {
+        PROD.forEach(o => expect(isOriginAllowed(o, 'production')).toBe(true));
+        STAGING.forEach(o => expect(isOriginAllowed(o, 'production')).toBe(false));
+        expect(isOriginAllowed('http://localhost:5000', 'production')).toBe(false);
+        expect(isOriginAllowed('http://127.0.0.1:3000', 'production')).toBe(false);
+    });
+
+    test('staging accepts its own origins and localhost, never the production origins', () => {
+        STAGING.forEach(o => expect(isOriginAllowed(o, 'staging')).toBe(true));
+        PROD.forEach(o => expect(isOriginAllowed(o, 'staging')).toBe(false));
+        expect(isOriginAllowed('http://localhost:5000', 'staging')).toBe(true);
+    });
+
+    test('emulator accepts localhost only', () => {
+        expect(isOriginAllowed('http://127.0.0.1:5050', 'emulator')).toBe(true);
+        [...PROD, ...STAGING].forEach(o => expect(isOriginAllowed(o, 'emulator')).toBe(false));
+    });
+
+    test('a missing, empty or unknown APP_ENVIRONMENT is treated as production', () => {
+        delete process.env.APP_ENVIRONMENT;
+        expect(currentAppEnvironment()).toBe('production');
+        expect(isOriginAllowed('https://planner.analogdigital.tech')).toBe(true);
+        expect(isOriginAllowed('https://ai-planner-staging.web.app')).toBe(false);
+        expect(isOriginAllowed('http://localhost:5000')).toBe(false);
+        process.env.APP_ENVIRONMENT = '';
+        expect(currentAppEnvironment()).toBe('production');
+        process.env.APP_ENVIRONMENT = 'Prod-ish';
+        expect(currentAppEnvironment()).toBe('production');
+        expect(allowedOriginsFor('nonsense')).toEqual(new Set(PROD));
+    });
+
+    test('APP_ENVIRONMENT=staging switches the default allowlist', () => {
+        process.env.APP_ENVIRONMENT = ' Staging ';
+        expect(currentAppEnvironment()).toBe('staging');
+        expect(isOriginAllowed('https://staging-planner.analogdigital.tech')).toBe(true);
+        expect(isOriginAllowed('https://planner.analogdigital.tech')).toBe(false);
+    });
+
+    test('rejects non-string origins', () => {
+        expect(isOriginAllowed(undefined, 'staging')).toBe(false);
+        expect(isOriginAllowed(42, 'production')).toBe(false);
+    });
+});
+
+describe('isValidTimeZone (B-09)', () => {
+    test.each(['UTC', 'Etc/UTC', 'Asia/Kolkata', 'Asia/Calcutta', 'Europe/Kyiv', 'America/New_York'])('accepts %s', (tz) => {
+        expect(isValidTimeZone(tz)).toBe(true);
+    });
+    test.each(['', 'Mars/Phobos', null, 42, 'x'.repeat(100)])('rejects %p', (tz) => {
+        expect(isValidTimeZone(tz)).toBe(false);
+    });
+});
+
+describe('chunkText (B-10)', () => {
+    test('splits on the limit without breaking surrogate pairs', () => {
+        const text = '😀'.repeat(1500); // 3000 code units
+        const chunks = chunkText(text, 2000);
+        expect(chunks.every(c => c.length <= 2000)).toBe(true);
+        expect(chunks.join('')).toBe(text);
+        expect(chunks[0].endsWith('\ud83d')).toBe(false);
+    });
+    test('returns [] for empty input', () => {
+        expect(chunkText('')).toEqual([]);
+    });
+});
+
+describe('redactSensitive (S-06)', () => {
+    test('removes URLs and key parameters', () => {
+        const msg = 'request to https://generativelanguage.googleapis.com/v1beta/models/x:generateContent?key=AIzaSECRET failed, reason: ECONNRESET';
+        const out = redactSensitive(msg);
+        expect(out).not.toContain('AIzaSECRET');
+        expect(out).not.toContain('googleapis.com');
+        expect(out).toContain('ECONNRESET');
+    });
+});
+
+describe('extensionForMime (Q-01)', () => {
+    test.each([
+        ['image/jpeg', 'jpg'], ['image/png', 'png'], ['image/webp', 'webp'], ['audio/webm', 'webm'],
+        ['audio/mp4', 'mp4'], ['audio/mpeg', 'mp3'], ['audio/wav', 'wav'], ['audio/ogg', 'ogg'], ['audio/aac', 'aac']
+    ])('%s → %s', (mime, ext) => {
+        expect(extensionForMime(mime)).toBe(ext);
+    });
+});
+
+describe('isValidClientRequestId (C4)', () => {
+    test('accepts UUID v4 and rejects others', () => {
+        expect(isValidClientRequestId('3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b')).toBe(true);
+        expect(isValidClientRequestId('3f1c2b4a-5d6e-1f70-8a9b-0c1d2e3f4a5b')).toBe(false);
+        expect(isValidClientRequestId('../../users/x')).toBe(false);
+        expect(isValidClientRequestId(undefined)).toBe(false);
+    });
+});
+
+describe('stored Notion key decoding (B-25, S-16)', () => {
+    test('corrupt ciphertext that looks encrypted is never returned as plaintext', () => {
+        expect(decryptStoredNotionKey('abcd:ef01', testKey)).toEqual({ value: null, needsMigration: false });
+        expect(decryptStoredNotionKey('legacy:cbc:encrypted:key', testKey)).toEqual({ value: null, needsMigration: false });
+    });
+
+    test('legacy CBC encrypted with a different key fails closed', () => {
+        const crypto = require('crypto');
+        const iv = crypto.randomBytes(16);
+        const cipher = crypto.createCipheriv('aes-256-cbc', deriveKey('other-key'), iv);
+        const payload = iv.toString('hex') + ':' + cipher.update('secret_x_123456789', 'utf8', 'hex') + cipher.final('hex');
+        const result = decryptStoredNotionKey(payload, testKey);
+        expect(result.value === null || result.value !== 'secret_x_123456789').toBe(true);
+    });
+
+    test('GCM payloads with a truncated auth tag are rejected', () => {
+        const encrypted = encrypt('secret_value_123', testKey);
+        const parts = encrypted.split(':');
+        parts[3] = parts[3].slice(0, 8);
+        expect(() => decryptCurrentGcm(parts.join(':'), testKey)).toThrow();
+    });
+});
+
+describe('key binding (S-16): AAD aiplanner:v3:<email>:<field>', () => {
+    const key = deriveKey('binding-test-secret');
+
+    test('keyBindingAad has the documented shape and validates input', () => {
+        expect(keyBindingAad('a@example.com', 'notionKey').toString('utf8')).toBe('aiplanner:v3:a@example.com:notionKey');
+        expect(keyBindingAad('a@example.com', 'byok').toString('utf8')).toBe('aiplanner:v3:a@example.com:byok');
+        expect(() => keyBindingAad('', 'byok')).toThrow('owner email');
+        expect(() => keyBindingAad(undefined, 'byok')).toThrow('owner email');
+        expect(() => keyBindingAad('a@example.com', 'other')).toThrow('Unknown key binding field');
+    });
+
+    test('v3 round-trip', () => {
+        const aad = keyBindingAad('a@example.com', 'notionKey');
+        const payload = encryptBound('ntn_round_trip_token_123', key, aad);
+        expect(payload.split(':')).toHaveLength(4);
+        expect(decryptBoundGcm(payload, key, aad)).toBe('ntn_round_trip_token_123');
+    });
+
+    test('a v3 ciphertext fails for another user, another field, or a downgraded prefix', () => {
+        const payload = encryptBound('ntn_round_trip_token_123', key, keyBindingAad('a@example.com', 'notionKey'));
+        expect(() => decryptBoundGcm(payload, key, keyBindingAad('b@example.com', 'notionKey'))).toThrow();
+        expect(() => decryptBoundGcm(payload, key, keyBindingAad('a@example.com', 'byok'))).toThrow();
+        // Relabelling it as an unbound v2 ciphertext does not bypass the binding.
+        expect(decryptStoredNotionKey(payload.replace(/^v3:/, 'v2:'), key).value).toBeNull();
+    });
+
+    test('decryptBoundGcm ignores non-v3 payloads and rejects missing AAD or short tags', () => {
+        expect(decryptBoundGcm('v2:aa:bb:cc', key, Buffer.from('x'))).toBeNull();
+        const aad = keyBindingAad('a@example.com', 'notionKey');
+        const payload = encryptBound('secret', key, aad);
+        expect(() => decryptBoundGcm(payload, key, null)).toThrow('Missing key binding AAD');
+        const [v, iv, ct] = payload.split(':');
+        expect(() => decryptBoundGcm(`${v}:${iv}:${ct}:abcd`, key, aad)).toThrow('Invalid authentication tag length');
+        expect(() => encryptBound('secret', key, Buffer.alloc(0))).toThrow('Missing key binding AAD');
+        expect(encryptBound('', key, aad)).toBe('');
     });
 });

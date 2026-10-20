@@ -1,73 +1,56 @@
 #!/usr/bin/env node
 /**
  * AI Planner — Staging Database Reset Utility
- * Clears collections in the staging project for QA test isolation.
+ * Deletes all documents (including subcollections) from the Firestore database
+ * "staging" in ai-planner-project-467800, for QA isolation. The production database
+ * "(default)" is never touched: the database id is hard-coded below.
  *
  * Usage:
  *   node scripts/reset-staging.js --confirm=RESET-STAGING-DATA
  */
 
-const admin = require('firebase-admin');
+const { initializeApp } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
-const targetProject = 'ai-planner-staging';
+const PROJECT_ID = 'ai-planner-project-467800';
+const STAGING_DATABASE = 'staging';
 const confirmArg = process.argv.find(arg => arg.startsWith('--confirm='))?.split('=')[1];
 
 if (confirmArg !== 'RESET-STAGING-DATA') {
-    console.error("❌ Safety check failed: Must pass --confirm=RESET-STAGING-DATA");
+    console.error('❌ Safety check failed: Must pass --confirm=RESET-STAGING-DATA');
     process.exit(1);
 }
 
-console.log(`⚠️  Resetting staging database: ${targetProject}`);
+console.log(`⚠️  Resetting ${PROJECT_ID} / database "${STAGING_DATABASE}"`);
 
-admin.initializeApp({
-    projectId: targetProject
-});
+initializeApp({ projectId: process.env.FIRESTORE_EMULATOR_HOST ? (process.env.GCLOUD_PROJECT || PROJECT_ID) : PROJECT_ID });
 
-const db = admin.firestore();
-
-async function deleteCollection(collectionPath, batchSize = 100) {
-    const collectionRef = db.collection(collectionPath);
-    const query = collectionRef.limit(batchSize);
-
-    return new Promise((resolve, reject) => {
-        deleteQueryBatch(query, resolve, reject);
-    });
+const db = getFirestore(STAGING_DATABASE);
+if (db.databaseId !== STAGING_DATABASE) {
+    console.error('❌ SAFETY BLOCK: refusing to reset anything but the staging database.');
+    process.exit(1);
 }
 
-async function deleteQueryBatch(query, resolve, reject) {
-    const snapshot = await query.get();
-
-    const batchSize = snapshot.size;
-    if (batchSize === 0) {
-        resolve();
-        return;
-    }
-
-    const batch = db.batch();
-    snapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-    });
-    await batch.commit();
-
-    process.nextTick(() => {
-        deleteQueryBatch(query, resolve, reject);
-    });
+// recursiveDelete removes each document and all of its subcollections (e.g. users/*/syncHistory).
+async function deleteCollection(collectionPath) {
+    const ref = db.collection(collectionPath);
+    const before = (await ref.count().get()).data().count;
+    await db.recursiveDelete(ref);
+    console.log(`  • ${collectionPath}: deleted ${before} document(s) and their subcollections`);
 }
 
 async function reset() {
-    console.log("  • Deleting rateLimits collection...");
-    await deleteCollection('rateLimits');
-
-    console.log("  • Deleting syncErrors collection...");
-    await deleteCollection('syncErrors');
-
-    console.log("  • Deleting users collection...");
-    await deleteCollection('users');
-
-    console.log("\n✅ Staging database reset complete.");
+    const collections = await db.listCollections();
+    if (collections.length === 0) {
+        console.log('  (database is already empty)');
+    }
+    for (const col of collections) {
+        await deleteCollection(col.id);
+    }
+    console.log('\n✅ Staging database reset complete.');
 }
 
 reset().catch(err => {
-    console.error("Failed to reset staging database:", err);
+    console.error('Failed to reset staging database:', err);
     process.exit(1);
 });

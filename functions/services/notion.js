@@ -2,11 +2,18 @@ const { logger } = require("firebase-functions/logger");
 const { Client } = require("@notionhq/client");
 const { defineSecret } = require('firebase-functions/params');
 const { uploadToNotion } = require("notion-multipart-uploader");
+const { getE2EFakes } = require('../testing/e2eFakes');
 const {
     deriveKey,
-    encrypt: _encryptWithKey,
-    decryptCurrentGcm: _decryptGcmWithKey
+    encryptBound,
+    keyBindingAad,
+    decryptStoredNotionKey: _decryptStoredWithKey,
+    chunkText,
 } = require('../utils');
+
+// Notion API limits: 100 children per request, 2,000 characters per rich_text.
+const NOTION_MAX_CHILDREN = 100;
+const NOTION_MAX_TEXT = 2000;
 
 const NOTION_ENCRYPTION_KEY_V2 = defineSecret('NOTION_ENCRYPTION_KEY_V2');
 
@@ -14,41 +21,60 @@ function getCryptoKey() {
     return deriveKey(NOTION_ENCRYPTION_KEY_V2.value());
 }
 
-function encrypt(text) {
+/** Encrypt a Notion key for storage, bound to its owner (`v3:`; AAD aiplanner:v3:<email>:notionKey). */
+function encrypt(text, email) {
     if (!text) return text;
-    return _encryptWithKey(text, getCryptoKey());
+    return encryptBound(text, getCryptoKey(), keyBindingAad(email, 'notionKey'));
 }
 
-function decryptStoredNotionKey(text) {
+/**
+ * Decrypt the stored Notion key with the active secret. Delegates to the single
+ * format-aware implementation in utils (v3 bound GCM, v2 GCM, legacy iv:cipher
+ * CBC, plaintext), so legacy ciphertext is never mistaken for a plaintext token.
+ */
+function decryptStoredNotionKey(text, email) {
     if (!text) return text;
-
+    let result = null;
     try {
-        if (text.startsWith('v2:')) {
-            const val = _decryptGcmWithKey(text, getCryptoKey());
-            return { value: val, needsMigration: false };
-        }
-        // Plaintext key (not encrypted yet)
-        return { value: text, needsMigration: true };
-    } catch (e) {
-        logger.error("Decryption failed for stored Notion key.", { error: e.message });
+        result = _decryptStoredWithKey(text, getCryptoKey(), keyBindingAad(email, 'notionKey'));
+    } catch (_) {
+        result = null;
+    }
+    if (!result || !result.value) {
+        logger.error("Decryption failed for stored Notion key.");
         return { value: null, needsMigration: false, error: "Decryption failed. Please re-connect Notion in your settings." };
     }
+    return result;
 }
 
-async function getDecryptedNotionKeyAndMigrate(userRef, userData) {
+/**
+ * Decrypt the user's Notion key. Anything older than v3 is re-encrypted as v3
+ * and saved in the same request; that re-save is best effort and never fails
+ * the caller.
+ * @param {object} userRef   users/{email} document reference
+ * @param {object} userData  the user document's data
+ * @param {string} [email]   owner email (defaults to the document id)
+ */
+async function getDecryptedNotionKeyAndMigrate(userRef, userData, email = userRef?.id) {
     if (!userData?.notionKey) return null;
 
-    const { value, needsMigration } = decryptStoredNotionKey(userData.notionKey);
+    const { value, needsMigration } = decryptStoredNotionKey(userData.notionKey, email);
     if (!value) return null;
 
     if (needsMigration) {
-        await userRef.set({ notionKey: encrypt(value) }, { merge: true });
+        try {
+            await userRef.set({ notionKey: encrypt(value, email) }, { merge: true });
+        } catch (err) {
+            logger.warn("Could not re-encrypt stored Notion key as v3", { error: err?.message });
+        }
     }
 
     return value;
 }
 
 async function validateNotionCredentials(apiKey, databaseId) {
+    const fakes = getE2EFakes();
+    if (fakes) return fakes.notion.validateCredentials(apiKey, databaseId);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
     try {
@@ -91,8 +117,9 @@ async function validateNotionCredentials(apiKey, databaseId) {
 // Helper to upload file to Notion (using custom multipart uploader package)
 async function uploadFileToNotion(apiKey, fileBuffer, mimeType, filename = "journal.jpg") {
     try {
-        logger.info(`Uploading ${filename} to Notion using notion-multipart-uploader...`);
-        const fileId = await uploadToNotion(
+        logger.info(`Uploading ${filename} to Notion using notion-multipart-uploader...`, { bytes: fileBuffer?.length || 0 });
+        const upload = getE2EFakes()?.notion.uploadToNotion || uploadToNotion;
+        const fileId = await upload(
             apiKey,
             fileBuffer,
             mimeType,
@@ -114,7 +141,8 @@ function normalizeBrainDumpText(value) {
 const NOTION_SDK_VERSION = '2025-09-03';
 
 function createNotionClient(notionApiKey) {
-    return new Client({
+    const NotionClient = getE2EFakes()?.notion.Client || Client;
+    return new NotionClient({
         auth: notionApiKey,
         notionVersion: NOTION_SDK_VERSION,
     });
@@ -137,13 +165,41 @@ async function queryDatabasePages(notion, databaseId, filter) {
     });
 }
 
-async function createPageInDatabase(notion, databaseId, { properties, children }) {
+/** Paragraph blocks for `text`, one per non-empty line, each ≤ 2,000 characters. */
+function buildParagraphBlocks(text) {
+    const blocks = [];
+    const paragraphs = String(text || '').split('\n').filter(p => p.trim() !== '');
+    for (const paragraph of paragraphs) {
+        for (const chunk of chunkText(paragraph, NOTION_MAX_TEXT)) {
+            blocks.push({
+                object: 'block',
+                type: 'paragraph',
+                paragraph: { rich_text: [{ type: 'text', text: { content: chunk } }] }
+            });
+        }
+    }
+    return blocks;
+}
+
+/**
+ * Create a page with any number of children: the first 100 go with pages.create,
+ * the rest are appended in batches of 100.
+ */
+async function createPageInDatabase(notion, databaseId, { properties, children = [] }) {
     const dataSourceId = await resolveDataSourceId(notion, databaseId);
-    return notion.pages.create({
+    const allChildren = Array.isArray(children) ? children : [];
+    const page = await notion.pages.create({
         parent: { type: 'data_source_id', data_source_id: dataSourceId },
         properties,
-        children,
+        children: allChildren.slice(0, NOTION_MAX_CHILDREN),
     });
+    for (let i = NOTION_MAX_CHILDREN; i < allChildren.length; i += NOTION_MAX_CHILDREN) {
+        await notion.blocks.children.append({
+            block_id: page.id,
+            children: allChildren.slice(i, i + NOTION_MAX_CHILDREN),
+        });
+    }
+    return page;
 }
 
 /**
@@ -176,17 +232,7 @@ async function syncBrainDumpToNotion(plannerData, notionApiKey, databaseId, file
             return { ok: true, status: 'duplicate' };
         }
 
-        const children = [];
-
-        if (hasText) {
-            children.push({
-                object: 'block',
-                type: 'paragraph',
-                paragraph: {
-                    rich_text: [{ type: 'text', text: { content: brainDumpText } }]
-                }
-            });
-        }
+        const children = hasText ? buildParagraphBlocks(brainDumpText) : [];
 
         if (fileId) {
             children.push({
@@ -221,5 +267,8 @@ module.exports = {
     normalizeBrainDumpText,
     createNotionClient,
     createPageInDatabase,
+    buildParagraphBlocks,
     resolveDataSourceId,
+    NOTION_MAX_CHILDREN,
+    NOTION_MAX_TEXT,
 };

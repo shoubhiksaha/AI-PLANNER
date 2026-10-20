@@ -1,6 +1,6 @@
-const admin = require('firebase-admin');
+const adminBacking = require('mock-firebase-admin-backing');
 
-jest.mock('firebase-admin', () => {
+jest.mock('mock-firebase-admin-backing', () => {
     const mockCollectionInner = jest.fn(() => ({
         add: jest.fn().mockResolvedValue(undefined)
     }));
@@ -14,7 +14,14 @@ jest.mock('firebase-admin', () => {
     }));
     firestoreFn.FieldValue = firestoreMock.FieldValue;
     return { firestore: firestoreFn, initializeApp: jest.fn() };
-});
+}, { virtual: true });
+jest.mock('firebase-admin/app', () => require('./helpers/adminMock').app());
+jest.mock('firebase-admin/firestore', () => require('./helpers/adminMock').firestore());
+jest.mock('firebase-admin/auth', () => require('./helpers/adminMock').auth());
+jest.mock('firebase-admin/app-check', () => require('./helpers/adminMock').appCheck());
+
+// firebase-functions' HTTPS module pulls in firebase-admin/auth (ESM-only jose) — not needed here.
+jest.mock('firebase-functions/v2/https', () => ({ onRequest: (_opts, handler) => handler }));
 
 process.env.NODE_ENV = 'test';
 const { runGamificationAfterSync, applyGamificationMilestones } = require('../index');
@@ -35,7 +42,7 @@ describe('runGamificationAfterSync', () => {
     });
 
     test('returns milestone message on success', async () => {
-        admin.firestore().runTransaction.mockImplementationOnce(async (cb) => {
+        adminBacking.firestore().runTransaction.mockImplementationOnce(async (cb) => {
             const t = {
                 get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ currentStreak: 0, lastSyncDate: null }) }),
                 set: jest.fn()
@@ -49,7 +56,7 @@ describe('runGamificationAfterSync', () => {
 
     test('retries once then succeeds', async () => {
         let calls = 0;
-        admin.firestore().runTransaction.mockImplementation(async () => {
+        adminBacking.firestore().runTransaction.mockImplementation(async () => {
             calls++;
             if (calls === 1) throw new Error('transient');
             return null;
@@ -60,17 +67,17 @@ describe('runGamificationAfterSync', () => {
     });
 
     test('surfaces warning after two failures', async () => {
-        admin.firestore().runTransaction.mockRejectedValue(new Error('Firestore down'));
+        adminBacking.firestore().runTransaction.mockRejectedValue(new Error('Firestore down'));
         const result = await runGamificationAfterSync(userRef, { syncMode: 'morning', imageCount: 1 });
         expect(result.milestoneMsg).toBeNull();
         expect(result.streakWarning).toContain('Streak could not be updated');
-        expect(admin.firestore().runTransaction).toHaveBeenCalledTimes(2);
+        expect(adminBacking.firestore().runTransaction).toHaveBeenCalledTimes(2);
     });
 });
 
 describe('applyGamificationMilestones propagates errors', () => {
     test('throws on transaction failure (no silent swallow)', async () => {
-        admin.firestore().runTransaction.mockRejectedValueOnce(new Error('boom'));
+        adminBacking.firestore().runTransaction.mockRejectedValueOnce(new Error('boom'));
         await expect(applyGamificationMilestones({ id: 'u@test.com' })).rejects.toThrow('boom');
     });
 });

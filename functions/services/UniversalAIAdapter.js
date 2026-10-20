@@ -1,9 +1,16 @@
 const { logger } = require('firebase-functions/logger');
 const https = require('https');
+const net = require('net');
 const {
     isPrivateOrReservedIp,
-    validateBYOKBaseUrl
+    validateBYOKBaseUrl,
+    redactSensitive
 } = require('../utils');
+
+/** Provider error bodies are logged truncated and with URLs/keys scrubbed. */
+function safeErrorBody(body) {
+    return redactSensitive(body).slice(0, 500);
+}
 
 const MAX_AI_RESPONSE_BYTES = 2 * 1024 * 1024;
 const AI_REQUEST_TIMEOUT_MS = 120000;
@@ -121,6 +128,17 @@ class UniversalAIAdapter {
             const dns = require('dns').promises;
             const validatedAddresses = [];
 
+            // IP-literal hosts are not resolvable via DNS; validate them directly.
+            const literalFamily = net.isIP(host);
+            if (literalFamily) {
+                if (isPrivateOrReservedIp(host)) {
+                    throw new Error(`SSRF blocked: private or reserved IP literal ${host}`);
+                }
+                this._validatedAddresses = [{ address: host, family: literalFamily }];
+                this._dnsValidated = true;
+                return;
+            }
+
             // Check IPv4 resolved addresses
             try {
                 const v4 = await dns.resolve4(host);
@@ -166,14 +184,32 @@ class UniversalAIAdapter {
     _getPinnedHttpsAgent() {
         if (!this._customBaseUrl || this._validatedAddresses.length === 0) return undefined;
         const expectedHost = new URL(this.baseUrl).hostname.replace(/^\[|\]$/g, '').toLowerCase();
-        const pinned = this._validatedAddresses[0];
+        const validated = this._validatedAddresses.slice();
         return new https.Agent({
             keepAlive: false,
-            lookup: (hostname, _options, callback) => {
+            // Node >= 20 calls lookup with { all: true } (happy-eyeballs) and expects
+            // an array of { address, family }; older callers expect (address, family).
+            lookup: (hostname, options, callback) => {
+                if (typeof options === 'function') {
+                    callback = options;
+                    options = {};
+                }
                 if (String(hostname).toLowerCase() !== expectedHost) {
                     return callback(new Error('SSRF blocked: unexpected outbound hostname'));
                 }
-                callback(null, pinned.address, pinned.family);
+                const wantedFamily = typeof options === 'number' ? options : (options && options.family) || 0;
+                const candidates = wantedFamily
+                    ? validated.filter(a => a.family === wantedFamily)
+                    : validated;
+                if (candidates.length === 0) {
+                    const err = new Error('SSRF blocked: no validated address for requested family');
+                    err.code = 'ENOTFOUND';
+                    return callback(err);
+                }
+                if (options && options.all) {
+                    return callback(null, candidates.map(a => ({ address: a.address, family: a.family })));
+                }
+                return callback(null, candidates[0].address, candidates[0].family);
             }
         });
     }
@@ -303,7 +339,7 @@ class UniversalAIAdapter {
         const response = await this._fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             const errBody = await response.text().catch(() => '');
-            logger.error(`${this.provider} API Error: ${response.status}`, { requestId, body: errBody });
+            logger.error(`${this.provider} API Error: ${response.status}`, { requestId, body: safeErrorBody(errBody) });
             throw new Error(`${this.provider} API Error: ${response.status}`);
         }
 
@@ -321,8 +357,9 @@ class UniversalAIAdapter {
     // Vision images are passed as `inlineData` parts.
     // ─────────────────────────────────────────────────────────────────────────
     async _chatGoogle(systemPrompt, userPrompt, images, requestId) {
-        const url = `${this.baseUrl}?key=${this.apiKey}`;
-        const headers = { "Content-Type": "application/json" };
+        // Key in a header (never the URL) so it cannot leak through logged errors.
+        const url = this.baseUrl;
+        const headers = { "Content-Type": "application/json", "x-goog-api-key": this.apiKey };
 
         // Build user message parts: text first, then image(s)
         const userParts = [{ text: userPrompt }];
@@ -351,7 +388,7 @@ class UniversalAIAdapter {
         const response = await this._fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             const errBody = await response.text().catch(() => '');
-            logger.error(`Google API Error: ${response.status}`, { requestId, body: errBody });
+            logger.error(`Google API Error: ${response.status}`, { requestId, body: safeErrorBody(errBody) });
             throw new Error(`Google API Error: ${response.status}`);
         }
 
@@ -408,7 +445,7 @@ class UniversalAIAdapter {
         const response = await this._fetch(this.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             const errBody = await response.text().catch(() => '');
-            logger.error(`Anthropic API Error: ${response.status}`, { requestId, body: errBody });
+            logger.error(`Anthropic API Error: ${response.status}`, { requestId, body: safeErrorBody(errBody) });
             throw new Error(`Anthropic API Error: ${response.status}`);
         }
 
@@ -455,7 +492,7 @@ class UniversalAIAdapter {
         const response = await this._fetch(this.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             const errBody = await response.text().catch(() => '');
-            logger.error(`Cohere API Error: ${response.status}`, { requestId, body: errBody });
+            logger.error(`Cohere API Error: ${response.status}`, { requestId, body: safeErrorBody(errBody) });
             throw new Error(`Cohere API Error: ${response.status}`);
         }
 
@@ -514,7 +551,7 @@ class UniversalAIAdapter {
         const response = await this._fetch(this.baseUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
         if (!response.ok) {
             const errBody = await response.text().catch(() => '');
-            logger.error(`HuggingFace API Error: ${response.status}`, { requestId, body: errBody });
+            logger.error(`HuggingFace API Error: ${response.status}`, { requestId, body: safeErrorBody(errBody) });
             throw new Error(`HuggingFace API Error: ${response.status}`);
         }
 
