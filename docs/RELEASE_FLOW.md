@@ -65,7 +65,7 @@ flowchart LR
 | Push check | `.github/workflows/production.yml` (job "Staging Provenance") | Re-runs the policy on what actually landed on `main` before any deploy |
 | Approval | GitHub environments `staging` and `production` | The deploy job waits for the owner's approval; each environment only accepts its own branch |
 | Tests | `.github/workflows/quality.yml` | The same suite on PRs, on staging pushes and on main pushes |
-| Branch protection | `scripts/setup-repo-governance.sh` | PRs + CODEOWNERS review + required checks on `main` and `staging`; no force-push or delete |
+| Branch protection | `scripts/setup-repo-governance.sh` | PRs + required checks on `main` and `staging` (no approving review; the environment approval gates deploys); no force-push or delete |
 | Local guard | `scripts/git-hooks/pre-push` (`npm run setup:hooks`) | Stops `git push origin main`/`staging` and pushing staging into main from your laptop |
 | Deploy guard | `scripts/guard-deploy.sh` (Firebase `predeploy`) | `firebase deploy` only runs inside GitHub Actions; local deploys are refused |
 | Cloud identity | `scripts/setup-gcp-oidc.sh` | Only the matching GitHub environment's jobs can impersonate each project's deploy account |
@@ -89,9 +89,9 @@ Optional per-environment variables (Settings → Environments → *env* → Vari
 When absent, `scripts/ci/deploy.sh` reads the web config from the project (both environments use
 the same web app).
 
-**Solo owner:** GitHub never lets you approve your own pull request. As an admin you can merge
-your own PRs with "Merge without waiting for requirements"; the deploy itself still waits for
-your approval on the environment. PRs from anyone else need your review.
+**Solo owner:** GitHub never lets you approve your own pull request, so PRs need no approving
+review. Every PR must still pass the required checks, and every deploy waits for your approval
+on its environment.
 
 ## Hotfixes and rollbacks
 
