@@ -10,12 +10,13 @@ scripts/setup-repo-governance.sh
 
 It configures:
 
-- **`main` and `staging`**: PR required, 1 approving review from a code owner (`.github/CODEOWNERS`),
-  stale reviews dismissed, conversations resolved, no force-push or deletion.
+- **`main` and `staging`**: PR required (no approving review: GitHub never lets a solo owner approve
+  their own PR, and the environment approval below gates every deploy), conversations resolved,
+  no force-push or deletion.
 - **Required checks** (from `.github/workflows/pr-check.yml`): `Branch Policy`, plus
   `Quality / Conflict Marker Check`, `Quality / Code Linting`, `Quality / Dependency Audit`,
   `Quality / Frontend Tests`, `Quality / Backend Tests & Coverage`, `Quality / Firestore Rules Tests`,
-  `Quality / Mobile Lint & Tests`, `Quality / E2E Tests`.
+  `Quality / Mobile Lint & Tests`, `Quality / E2E Tests`, `Quality / Emulator E2E (Chromium, Firefox, WebKit)`.
 - **Up-to-date branches**: required on `main` only. On `staging` it is off on purpose: catching up
   with staging would mean merging staging into the feature, which would then be refused by main.
 - **Merge method**: merge commits only. The provenance check needs each feature's commits to exist on staging.

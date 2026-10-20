@@ -117,8 +117,8 @@ protect() {
       \"required_status_checks\": {\"strict\": $strict, \"checks\": $checks},
       \"enforce_admins\": false,
       \"required_pull_request_reviews\": {
-        \"required_approving_review_count\": 1,
-        \"require_code_owner_reviews\": true,
+        \"required_approving_review_count\": 0,
+        \"require_code_owner_reviews\": false,
         \"dismiss_stale_reviews\": true
       },
       \"restrictions\": null,
@@ -148,8 +148,8 @@ Next steps (manual):
                             scripts/setup-gcp-oidc.sh production
     and set WIF_PROVIDER / SA_EMAIL as *environment* variables it prints.
   • Delete the unused repo secret GEMINI_API_KEY:  gh secret delete GEMINI_API_KEY
-  • Solo-owner note: GitHub never lets you approve your own PR. As an admin you can still
-    merge with "Merge without waiting for requirements"; the deploy itself always waits for
-    your approval on the environment. PRs from anyone else need your review.
+  • Solo-owner note: GitHub never lets you approve your own PR, so PRs need no approving
+    review. Every PR must still pass the required checks, and every deploy waits for your
+    approval on its environment.
 EOF
 echo "✅ Governance applied."
