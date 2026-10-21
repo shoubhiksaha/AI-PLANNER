@@ -2,122 +2,42 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Download Planner - AI Planner</title>
-    <style>
-        :root {
-            --bg-main: #f8fafc;
-            --text-main: #334155;
-            --text-muted: #64748b;
-            --border-color: #e2e8f0;
-            --accent: #2563eb;
-        }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-main: #0f172a;
-                --text-main: #e2e8f0;
-                --text-muted: #94a3b8;
-                --border-color: #334155;
-                --accent: #3b82f6;
-            }
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background-color: var(--bg-main);
-            color: var(--text-main);
-            line-height: 1.6;
-            margin: 0;
-            padding: 2rem 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            box-sizing: border-box;
-        }
-        .container {
-            max-width: 500px;
-            width: 100%;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 2.5rem;
-            border-radius: 1rem;
-            border: 1px solid var(--border-color);
-            text-align: center;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-        }
-        .icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
-        h1 { font-size: 1.75rem; margin-top: 0; margin-bottom: 0.5rem; color: var(--text-main); }
-        p { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 2rem; }
-        
-        .btn-primary {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            background-color: var(--accent);
-            color: white;
-            padding: 0.875rem 1.5rem;
-            border-radius: 0.75rem;
-            font-size: 1rem;
-            font-weight: 600;
-            text-decoration: none;
-            border: none;
-            cursor: pointer;
-            transition: opacity 0.2s;
-            margin-bottom: 1rem;
-            box-sizing: border-box;
-        }
-        .btn-primary:hover {
-            opacity: 0.9;
-        }
-        .btn-primary svg {
-            margin-right: 0.5rem;
-            width: 20px;
-            height: 20px;
-        }
-
-        .btn-secondary {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background-color: transparent;
-            color: var(--text-muted);
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            text-decoration: none;
-            border: 1px solid var(--border-color);
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .btn-secondary:hover {
-            background-color: rgba(100, 116, 139, 0.1);
-            color: var(--text-main);
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Free planner template — AI Planner</title>
+    <link rel="icon" type="image/svg+xml" href="brand/favicon.svg">
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)">
+    <script src="theme-init.js?v=2"></script>
+    <link rel="stylesheet" href="tailwind.css?v=28">
 </head>
-<body>
-    <div class="container">
-        <div class="icon">📄</div>
-        <h1>AI Planner Template</h1>
-        <p>Download the official PDF template designed and optimized specifically for our high-accuracy AI OCR engine.</p>
-        
-        <form action="planner-file.pdf" method="get" target="_blank" style="margin: 0; padding: 0;">
-            <button type="submit" class="btn-primary">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                Download PDF
-            </button>
-        </form>
-
-        <form action="index.html" method="get" style="margin: 0; padding: 0; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
-            <button type="submit" class="btn-secondary">
-                &larr; Back to Dashboard
-            </button>
-        </form>
-    </div>
+<body class="min-h-screen">
+    <header class="app-bar">
+        <div class="max-w-3xl mx-auto px-4 h-16 flex items-center">
+            <a href="/" class="flex items-center gap-2 min-h-[44px] rounded-lg pr-2">
+                <img src="brand/app-icon.svg" alt="" width="28" height="28" class="brand-tile">
+                <span class="font-display font-bold text-[17px] text-ink">AI Planner</span>
+            </a>
+        </div>
+    </header>
+    <main class="doc max-w-3xl mx-auto px-4 py-10">
+        <h1>Free planner template</h1>
+        <p>A printable daily page laid out the way AI Planner reads best: times on the left for your calendar, a to-do list with checkboxes, and space for spending, health and a brain dump.</p>
+        <ul>
+            <li>Print it on A4 or Letter, black and white is fine.</li>
+            <li>Write with a dark pen; tick or cross out what you finish.</li>
+            <li>Photograph the whole page in good light, straight on.</li>
+        </ul>
+        <p class="mt-6">
+            <a href="planner-file.pdf" target="_blank" rel="noopener" class="btn btn-primary no-underline">Download the PDF</a>
+        </p>
+        <p class="text-sm">Any notebook works too. The template just makes the AI’s job easier.</p>
+    </main>
+    <footer class="max-w-3xl mx-auto px-4 pb-10 pt-6 border-t border-line flex flex-wrap items-center justify-between gap-4 text-sm text-muted">
+        <a href="/" class="link">Back to AI Planner</a>
+        <a href="https://analogdigital.tech" target="_blank" rel="noopener" class="inline-flex rounded" aria-label="An offering by ADT, Analog Digital Technologies">
+            <img src="brand/offering-by-adt-inline-light.svg" alt="" width="196" height="16" class="on-light h-4 w-auto">
+            <img src="brand/offering-by-adt-inline-dark.svg" alt="" width="196" height="16" class="on-dark h-4 w-auto">
+        </a>
+    </footer>
 </body>
 </html>
