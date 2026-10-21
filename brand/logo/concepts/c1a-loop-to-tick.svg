@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<title>c1a loop to tick: a handwritten loop that finishes as a squared tick</title>
+<path fill="none" stroke="#0A0A0A" stroke-width="40" stroke-linecap="round" stroke-linejoin="miter" d="M 44 344 C 124 318 232 236 232 166 C 232 122 204 96 172 96 C 136 96 112 126 112 170 C 112 236 170 312 240 400 L 476 124"/>
+</svg>

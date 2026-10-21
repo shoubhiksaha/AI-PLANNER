@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<title>c0 control: planner page with a tick</title>
+<path fill="none" stroke="#0A0A0A" stroke-width="36" stroke-linejoin="round" d="M 124 112 H 388 A 24 24 0 0 1 412 136 V 448 A 24 24 0 0 1 388 472 H 124 A 24 24 0 0 1 100 448 V 136 A 24 24 0 0 1 124 112 Z"/>
+<path fill="none" stroke="#0A0A0A" stroke-width="36" stroke-linecap="round" d="M 196 56 V 156 M 316 56 V 156"/>
+<path fill="none" stroke="#0A0A0A" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" d="M 180 304 L 236 360 L 336 248"/>
+</svg>
