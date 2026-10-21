@@ -109,7 +109,7 @@
         </div>
     </header>
 
-    <main id="app-main" class="w-full max-w-2xl mx-auto px-4 pt-6 pb-16" tabindex="-1">
+    <main id="app-main" class="w-full max-w-2xl mx-auto px-4 pt-6 pb-10" tabindex="-1">
 
         <!-- VIEW: SIGN IN -->
         <section id="view-login" class="max-w-md mx-auto flex flex-col items-center text-center">
@@ -167,7 +167,6 @@
                 <a href="refund-policy.html" target="_blank" rel="noopener" class="min-h-[44px] flex items-center justify-center text-muted hover:text-ink">Refunds</a>
             </nav>
 
-            <a href="https://analogdigital.tech" target="_blank" rel="noopener" class="mt-6 text-sm text-muted hover:text-ink min-h-[44px] inline-flex items-center">More from ADT · analogdigital.tech</a>
         </section>
 
         <!-- VIEW: NOTION SETUP (only when Notion is chosen for notes) -->
@@ -541,6 +540,22 @@
 
     </main>
 
+    <!-- ADT endorsement (brand/logo, ADT LOGO.md §8): stacked on sign-in, inline inside the app.
+         Always smaller and quieter than the product's own logo; links to ADT's home page. -->
+    <footer id="adt-footer" class="w-full max-w-2xl mx-auto px-4 pt-2 flex justify-center adt-footer">
+        <a href="https://analogdigital.tech" target="_blank" rel="noopener" class="inline-flex items-center justify-center min-h-[44px] px-2 rounded-lg opacity-90 hover:opacity-100"
+            aria-label="An offering by ADT, Analog Digital Technologies. Opens analogdigital.tech">
+            <span class="signed-out-only inline-flex">
+                <img src="brand/offering-by-adt-stacked-light.svg" alt="" width="123" height="36" class="on-light h-9 w-auto">
+                <img src="brand/offering-by-adt-stacked-dark.svg" alt="" width="123" height="36" class="on-dark h-9 w-auto">
+            </span>
+            <span class="signed-in-only inline-flex">
+                <img src="brand/offering-by-adt-inline-light.svg" alt="" width="196" height="16" class="on-light h-4 w-auto">
+                <img src="brand/offering-by-adt-inline-dark.svg" alt="" width="196" height="16" class="on-dark h-4 w-auto">
+            </span>
+        </a>
+    </footer>
+
     <!-- MENU (slides in from the left) -->
     <div id="drawer-container" class="fixed inset-0 z-50 hidden">
         <div class="drawer-overlay fixed inset-0 opacity-0 pointer-events-none" id="drawer-overlay"></div>
@@ -581,10 +596,6 @@
                 <svg class="icon" aria-hidden="true"><use href="#i-log-out"></use></svg> Sign out</button>
             <div class="mt-auto pt-6 px-3 space-y-3 text-xs text-muted">
                 <span id="drawer-user-email" class="truncate block"></span>
-                <a href="https://analogdigital.tech" target="_blank" rel="noopener" class="inline-flex rounded" aria-label="An offering by ADT, Analog Digital Technologies">
-                    <img src="brand/offering-by-adt-inline-light.svg" alt="" width="196" height="16" class="on-light h-4 w-auto">
-                    <img src="brand/offering-by-adt-inline-dark.svg" alt="" width="196" height="16" class="on-dark h-4 w-auto">
-                </a>
                 <span id="build-version" class="block">build v?</span>
             </div>
         </div>

@@ -1269,6 +1269,10 @@ button.chip:hover {
   height: 1.75rem;
 }
 
+.h-9 {
+  height: 2.25rem;
+}
+
 .h-auto {
   height: auto;
 }
@@ -1809,10 +1813,6 @@ button.chip:hover {
   padding-bottom: 2.5rem;
 }
 
-.pb-16 {
-  padding-bottom: 4rem;
-}
-
 .pb-2 {
   padding-bottom: 0.5rem;
 }
@@ -1839,6 +1839,10 @@ button.chip:hover {
 
 .pt-1 {
   padding-top: 0.25rem;
+}
+
+.pt-2 {
+  padding-top: 0.5rem;
 }
 
 .pt-6 {
@@ -2013,6 +2017,10 @@ button.chip:hover {
 
 .opacity-15 {
   opacity: 0.15;
+}
+
+.opacity-90 {
+  opacity: 0.9;
 }
 
 .shadow {
@@ -2698,6 +2706,16 @@ body[data-signed-in="false"] .signed-in-only {
   color: var(--on-signal);
 }
 
+/* ADT endorsement footer: shown on every view, below the content */
+
+body[data-signed-in="true"] .signed-out-only {
+  display: none !important;
+}
+
+.adt-footer {
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 .placeholder\:font-sans::-moz-placeholder {
   font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
 }
@@ -2728,6 +2746,10 @@ body[data-signed-in="false"] .signed-in-only {
 
 .hover\:text-ink:hover {
   color: var(--ink);
+}
+
+.hover\:opacity-100:hover {
+  opacity: 1;
 }
 
 .focus\:not-sr-only:focus {

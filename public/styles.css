@@ -379,3 +379,7 @@ body[data-signed-in="false"] .signed-in-only { display: none !important; }
 .doc .last-updated { color: var(--ink-subtle); font-size: 14px; margin-bottom: 2rem; }
 .doc a.btn { text-decoration: none; }
 .doc a.btn-primary { color: var(--on-signal); }
+
+/* ADT endorsement footer: shown on every view, below the content */
+body[data-signed-in="true"] .signed-out-only { display: none !important; }
+.adt-footer { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px)); }
