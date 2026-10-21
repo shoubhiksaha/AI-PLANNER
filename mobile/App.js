@@ -116,7 +116,8 @@ export default function App() {
   const refreshSessionRef = useRef(null);
 
   const isDark = appTheme === 'dark';
-  const themeBg = isDark ? '#0f172a' : '#ffffff';
+  // ADT design tokens (see public/styles.css): Deep Black / white surfaces, ink text.
+  const themeBg = isDark ? '#0A0A0A' : '#FFFFFF';
 
   const clearStoredLogin = async () => {
     await SecureStore.deleteItemAsync('idToken');
@@ -428,7 +429,7 @@ export default function App() {
         <StatusBar barStyle="dark-content" />
         <View style={styles.authContent}>
           <Text style={styles.title} accessibilityRole="header">AI Planner</Text>
-          <Text style={styles.subtitle}>Secure Native Login</Text>
+          <Text style={styles.subtitle}>Your paper planner, synced</Text>
 
           <TouchableOpacity
             style={[styles.loginBtn, isNativeLoginInProgress && styles.loginBtnDisabled]}
@@ -492,7 +493,7 @@ export default function App() {
       {webError ? (
         <View style={[styles.overlay, { backgroundColor: themeBg }]}>
           <Text
-            style={[styles.overlayTitle, { color: isDark ? '#ffffff' : '#0f172a' }]}
+            style={[styles.overlayTitle, { color: isDark ? '#F2F5F4' : '#0A0A0A' }]}
             accessibilityRole="alert"
             accessibilityLiveRegion="polite"
           >
@@ -504,19 +505,19 @@ export default function App() {
             accessibilityRole="button"
             accessibilityLabel="Retry loading AI Planner"
           >
-            <Text style={styles.overlayBtnText}>Retry</Text>
+            <Text style={[styles.overlayBtnText, styles.retryBtnText]}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : webBridgeStatus !== 'authenticated' && webBridgeStatus !== 'ready' ? (
         <View style={[styles.overlay, { backgroundColor: themeBg }]}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color={isDark ? '#01F9C9' : '#00735C'} />
           <Text
-            style={[styles.overlayTitle, { color: isDark ? '#ffffff' : '#0f172a' }]}
+            style={[styles.overlayTitle, { color: isDark ? '#F2F5F4' : '#0A0A0A' }]}
             accessibilityLiveRegion="polite"
           >
             Authenticating secure session
           </Text>
-          <Text style={[styles.overlaySubtitle, { color: isDark ? '#cbd5e1' : '#64748b' }]}>
+          <Text style={[styles.overlaySubtitle, { color: isDark ? '#A3ADA9' : '#4E5653' }]}>
             Connecting your native Google login to AI Planner.
           </Text>
           <TouchableOpacity
@@ -556,15 +557,15 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#000000',
+    color: '#0A0A0A',
   },
   subtitle: {
     fontSize: 16,
-    color: '#666666',
+    color: '#4E5653',
     marginBottom: 48,
   },
   loginBtn: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#01F9C9',
     minHeight: 48,
     paddingVertical: 14,
     paddingHorizontal: 32,
@@ -574,10 +575,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loginBtnDisabled: {
-    backgroundColor: '#A0C8FF',
+    backgroundColor: '#E9EDEB',
   },
   loginBtnText: {
-    color: '#ffffff',
+    color: '#0A0A0A',
     fontSize: 18,
     fontWeight: '600',
   },
@@ -585,7 +586,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 14,
     lineHeight: 20,
-    color: '#b91c1c',
+    color: '#B42318',
     textAlign: 'center',
   },
   overlay: {
@@ -617,14 +618,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   resetBtn: {
-    backgroundColor: '#ef4444',
+    backgroundColor: '#B42318',
   },
   retryBtn: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#01F9C9',
   },
   overlayBtnText: {
-    color: '#ffffff',
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
+  },
+  retryBtnText: {
+    color: '#0A0A0A',
   },
 });
