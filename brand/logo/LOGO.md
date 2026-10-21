@@ -1,96 +1,91 @@
-# AI Planner logo
+# ADT AI Planner — logo
 
 ## 1. Recommendation
 
-**"Loop to tick"** (`final/logo-primary.svg`). It's one continuous stroke that starts as a handwritten loop and finishes as a crisp tick with a squared corner and a flat end. It sits in Signal Aqua on ADT's deep-black tile, next to "AI Planner" set in Space Grotesk 700.
+**"Wave to tick"** (`final/logo-primary.svg`). AI Planner is ADT's showcase app, so its logo is a member of the ADT family, not a standalone brand. ADT's own waveform starts the same way — the same band, the same sine, the same Signal Aqua on Deep Black — and where ADT's wave turns into a square pulse, AI Planner's turns into a **tick**. The lockup is ADT's lockup with the product as the second line: **wave + ADT, then AI PLANNER** underneath (ADT LOGO.md §4, the "ADT Handyman" pattern).
 
-It says what the product does in one gesture: **what you write by hand comes out done**. In the competitor lineup it is the only mark with no container and no plain tick, and nobody else in the category uses aqua on black.
+It beat the plain family mark on the stranger test: ADT's unchanged wave read as "electronics or audio", while this one read as "**wave that flows into a check mark … productivity or task software**". It stays quiet on purpose — one stroke, one colour, no extra elements — for people who want their tools to stay out of the way.
 
-It gave up one thing. Shown alone, strangers often read the loop as a **signature** and guessed "e-signature or legal service", whereas the plain control (a notepad with a tick) was read as productivity software straight away. So always show the mark with the name "AI Planner".
+What it gives up: alone and small, the wave can still read as a sound wave or a heartbeat (ADT's own mark has the same trade-off). Keep it next to the name.
 
 ## 2. What it means
 
-- Meaning a customer can repeat: **"Your handwriting, done."**
-- What strangers said (final files, 32 px, one colour, no context, three separate runs):
-  - bare mark: *"Handwritten signature or checkmark"*, *"Black scribbled loop with a checkmark"*, *"Handwritten squiggle with a checkmark"*
-  - app icon: *"App icon with a signature… productivity or signing app"*, *"White scribbled check on black tile"*, *"White script-check app icon"*
-  - favicon: *"App icon with check mark… task or to-do software"*, *"Bold white loop with checkmark"*, *"Bold white letter-check icon"*
-
-  Every run named the handwritten tick first. Full answers are in `audit.md`.
+- Meaning a customer can repeat: **"The messy page in, the done list out."** — ADT's "Analog In, Digital Out", applied to a planner.
+- What strangers said (final files, 32 px, one colour, three runs each): bare mark *"A wavy line ending in a tick-like stroke"*, *"black wavy stroke with tick"*, *"A wavy line ending in a tick"*; app icon *"a wave ending in an upward tick"*, *"white wavy line rising to a tick-like upward end"*; favicon *"white wave-tick on black tile"*, *"White wave-and-tick on a black rounded square"*. Every answer is in `audit.md`.
 
 ## 3. Design decisions
 
 | Decision | Brief entry | Principle |
 |---|---|---|
-| Combination mark; symbol also works alone as the app icon | Generic name; the home screen and browser tab are the most frequent contact | §9 Distinctiveness, §11 Resizable |
-| The symbol shows the transformation (hand → done), not a calendar, notebook or destination | More destinations and modes are coming (Drive, Notion, voice, health) | §12 Timeless and future-proof |
-| One curve (the loop), then a squared corner and a flat end | ADT shape rule "mostly geometric and squared, one deliberate curve"; personality: personal and precise | §6 Shape psychology |
-| Tick kept, but subverted with a pen loop | 4 of 9 competitors use a plain tick; the owner's earlier explorations used a tick | §9, ideation route 6 |
-| Band 52/512 in the master = 35.9 in the app tile, against ADT's 36.5 | ADT family consistency | §4 Gestalt (similarity across the family) |
-| Aqua on deep black; deep black on light | ADT palette; blue is over-used in the category | §7 Colour, §9 |
-| Space Grotesk 700, outlined, −1 % tracking | ADT display face | §8 Typography |
-| Simplified favicon: no lead-in tail, heavier band, bevelled corner, tile radius 96 | The tail's wedge closes up at 16 px | §11, §2 Simplicity |
+| ADT family mark, not a product brand | Owner: "a showcase frontline app made by ADT" | §10 Appropriateness |
+| Band, sine period, colours and lockup identical to ADT; only the digital half changes | ADT LOGO.md §4 sub-brand rule | §4 Gestalt (similarity across the family) |
+| The digital half is a tick | The product's outcome: plans that get done | §6 Shape psychology, ideation route 3 |
+| Square tip across the stroke, sharp notch between wave and tick | A flat-cut tip and a bevelled notch made strangers see a "w" / zigzag (`audit.md`, Final F1) | §2 Simplicity, §15 fluency |
+| Second line "AI PLANNER" in Space Grotesk 500 caps, spanning the lockup | ADT's name-line treatment; one rectangular unit | §5 Hierarchy, §8 Typography |
+| App icon and favicon use a heavier, wider wave than ADT's tile | ADT's thin tile placement hid the tick at 32 px (`audit.md`, Final F2) | §11 Resizable |
+| One stroke, one colour, nothing decorative | Owner: "to minimise distraction" | §2 Simplicity |
 
 ## 4. Future plans
 
-- **New destinations and modes** (Drive, Notion, voice notes, health sync): the mark doesn't depict any of them, so nothing goes out of date.
-- **Other languages and scripts:** no Latin letter in the symbol; it sits next to Bengali or Hindi text.
-- **The ADT family:** same band weight, tile shape and palette as ADT's mark, and the same "analog in, digital out" idea, without reusing ADT's waveform. AI Planner keeps its own name and mark, with the smaller "An offering by ADT" endorsement (ADT LOGO.md §8).
-- **Android adaptive icons and notifications:** the bare symbol (`final/logo-mark.svg`) works as a one-colour glyph.
+- **More ADT products:** each can take ADT's wave and change only its digital half, exactly as this one does, so the family reads together.
+- **New destinations and modes** (Drive, Notion, voice, health): the tick is the outcome, not a destination, so nothing goes out of date.
+- **Other languages:** the symbol has no Latin letters.
 
 ## 5. Your idea
 
-- Your earlier `/logo` explorations used a **tick in a tile** and a **P**.
-- The tick idea is the recommendation, subverted with the loop so its silhouette differs from Google Tasks, Microsoft To Do and Any.do.
-- The P was built as c4. Strangers read it as a stylised P with a slash, and next to a tick it resembles the ₽ (rouble) sign, so it's not recommended.
-- The glow and gradient treatments of the old explorations aren't used, because ADT's rules forbid glows, gradients and shadows.
-- You decide.
+- **Round 1 — "loop to tick":** this was a standalone AI Planner mark with a small "An offering by ADT" badge, and it's kept in `previous/loop-to-tick/`. You corrected the brief: AI Planner is an ADT showcase product for focused users.
+- **This round:** the brief was rebuilt from ADT's own system, so the product carries ADT's name and wave.
+- **What carried over:** the tick, which was the round-1 hook and also the idea in your earlier explorations in `/logo`, now lives in the digital half of the wave.
 
 ## 6. Palette
 
 | Role | HEX | RGB | CMYK (approximate) |
 |---|---|---|---|
-| Signal Aqua | `#01F9C9` | 1, 249, 201 | ≈ 65 0 35 0. Out of CMYK gamut; it prints duller, so match from a physical swatch book at print. |
+| Signal Aqua | `#01F9C9` | 1, 249, 201 | ≈ 65 0 35 0 — out of CMYK gamut; match from a physical swatch book at print |
 | Deep Black | `#0A0A0A` | 10, 10, 10 | ≈ 60 40 40 100 (rich black) |
 | White | `#FFFFFF` | 255, 255, 255 | 0 0 0 0 |
 
-Aqua on deep black is about 14.5 : 1. **Aqua on white is 1.4 : 1, so never use it.** On light backgrounds the symbol is deep black, or sits inside the black tile.
+Aqua on deep black ≈ 14.5 : 1; **aqua on white ≈ 1.4 : 1 — never**. On light backgrounds the logo is deep black; aqua appears only on dark or inside the black tile.
 
 ## 7. Typeface
 
-**Space Grotesk 700** (Florian Karsten), SIL Open Font License 1.1, free for logos. File: `fonts/SpaceGrotesk-700.ttf`, from ADT's kit. All delivered lettering is outlined to paths.
+- "ADT" is ADT's own outlined letters, copied unchanged from `~/Desktop/ADT Papers/brand/logo/final/logo-primary.svg`.
+- "AI PLANNER" is **Space Grotesk 500** (Florian Karsten, SIL OFL 1.1), from `fonts/SpaceGrotesk-500.ttf`, outlined, with +29.5 % tracking so it spans the lockup.
+- No file depends on installed fonts.
 
 ## 8. Usage
 
 | File | Use |
 |---|---|
-| `final/logo-primary.svg` | Main logo on light backgrounds: black app tile with the aqua mark, plus the black wordmark |
-| `final/logo-primary-reversed.svg` | Dark backgrounds: aqua mark, white wordmark |
-| `final/app-icon.svg` | App icon, PWA icon, store listing, OAuth consent screen, avatars |
+| `final/logo-primary.svg` | Main logo on white and light backgrounds (deep black) |
+| `final/logo-primary-reversed.svg` | Dark backgrounds: aqua wave, white ADT, aqua AI PLANNER (ADT's reversed pattern) |
+| `final/app-icon.svg` | App icon, PWA, store listing, Google sign-in screen, avatars |
 | `final/favicon.svg` | Browser tab, 16–32 px |
-| `final/logo-mark.svg` / `final/logo-mark-aqua.svg` | The symbol alone (deep black for light backgrounds; aqua for dark only) |
-| `final/logo-mono-black.svg` / `final/logo-mono-white.svg` | One-colour print, stamps, the printable planner template |
+| `final/logo-mark.svg` / `logo-mark-aqua.svg` | Wave alone (deep black on light; aqua on dark only) |
+| `final/logo-mono-black.svg` / `logo-mono-white.svg` | One-colour print, stamps, the printable planner template |
 
-- **Clear space:** at least **x** on every side, where x = the height of the loop (about 0.6 × the wordmark cap height).
-- **Minimum sizes** (from `measure.py` and the small-size sheets):
-  - full lockup: 120 px wide (30 mm)
-  - app icon: 24 px
-  - favicon: 16 px (borderline: smallest feature 7.4 % against an 8 % target, but the loop and tick stay readable on the 16 px sheet)
-  - bare symbol: 24 px
+- **Clear space:** at least **x** on every side, where x = the height of the tick's short arm (about 0.55 × the ADT cap height).
+- **Minimum sizes:**
+  - full lockup: 180 px wide (40 mm), where "AI PLANNER" is about 15 px tall;
+  - app icon: 24 px;
+  - favicon: 16 px. Its smallest feature measures 5.5 % against the 8 % favicon target, but the tick and wave stay readable on the 16 px sheet.
 - **Don't:**
-  - put aqua on white or light backgrounds
-  - stretch, rotate or re-space the parts
-  - put the symbol in a circle or box other than the app tile
-  - add gradients, glows or shadows
-  - set the name in another font
-  - use the bare symbol where the name "AI Planner" isn't nearby, because alone it reads as a signature
-- **Approved backgrounds:** white and light neutrals (primary lockup); deep black and dark surfaces (reversed); Signal Aqua as a large flat field with the one-colour black logo on top.
+  - put aqua on white;
+  - stretch, rotate or re-space the parts;
+  - change the sine (it's ADT's);
+  - add gradients, glows or shadows;
+  - set "AI PLANNER" in another font;
+  - use the wave alone where neither "ADT" nor "AI Planner" is nearby.
+- **In the app:**
+  - sign-in screen: the full lockup;
+  - app bar and menu: app tile plus "AI Planner" as a text label;
+  - menu footer and content pages: a quiet link to analogdigital.tech.
 
 ## 9. Next steps
 
-1. Run `human-test/human-test.md` (10 minutes, 5 people from the target audience: people who keep a paper planner or journal). The key question is whether "planner" or "signature" comes first.
-2. Trademark search (links below).
-3. A human designer's craft pass on the loop's curvature, which was hand-authored in SVG.
+1. Run `human-test/human-test.md` with 5 people from the audience: focused planner and journal users.
+2. Ask ADT's brand owner, which is you, to confirm that the family rule allows a tick as the digital half.
+3. A designer's craft pass on the notch where the wave meets the tick.
 
 ## 10. Trademark — not searched
 
@@ -100,11 +95,8 @@ Aqua on deep black is about 14.5 : 1. **Aqua on white is 1.4 : 1, so never use i
 - India: https://tmrsearch.ipindia.gov.in/tmrpublicsearch/
 - WIPO: https://branddb.wipo.int/en/quicksearch?by=brandName&v=AI%20Planner
 
-"AI Planner" is a descriptive name, so a word-mark registration may be hard. The symbol is the more protectable asset.
-
 ## 11. Not verified
 
-- **Human perception:** only model strangers were used; the human kit hasn't been run.
+- **Human perception:** only model strangers were used. The human kit in `human-test/` shows the family finalists against ADT's own mark.
 - **Competitor marks not seen:** Moleskine Smart Writing, Evernote, TickTick, Structured.
-- **Print reproduction:** no physical proof of the aqua.
-- **Blind-test file paths:** the images were copied to a neutral temporary folder for the stranger, so the project name couldn't leak through the path.
+- **Print:** no physical proof of the aqua.

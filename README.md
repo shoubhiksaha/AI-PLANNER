@@ -1,8 +1,8 @@
 # AI Planner — Zero Image Storage Architecture
 
-<img src="brand/logo/final/logo-primary.svg" alt="AI Planner" width="240">
+<img src="brand/logo/final/logo-primary.svg" alt="ADT AI Planner" width="260">
 
-*An offering by [ADT](https://analogdigital.tech). For people who plan on paper: photograph a planner or journal page and it lands in Google Calendar, Tasks, Sheets, and Google Drive or Notion.*
+*ADT's showcase app for focused people who plan on paper ([analogdigital.tech](https://analogdigital.tech)): photograph a planner or journal page and it lands in Google Calendar, Tasks, Sheets, and Google Drive or Notion — with as little on screen as possible.*
 
 **A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini AI.**
 
@@ -259,4 +259,4 @@ Config:
 
 ## Brand
 
-AI Planner uses the ADT design system: Signal Aqua `#01F9C9` on Deep Black `#0A0A0A`, Space Grotesk (headings) and IBM Plex Sans (body). The tokens live in `public/styles.css`; never put aqua text or thin aqua lines on light backgrounds. The logo, its rationale, the stranger tests and the usage rules are in [`brand/logo/LOGO.md`](brand/logo/LOGO.md).
+AI Planner uses the ADT design system: Signal Aqua `#01F9C9` on Deep Black `#0A0A0A`, Space Grotesk (headings) and IBM Plex Sans (body). The tokens live in `public/styles.css`; never put aqua text or thin aqua lines on light backgrounds. The logo is an ADT family mark (ADT's wave, ending in a tick instead of a square pulse); its rationale, the stranger tests and the usage rules are in [`brand/logo/LOGO.md`](brand/logo/LOGO.md).

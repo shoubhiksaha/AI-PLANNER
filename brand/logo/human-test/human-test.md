@@ -1,4 +1,4 @@
-# Human test — AI Planner
+# Human test — ADT AI Planner
 
 Ten minutes, five people from the target audience (planner and journal app customers), no design
 knowledge needed. You need `human-test.png` (or the .html) on a phone or laptop.
@@ -6,9 +6,10 @@ knowledge needed. You need `human-test.png` (or the .html) on a phone or laptop.
 ## Key (don't show this to participants)
 | Letter | File | Role |
 |---|---|---|
-| A | c0-control.svg | control |
-| B | c1a-loop-to-tick.svg | finalist |
-| C | c5-page-loop-tick.svg | finalist |
+| A | k0-adt-control.svg | control |
+| B | k2-wave-to-calm.svg | finalist |
+| C | logo-mark.svg | finalist |
+| D | k3-wave-step-up.svg | finalist |
 
 The control is the plain category-standard mark. A finalist that loses to the
 control on questions 1–2 is harder to read than the obvious answer; it must win
@@ -26,13 +27,13 @@ Repeat for each card. Rotate the starting card between people.
 After all cards: **Q5 Which one would you trust with your [pet / money / …]? Why?**
 
 ## Scoring
-| Question | A | B | C |
-|---|---|---|---|
-| Q1 named the intended subject (count / 5) |  |  |  |
-| Q2 named the right category (count / 5) |  |  |  |
-| Q3 adjectives matched (avg 0–3) |  |  |  |
-| Q4 "seen it before" (count / 5, lower is better) |  |  |  |
-| Q5 preferred (count / 5) |  |  |  |
+| Question | A | B | C | D |
+|---|---|---|---|---|
+| Q1 named the intended subject (count / 5) |  |  |  |  |
+| Q2 named the right category (count / 5) |  |  |  |  |
+| Q3 adjectives matched (avg 0–3) |  |  |  |  |
+| Q4 "seen it before" (count / 5, lower is better) |  |  |  |  |
+| Q5 preferred (count / 5) |  |  |  |  |
 
 A mark that scores ≥ 3/5 on Q1 and Q2 passes fluency. Q4 ≥ 3/5 means it is not
 distinctive. Write the verbatim Q1 answers into LOGO.md — they are the best evidence

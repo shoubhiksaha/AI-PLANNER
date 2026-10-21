@@ -1161,10 +1161,6 @@ button.chip:hover {
   margin-bottom: 1rem;
 }
 
-.mb-5 {
-  margin-bottom: 1.25rem;
-}
-
 .ml-1 {
   margin-left: 0.25rem;
 }
@@ -1273,8 +1269,8 @@ button.chip:hover {
   height: 1.75rem;
 }
 
-.h-9 {
-  height: 2.25rem;
+.h-auto {
+  height: auto;
 }
 
 .h-full {
@@ -1343,6 +1339,10 @@ button.chip:hover {
 
 .w-80 {
   width: 20rem;
+}
+
+.w-\[280px\] {
+  width: 280px;
 }
 
 .w-auto {
@@ -1725,10 +1725,6 @@ button.chip:hover {
   padding: 0px;
 }
 
-.p-1 {
-  padding: 0.25rem;
-}
-
 .p-2 {
   padding: 0.5rem;
 }
@@ -1912,10 +1908,6 @@ button.chip:hover {
   font-size: 26px;
 }
 
-.text-\[40px\] {
-  font-size: 40px;
-}
-
 .text-sm {
   font-size: 0.875rem;
   line-height: 1.25rem;
@@ -1959,20 +1951,12 @@ button.chip:hover {
   line-height: 2rem;
 }
 
-.leading-\[46px\] {
-  line-height: 46px;
-}
-
 .leading-snug {
   line-height: 1.375;
 }
 
 .leading-tight {
   line-height: 1.25;
-}
-
-.tracking-tight {
-  letter-spacing: -0.025em;
 }
 
 .text-bg {

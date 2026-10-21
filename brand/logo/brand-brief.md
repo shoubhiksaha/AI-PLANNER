@@ -1,5 +1,7 @@
 # Brand brief — AI Planner
 
+> **Revised 2026-10-21 (owner):** "It is not a standalone brand but a showcase frontline app made by ADT for productivity-focused users, to minimise distraction." [V] This overrides the first brief's product-led approach: AI Planner is an **ADT product** and its logo is a member of the ADT family (ADT LOGO.md §4: keep the band, the period and the colours; vary only the wave and the name). The first concept round (loop to tick) is kept in `previous/loop-to-tick/` for reference.
+
 Tags: **[V]** verified (seen in the project or stated by the owner), **[I]** inferred (from what), **[A]** assumed.
 
 ## Identity
@@ -10,7 +12,7 @@ Tags: **[V]** verified (seen in the project or stated by the owner), **[I]** inf
 - Why it exists: people who think better on paper shouldn't have to type everything twice [I: README "Zero Image Storage" philosophy, landing copy "No more double-entry"].
 
 ## Audience
-- Primary audience: **individuals** who keep a paper planner, bullet journal or notebook and also live in Google Calendar/Tasks or Notion [V: owner, 2026-10-21]. Not businesses.
+- Primary audience: **productivity-focused individuals** who keep a paper planner, bullet journal or notebook and want their digital tools to stay quiet and out of the way [V: owner, 2026-10-21]. Not businesses.
 - Secondary: journaling and planner communities (bullet-journal, Hobonichi, Moleskine users) [I: product modes "Morning plan", "Evening review", "Journal", "Brain dump"].
 - What they expect a credible brand here to look like: calm, tidy, trustworthy with personal notes (privacy), a little crafted rather than corporate [I: the category's journaling apps; privacy-first positioning in README].
 - Where they meet the logo: phone home screen (Android app `com.analogdigital.aiplanner`, iOS bundle, PWA install icon), browser tab favicon, Google sign-in consent screen (120 px logo), Play/App Store listing, landing page header, the ADT website's product grid, the printable planner template PDF [V: mobile/app.json, public/manifest.json, public/planner-file.pdf; I: OAuth consent screen].
@@ -22,7 +24,7 @@ Tags: **[V]** verified (seen in the project or stated by the owner), **[I]** inf
 - Conventions to BREAK: **blue** (Any.do, Google Tasks, Microsoft To Do, Lens) and the **plain tick** (Any.do, Google Tasks, To Do, Todoist). A stock tick in a tile would vanish among them [I: lineup]. Also avoid the calendar-page "31" (Google owns it).
 
 ## Personality
-- Adjectives: **calm, practical, trustworthy, personal, quietly modern** [V: ADT tone "practical, clear, reliable, approachable, quietly modern"; I: journaling audience].
+- Adjectives: **calm, focused, practical, trustworthy, quietly modern** — the mark must not add visual noise [V: owner "minimise distraction"; ADT tone "practical, clear, reliable, approachable, quietly modern"].
 - Opposites to avoid: frantic/hype ("AI magic"), cold enterprise, childish, techy-glitchy, clip-art [V: ADT tone "avoid AI-hype gimmicks, cold enterprise, clip-art, retro-futurist glitch"].
 - Shape direction: mostly geometric and squared with **one deliberate curve** (the human, handwritten part) [V: ADT "mostly geometric and squared, with one deliberate curve"].
 - Type direction: Space Grotesk 700 for the wordmark, the family's display face [V: ADT kit; fonts available in `fonts/`].
@@ -31,7 +33,7 @@ Tags: **[V]** verified (seen in the project or stated by the owner), **[I]** inf
 ## Future & direction
 - Planned products/modes: voice notes (live, Pro), health sync ("SOON" in the app), more destinations (Drive added now; others later) [V: app UI, owner 2026-10-21]. **Implication: don't draw Google Calendar, a calendar page, or any one destination.**
 - Markets/languages: India first (₹ pricing, Cashfree), English UI; handwriting in other scripts is plausible later [V: pricing; I: market]. **Implication: no Latin letter as the core idea**, so it sits next to Bengali/Hindi text too.
-- Sub-brands: AI Planner is itself a product inside the ADT family; other ADT products will follow [V: ADT LOGO.md §4]. **Implication: share ADT's band weight, corner logic and palette so the family reads together, but don't reuse ADT's waveform (that is ADT's own mark).**
+- Family: AI Planner is ADT's showcase product [V: owner]. **Implication: use ADT's own waveform system — same band, same sine period, same colours — and change only the digital half of the wave and the second line of the lockup** (ADT LOGO.md §4, the "ADT Handyman" pattern) [V].
 - Needs: app icon (square tile, Android adaptive icon safe zone, iOS), favicon, monochrome Android notification icon, OAuth consent logo [V/I].
 
 ## Existing equity
@@ -41,7 +43,7 @@ Tags: **[V]** verified (seen in the project or stated by the owner), **[I]** inf
 ## User preferences & ideas
 - Explicit: use ADT's branding; "theme and branding and everything" [V: 2026-10-21]. Use the logo-design skill [V].
 - Implied ideas from the `/logo` explorations: a **tick** in a tile, and a **P** [I: owner-commissioned explorations]. Built as concepts c1 (tick idea) and c4 (P idea).
-- Hard constraints: ADT palette and rules (no gradients, glows or shadows; no aqua on white; no blue) [V]; the product keeps its own mark with a smaller "An offering by ADT" endorsement [V: ADT LOGO.md §8].
+- Hard constraints: ADT palette and rules (no gradients, glows or shadows; no aqua on white; no blue) [V]; ADT's sub-brand rule: band, period and colours unchanged, only the wave and the name vary [V: ADT LOGO.md §4].
 - Tension: the owner's tick idea is the category cliché (4 of 9 competitors use a tick). Resolution: keep a tick only if it is subverted so its silhouette differs (ideation route 6), and test it against the plain control.
 
 ## Practical constraints
