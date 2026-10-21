@@ -92,3 +92,24 @@ Range rule: one lettermark (c4), meaning-derived (c1, c2), abstract (c3). No cli
 ## Iteration log
 
 - Round 1: c0–c4 drawn on a 512 grid, band = 36 units (7 %, ADT's band is 36.5).
+
+---
+
+## Round 2 — ADT family (owner, 2026-10-21: "a showcase frontline app made by ADT … minimise distraction")
+
+Strategy change: AI Planner is not its own brand, so the mark joins the ADT family. ADT's sub-brand rule (ADT LOGO.md §4) fixes the band (44 on the 512 symbol grid), the sine period (two half-circles, centre radius 56) and the colours; only the **digital half of the wave** and the **second line of the lockup** change.
+
+| File | Digital half | Meaning |
+|---|---|---|
+| `family/k0-adt-control.svg` | ADT's square pulse, unchanged | the control: the family mark with no product cue |
+| `family/k1-wave-to-tick.svg` | a tick | your messy page resolves to done |
+| `family/k2-wave-to-calm.svg` | a flat line | noise in, calm out |
+| `family/k3-wave-step-up.svg` | one step up, then level | a calmer, steadier day |
+| `family/k1b…`, `family/k2b…` | variants, not tested | |
+
+Iteration log
+- Round F1 blind test: k1 "Wave that flows into a check mark … Productivity or task software"; the ADT control read "Electronics or audio"; k2 "cable supplier"; k3 "plumbing supplier". k1 chosen.
+- Final F1 (tip cut flat, notch bevelled): strangers lost the tick (bare mark 1/3, app icon 0/3, favicon 1/3: "w", zigzag, audio). Both refinements reverted.
+- Final F2 (square tip across the stroke, sharp notch): bare mark 3/3, favicon 2/3, app icon 0/3 (thin tile placement hides the tick at 32 px).
+- Final F3 (app icon uses the heavier favicon geometry with the app-tile radius): app icon 2/3.
+- Lockup: AI Planner wave + ADT's own letters (unchanged path) + "AI PLANNER" in Space Grotesk 500 spanning the full width (tracking +29.5 %), ADT's 47.4-unit line gap.

@@ -1,0 +1,3 @@
+w=logo-mark
+x=app-icon
+y=favicon

@@ -1,43 +1,47 @@
-# Audit — AI Planner logo
+# Audit — AI Planner logo (ADT family)
 
-Evidence paths are relative to `brand/logo/`. Blind-test images were anonymised (`proofs/blind/*/key.txt` maps letters to concepts).
+Owner brief, 2026-10-21: AI Planner is ADT's showcase app for productivity-focused users, not a standalone brand. The first round (product-led "loop to tick") is audited in git history and kept in `previous/loop-to-tick/`.
 
-| Test | c0 control (page + tick) | c1/c1a loop to tick (recommended) | c2 loop on line | c3 settling lines | c4 P that ticks | c5 page + loop tick |
-|---|---|---|---|---|---|---|
-| 1 Fluency — blind test | ✅ round 1: "Notepad with checkmark", productivity software | ✅ round 1 "Handwritten checkmark with loop"; round 2 "Handwritten check mark with loop, signature-like"; **final 3/3 pass** (see below) | ❌ "Loop above horizontal bar", hardware/jewellery | ❌ "Three wavy horizontal lines", heating/water | ❌ "Stylized P with diagonal slash", design company | ✅ round 2 "Check mark inside a checkbox", forms/compliance software (generic) |
-| 2 Gestalt unity — blur row | ✅ one unit (`proofs/round1/proof-c0-control.png`) | ✅ one continuous stroke survives 4 px blur (`proofs/round1/proof-c1-loop-to-tick.png`, `proofs/final/proof-app-icon.png`) | ✅ | ⚠️ three parts stay three parts | ✅ | ✅ (`proofs/round3/proof-c5-lockup.png`) |
-| 3 Shape signals match personality | ⚠️ rounded, generic | ✅ one curve (hand) + squared corner and flat end (digital): approachable and precise | ✅ | ⚠️ soft, reads as water | ⚠️ letter-led | ⚠️ container dominates |
-| 4 Colour–form congruence — mono row | ✅ | ✅ structure holds in one colour (`proofs/final/small-1.png` mono row) | ✅ | ✅ | ✅ | ✅ |
-| 5 Typography fits tone | — | ✅ Space Grotesk 700, the ADT family display face; geometric with a human `a` | — | — | — | ✅ same |
-| 6 Distinctive — lineup | ❌ notepad + tick sits with Google Tasks / Microsoft To Do / Any.do | ✅ only mark with a loop and no container; shares "tick" meaning with 4 of 9 competitors but not their silhouette (`proofs/round1/lineup.png`). Aqua on deep black is unused by every competitor seen. Not seen: Moleskine Smart Writing, Evernote, TickTick, Structured | ✅ | ✅ | ⚠️ close to the ₽ rouble sign | ❌ checkbox silhouette is the category default |
-| 7 Timeless core, future-proof vs brief | ⚠️ draws "a planner page" (today's product) | ✅ shows the transformation (hand → done), not a destination or device; no Latin letter | ✅ | ✅ | ⚠️ tied to the letter P | ⚠️ draws a page |
-| measure.py — thinnest ink / smallest counter | 7.5 % / 12.6 % | final mark 8.5 % / 4.5 %; app icon 8.2 % / 4.3 %; **favicon 8.2 % / 7.4 % (borderline vs 8 %)**; lockup 9.5 % / 4.8 % (`proofs/final`) | 11.5 % / 10.6 % | 8.1 % / none | 7.9 % / 7.9 % | 6.1 % / 7.0 % |
-| Craft — overshoot / stroke / gap / spacing | not measured | stroke 1.00 (single band, 52 units = 35.9 in the 512 tile vs ADT 36.5); loop top overshoots the tick end by 6 % of mark height; symbol↔wordmark gap 0.62 × cap height; symbol centred on cap centre (heavy mark); coordinates ≤ 1 decimal | not measured | not measured | not measured | not measured |
-| S / M / A / R / T | S ✅ M ⚠️ A ✅ R ✅ T ⚠️ | S ✅ M ✅ A ✅ R ✅ (favicon variant) T ✅ | S ✅ M ⚠️ A ❌ R ✅ T ✅ | S ✅ M ❌ A ❌ R ✅ T ✅ | S ✅ M ⚠️ A ❌ R ✅ T ⚠️ | S ✅ M ⚠️ A ✅ R ✅ T ⚠️ |
+| Test | k0 control (ADT mark unchanged) | k1 wave to tick (recommended) | k2 wave to calm line | k3 wave to step up |
+|---|---|---|---|---|
+| 1 Fluency — blind test | ⚠️ "Wavy line stepping into a block pulse … Electronics or audio company" | ✅ round F1 "Wave that flows into a check mark … Productivity or task software"; **final: mark 3/3, favicon 2/3, app icon 2/3** (below) | ❌ "Wave that ends in a flat horizontal line … Electronics or cable supplier" | ❌ "Wave that ends in a line with a single step up … Electronics or plumbing supplier" |
+| 2 Gestalt unity — blur row | ✅ | ✅ one stroke survives 4 px blur (`proofs/final-family-r2/proof-logo-mark.png`) | ✅ | ✅ |
+| 3 Shape signals match personality | ✅ ADT | ✅ one curve (the hand) resolving into a squared tick (done): calm and precise | ⚠️ flatline reads as a cable or a medical trace | ⚠️ reads as a broken ADT mark |
+| 4 Colour–form congruence — mono row | ✅ | ✅ (`proofs/final-family-r2/small-1.png`) | ✅ | ✅ |
+| 5 Typography fits tone | ✅ ADT letters | ✅ ADT's own outlined letters; second line Space Grotesk 500 caps, tracked like ADT's name line | — | — |
+| 6 Distinctive — lineup | — | ✅ only wave-plus-tick in the competitor lineup (`proofs/round1/lineup.png`); colour unused in the category. Not seen: Moleskine Smart Writing, Evernote, TickTick, Structured | — | — |
+| 7 Timeless, future-proof vs brief | ✅ | ✅ shows the transformation, not a destination; shares ADT's geometry so future ADT products can sit beside it | ✅ | ✅ |
+| measure.py — thinnest ink / smallest counter | 20.5 % / none | mark 11.4 % / none; app icon 12.5 % / 5.5 %; favicon 12.5 % / 5.5 % (below the 8 % favicon target); lockup 3.8 % / 2.5 % (text; judged at the stated minimum size) | 20.5 % / none | 20.5 % / none |
+| Craft | — | band 44/512 = ADT's; sine identical to ADT's (two half-circles, centre radius 56); tick corner 90° mitred; tip square to the stroke; tick tip 5 % above ADT's cap height in the lockup (pointed overshoot); line gap 47.4 = ADT's; coordinates ≤ 1 decimal | — | — |
+| S / M / A / R / T | S ✅ M ✅ A ⚠️ R ✅ T ✅ | S ✅ M ✅ A ✅ R ✅ T ✅ | S ✅ M ⚠️ A ❌ R ✅ T ✅ | S ✅ M ⚠️ A ❌ R ✅ T ✅ |
 
-## Blind test — verbatim answers
+## Blind test — verbatim answers (32 px, one colour, no context)
 
-**Round 1** (32 px, one colour): a = c0, b = c1, c = c2, d = c3, e = c4
-- blind-a: (1) Notepad with checkmark; (2) a wall calendar page, a paper receipt with a tick; (3) productivity or task-management software.
-- blind-b: (1) Handwritten checkmark with loop; (2) a cursive letter "y" or "v", a pen-drawn swoosh; (3) signature or e-signature service.
-- blind-c: (1) Loop above horizontal bar; (2) a hair clip or bobby pin, a lowercase "ℓ" or hook; (3) hardware or jewelry supplier.
-- blind-d: (1) Three wavy horizontal lines; (2) a heat or steam symbol, a water-surface icon; (3) heating or water services.
-- blind-e: (1) Stylized P with diagonal slash; (2) a play arrow with a bar, a pen nib or flag; (3) design or software company.
+**Round F1** (m = k0, n = k1, o = k2, s = k3)
+- blind-m: Wavy line stepping into a block pulse. (1) A squiggle followed by a rectangular step. (2) An electrical signal trace; a stylized wave with a stair step. (3) Electronics or audio company.
+- blind-n: Wave that flows into a check mark. (1) A squiggle ending in a tick. (2) A wave with a swoosh or arrow; a sine curve becoming a check. (3) Productivity or task software.
+- blind-o: Wave that ends in a flat horizontal line. (1) A tilde with a dash trailing off. (2) A cable or pipe bending into a run; a pen stroke or signature. (3) Electronics or cable supplier.
+- blind-s: Wave that ends in a line with a single step up. (1) A squiggle with a raised step. (2) A signal waveform with a pulse edge; a tilde with a flag. (3) Electronics or plumbing supplier.
 
-**Round 2**: f = c1a, g = c1b (tick on a ruled line), h = c5
-- blind-f: Handwritten check mark with loop, signature-like. (1) Signature-like handwritten check mark; (2) a tick-mark sketch or a loopy letter "L" or "R"; (3) legal or sign-off services.
-- blind-g: Handwritten check mark over a horizontal line. (1) Signature line with a check mark; (2) a checked box with the box cut off, or a "sign here" underline; (3) legal or signing services.
-- blind-h: Handwritten check mark inside a rectangle. (1) Check mark inside a checkbox; (2) a signed form field or a stamped approval seal; (3) forms or compliance software.
+**Final F1** — tip cut flat, notch bevelled (superseded; kept as history). t = mark, u = app icon, v = favicon
+- Run 1: t "A wavy black squiggle, like a hand-drawn tick or wave … stationery, pen or signature-related shop" · u "A white squiggle on a black rounded square; an app icon … streaming or audio-waveform logo … software or mobile app company" · v "A white wave-like stroke on a black rounded tile … a tick mark with a wiggle … tech or wellness app company".
+- Run 2: t "A black wavy squiggle line … handwritten signature, or a sound wave … pen or stationery brand" · u "White wave on black tile … sound-wave app icon … software or app company" · v "White wave in black tile … audio waveform icon, or a heartbeat monitor sign … health or audio app".
+- Run 3: t "A black wavy squiggle that dips and rises, ending in a point … handwriting or lettering studio" · u "A white wavy line on a black rounded square … audio app or tech startup" · v "A white squiggle with a tick-like end … a checkmark drawn with a wave … task or productivity app".
 
-**Final, 3 runs on the exact `final/` files** (p = `logo-mark.svg` sha f2be3150, q = `app-icon.svg` sha e6778c7b, r = `favicon.svg` sha 94de426d)
-- Run 1 — p: (1) Handwritten signature or checkmark; (2) a cursive letter with a loop and tail; a pen-drawn bird or swoosh; (3) legal or notary services. · q: (1) App icon with a signature; (2) a letter R with a tick; a cursive script symbol; (3) productivity or signing app. · r: (1) App icon with check mark; (2) a letter Q with a tick; a map pin with a checkmark; (3) task or to-do software.
-- Run 2 — p: (1) Black scribbled loop with a checkmark; (2) a handwritten signature; a lowercase letter "l" with a tick; (3) legal or document-signing service. · q: (1) White scribbled check on black tile; (2) inverted signature stamp; dark-mode app icon; (3) e-signature app or brand. · r: (1) Bold white loop with checkmark, black tile; (2) a stylized letter "Q" with a tick; a verified-badge icon; (3) verification or e-signature company.
-- Run 3 — p: (1) Handwritten squiggle with a checkmark; (2) a handwritten signature; a stylized letter Q with a tick; (3) e-signature or legal services. · q: (1) White script-check app icon; (2) a reversed-out signature; a verified-badge logo; (3) digital signature software. · r: (1) Bold white letter-check icon; (2) a heavy letter P with a checkmark; a verified-status badge; (3) mobile app brand identity.
+**Final F2** — square tip, sharp notch. w = mark (sha d6593e7b), x = app icon (thin ADT placement, superseded), y = favicon (sha feb08bdf)
+- Run 1: w "A wavy line ending in a tick-like stroke … wellness or fitness app" · x "White wavy line on a black rounded square … music or audio app" · y "Thick white wavy line on a black rounded tile … heart-rate monitor trace or a bold 'w' … health or fitness tech".
+- Run 2: w "black wavy stroke with tick … fitness apparel brand" · x "white squiggle in black square … audio or music software" · y "white wave-tick on black tile … health or wellness app".
+- Run 3: w "A wavy line ending in a tick, dark stroke on white … a sine wave with a checkmark … stationery or print shop" · x "White squiggle on a black rounded square … consumer app or music software" · y "White wave-and-tick on a black rounded square … media or audio streaming service".
 
-Scoring: every final answer names the intended subject (a handwritten tick) in (1) → **pass 3/3 runs for all three files**. The recurring second reading is **"signature / e-signature"**; the control's category read ("productivity software") was more direct.
+**Final F3** — app icon with the favicon's heavier geometry (z, sha 994aabe2)
+- Run 1: "White wavy line on black square; a heartbeat or ECG trace, or a sound waveform; health or audio software company".
+- Run 2: "a white squiggly line rising to the right, a wave ending in an upward tick, on black; a stock-price or activity trend line, a stylised '~' / wave-to-check mark; analytics, fintech, or health-tracking app".
+- Run 3: "white wavy line rising to a tick-like upward end on black rounded square; an audio waveform or sound-level icon … media, audio or analytics app".
+
+Scoring (subject = a wave that ends in a tick): **mark 3/3 pass**, **favicon 2/3 pass**, **app icon 2/3 pass** on the exact files in `final/`. Recurring second readings: sound wave, heartbeat, a handwritten "w".
 
 ## Decision
 
-**c1a "Loop to tick"**. It is the only concept that passed the stranger test *and* separates from the lineup: no container, a silhouette no competitor has, and a colour nobody in the category uses. It says the product's promise in one gesture: what you write by hand comes out done.
+**k1 "Wave to tick"** in the ADT family. It is the only family variant strangers tied to *productivity* ("Productivity or task software"); ADT's unchanged mark read as electronics or audio, and the other variants as cable or plumbing suppliers. It keeps everything ADT's sub-brand rule fixes (band, sine period, colours, lockup) and changes only the digital half of the wave.
 
-What it gives up: strangers place the bare mark in **e-signature / legal** before **planning**. The control (a notepad with a tick) was read as productivity software straight away, but it looks like Google Tasks, Microsoft To Do and Any.do. The trade-off is accepted because the mark always appears with the name "AI Planner" (home-screen label, header lockup, store listing, OAuth screen), which supplies the category. The human test kit (`human-test/`) checks this with real people.
+What it gives up: shown alone at small sizes, the sine still invites an audio or heartbeat reading, which is the same trade-off ADT's own mark carries ("strangers often connect a waveform with audio/music"). As with ADT, keep the mark next to the name: the home-screen label, the app bar and the lockup supply "AI Planner".
