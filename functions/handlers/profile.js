@@ -5,6 +5,7 @@ const { logger } = require('firebase-functions/logger');
 const { ERROR_CODES: E, sendError, guardRequest } = require('../services/requestGuard');
 const { isValidTimeZone, computeDisplayStreak, sanitizeControlCharacters } = require('../utils');
 const { buildNewUserDoc } = require('../sync/userPlan');
+const { isValidNotesDestination } = require('../sync/notesDestination');
 
 // --- ENDPOINT: updateProfile ---
 // Moves frontend Firestore writes behind secure admin privileges. Creates the
@@ -40,6 +41,13 @@ async function updateProfileHandler(req, res) {
             return sendError(res, 400, E.BAD_REQUEST, "Push token format is invalid.");
         }
         allowedUpdates.expoPushToken = pushToken;
+    }
+    if (updates.notesDestination !== undefined) {
+        // 'notion' is accepted before Notion is connected; the client then opens Notion setup.
+        if (!isValidNotesDestination(updates.notesDestination)) {
+            return sendError(res, 400, E.BAD_REQUEST, "Choose Google Drive or Notion.");
+        }
+        allowedUpdates.notesDestination = updates.notesDestination;
     }
     if (typeof updates.dedupCalendar === 'boolean') allowedUpdates.dedupCalendar = updates.dedupCalendar;
     if (typeof updates.dedupTasks === 'boolean') allowedUpdates.dedupTasks = updates.dedupTasks;

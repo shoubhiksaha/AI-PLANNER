@@ -58,6 +58,20 @@ async function recordCall(service, method, summary = '') {
     });
 }
 
+// Fake Drive contents, per signed-in user so tests never see each other's files.
+const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
+const driveFiles = new Map(); // email -> Map(id -> { id, name, mimeType, parent })
+function driveFilesFor(email) {
+    const key = email || '';
+    if (!driveFiles.has(key)) driveFiles.set(key, new Map());
+    return driveFiles.get(key);
+}
+
+function unquote(literal) {
+    if (!literal) return undefined;
+    return literal.slice(1, -1).replace(/\\(.)/g, '$1');
+}
+
 function httpError(status, message) {
     const err = new Error(message);
     err.code = status;
@@ -143,13 +157,30 @@ function createGoogleApis() {
         }),
         drive: () => ({
             files: {
-                list: async () => {
-                    await recordCall('drive', 'files.list', '');
-                    return { data: { files: [] } };
+                // Answers the `name = '…' and '<parent>' in parents …` queries services/googleDrive builds.
+                list: async ({ q = '' } = {}) => {
+                    await recordCall('drive', 'files.list', q);
+                    const name = unquote(q.match(/name = ('(?:[^'\\]|\\.)*')/)?.[1]);
+                    const parent = unquote(q.match(/('(?:[^'\\]|\\.)*') in parents/)?.[1]);
+                    const wantFolder = /mimeType = 'application\/vnd\.google-apps\.folder'/.test(q);
+                    const files = [...driveFilesFor(currentEmail()).values()]
+                        .filter(f => f.name === name && f.parent === parent && (f.mimeType === DRIVE_FOLDER_MIME) === wantFolder)
+                        .map(f => ({ id: f.id, name: f.name }));
+                    return { data: { files } };
                 },
-                create: async ({ requestBody } = {}) => {
-                    await recordCall('drive', 'files.create', requestBody?.name);
-                    return { data: { id: nextId('file') } };
+                get: async ({ fileId } = {}) => {
+                    await recordCall('drive', 'files.get', fileId);
+                    const file = driveFilesFor(currentEmail()).get(fileId);
+                    if (!file) throw httpError(404, `File not found: ${fileId}`);
+                    return { data: { id: file.id, trashed: false } };
+                },
+                create: async ({ requestBody = {}, media } = {}) => {
+                    const mimeType = requestBody.mimeType || media?.mimeType || '';
+                    await recordCall('drive', 'files.create', `${requestBody.name} (${mimeType})`);
+                    const id = nextId(mimeType === DRIVE_FOLDER_MIME ? 'folder' : 'file');
+                    const parent = (requestBody.parents || [])[0] || 'root';
+                    driveFilesFor(currentEmail()).set(id, { id, name: requestBody.name, mimeType, parent });
+                    return { data: { id, webViewLink: `https://drive.google.com/file/d/${id}/view` } };
                 },
             },
         }),

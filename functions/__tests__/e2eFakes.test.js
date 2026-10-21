@@ -174,12 +174,24 @@ describe('fake mode ON (FUNCTIONS_EMULATOR=true + E2E_FAKE_EXTERNALS=true)', () 
         }));
     });
 
-    test('evening: 1 completed task, 1 expense, 1 health entry', async () => {
+    test('evening: 1 completed task, 1 expense, 1 health entry, brain dump to Google Drive', async () => {
         seedUser();
         const res = makeRes();
         await fns.syncPlanner(makeReq({ syncType: 'evening', googleToken: E2E_GOOGLE_TOKEN, images: [JPEG] }), res);
         expect(res.status).toHaveBeenCalledWith(200);
-        expect(res.send.mock.calls[0][0].counts).toEqual({ completedTasks: 1, expenses: 1, health: 1 });
+        const body = res.send.mock.calls[0][0];
+        expect(body.counts).toEqual({ completedTasks: 1, expenses: 1, health: 1, brainDump: 1 });
+        expect(body.savedTo).toBe('drive');
+        expect(body.links.drive).toMatch(/^https:\/\/drive\.google\.com\/drive\/folders\/folder-/);
+        expect(body.notes).toEqual(expect.arrayContaining(['Brain dump saved to Google Drive.']));
+        const created = calls().filter(c => c.service === 'drive' && c.method === 'files.create').map(c => c.summary);
+        expect(created).toEqual(expect.arrayContaining([
+            'AI Planner (application/vnd.google-apps.folder)',
+            'Brain dumps (application/vnd.google-apps.folder)',
+            `${today()} Brain dump.jpg (image/jpeg)`,
+            `${today()} Brain dump (application/vnd.google-apps.document)`,
+        ]));
+        expect(user().driveFolders).toEqual({ root: expect.stringMatching(/^folder-/), brainDump: expect.stringMatching(/^folder-/) });
         expect(user().spreadsheetId).toMatch(/^sheet-/);
         expect(calls().map(c => c.method)).toEqual(expect.arrayContaining(['spreadsheets.create', 'values.append', 'tasks.patch']));
     });
@@ -207,6 +219,30 @@ describe('fake mode ON (FUNCTIONS_EMULATOR=true + E2E_FAKE_EXTERNALS=true)', () 
         ]);
         expect(calls().filter(c => c.method === 'fileUploads.send')).toHaveLength(2);
         expect(calls().every(c => c.email === EMAIL)).toBe(true);
+    });
+
+    test('journal without Notion goes to the fake Drive: folders reused, photo + transcript Doc', async () => {
+        seedUser();
+        const first = makeRes();
+        await fns.syncPlanner(makeReq({ syncType: 'journal', googleToken: E2E_GOOGLE_TOKEN, images: [JPEG] }), first);
+        expect(first.status).toHaveBeenCalledWith(200);
+        const body = first.send.mock.calls[0][0];
+        expect(body).toEqual(expect.objectContaining({ counts: { journalPages: 1 }, savedTo: 'drive', warnings: [] }));
+        expect(body.links.drive).toBe(`https://drive.google.com/drive/folders/${user().driveFolders.journal}`);
+
+        const second = makeRes();
+        await fns.syncPlanner(makeReq({ syncType: 'journal', googleToken: E2E_GOOGLE_TOKEN, images: [JPEG] }), second);
+        expect(second.status).toHaveBeenCalledWith(200);
+
+        const created = calls().filter(c => c.service === 'drive' && c.method === 'files.create').map(c => c.summary);
+        // The fake Drive persists per user for the whole file, so "AI Planner" may
+        // already exist from the evening test; either way no folder is made twice.
+        const folders = created.filter(s => s.endsWith('(application/vnd.google-apps.folder)'));
+        expect(new Set(folders).size).toBe(folders.length);
+        expect(folders).toContain('Journal (application/vnd.google-apps.folder)');
+        expect(created.filter(s => s === `${today()} Journal 1.jpg (image/jpeg)`)).toHaveLength(2);
+        expect(created.filter(s => s === `${today()} Journal (application/vnd.google-apps.document)`)).toHaveLength(2);
+        expect(calls().some(c => c.service === 'notion')).toBe(false);
     });
 
     test('setupBYOK wraps with the fake KMS and the stored key is used for the next sync (no credit)', async () => {

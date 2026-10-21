@@ -5,6 +5,9 @@ const { getPlannerDataFromImages, getCountWarnings } = require('../../services/g
 const { syncCalendarEvents, syncGoogleTasks } = require('../../services/googleSync');
 const { SyncError } = require('../errors');
 
+// The response lists at most this many created events and tasks for the client to show.
+const MAX_LISTED_ITEMS = 10;
+
 async function runMorningSync(ctx) {
     const { requestId, uid, parsedImages, byokConfig, aiOptions, userData, timeZone, warnings, google, auth } = ctx;
     const calendar = google.calendar({ version: 'v3', auth });
@@ -25,11 +28,17 @@ async function runMorningSync(ctx) {
     ]);
 
     let msg = `Morning Sync Complete! Created ${eventResults.events} events, ${eventResults.reminders} reminders, and ${taskResults.tasks} tasks.`;
+    const notes = [];
     if (eventResults.skippedDuplicates > 0 || taskResults.skippedDuplicates > 0) {
         const skipDetails = [];
         if (eventResults.skippedDuplicates > 0) skipDetails.push(`${eventResults.skippedDuplicates} events`);
         if (taskResults.skippedDuplicates > 0) skipDetails.push(`${taskResults.skippedDuplicates} tasks`);
         msg += ` (Skipped ${skipDetails.join(" and ")} that already existed).`;
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+        const skipped = [];
+        if (eventResults.skippedDuplicates > 0) skipped.push(plural(eventResults.skippedDuplicates, 'event', 'events'));
+        if (taskResults.skippedDuplicates > 0) skipped.push(plural(taskResults.skippedDuplicates, 'task', 'tasks'));
+        notes.push(`Skipped ${skipped.join(' and ')} already in your calendar or task list.`);
     }
     return {
         msg,
@@ -37,6 +46,11 @@ async function runMorningSync(ctx) {
         dataSynced: eventResults.events + eventResults.reminders + taskResults.tasks > 0,
         extractionOk: true,
         partial: false,
+        notes,
+        items: {
+            events: (eventResults.created || []).slice(0, MAX_LISTED_ITEMS),
+            tasks: (taskResults.created || []).slice(0, MAX_LISTED_ITEMS),
+        },
     };
 }
 
