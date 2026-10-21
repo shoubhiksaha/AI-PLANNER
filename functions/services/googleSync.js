@@ -2,7 +2,7 @@ const { logger } = require("firebase-functions/logger");
 const { parseDateTime } = require("../utils");
 
 async function syncCalendarEvents(calendar, plannerData, timeZone = 'UTC', enableDedup = true) {
-    let counts = { events: 0, reminders: 0, skippedDuplicates: 0 };
+    let counts = { events: 0, reminders: 0, skippedDuplicates: 0, created: [] };
 
     // Pre-fetch existing events for the planner date to detect duplicates
     let existingEvents = [];
@@ -109,6 +109,7 @@ async function syncCalendarEvents(calendar, plannerData, timeZone = 'UTC', enabl
 
             if (item.block) counts.events++;
             if (item.reminder) counts.reminders++;
+            counts.created.push({ title: String(item.task), start: sTime });
         }
     }
     return counts;
@@ -117,6 +118,7 @@ async function syncCalendarEvents(calendar, plannerData, timeZone = 'UTC', enabl
 async function syncGoogleTasks(tasks, plannerData, enableDedup = true) {
     let count = 0;
     let skippedDuplicates = 0;
+    const created = [];
     let exactDueIso = null;
     let dueMinIso = null;
     let dueMaxIso = null;
@@ -224,6 +226,7 @@ async function syncGoogleTasks(tasks, plannerData, enableDedup = true) {
                     requestBody
                 });
                 count++;
+                created.push(requestBody.title);
                 // Add to existing list to prevent duplicates within the same sync batch
                 if (enableDedup) existingTasksForDate.push(cleanTitle(item.task));
             } catch (err) {
@@ -233,7 +236,7 @@ async function syncGoogleTasks(tasks, plannerData, enableDedup = true) {
         }
     }
     logger.info(`Tasks sync: created ${count}, skipped ${skippedDuplicates} duplicates`);
-    return { tasks: count, skippedDuplicates };
+    return { tasks: count, skippedDuplicates, created };
 }
 
 function normalizeTitle(value) {

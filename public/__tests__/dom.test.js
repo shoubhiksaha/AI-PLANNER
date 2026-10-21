@@ -126,13 +126,13 @@ describe('Critical DOM Elements', () => {
     test('U-03 / U-06 / U-08: menu button is labelled; form fields have labels', () => {
         const hamburger = document.getElementById('hamburger-btn');
         expect(hamburger.getAttribute('aria-label')).toBe('Menu');
-        expect(hamburger.className).toMatch(/w-11/);
-        expect(hamburger.className).toMatch(/h-11/);
+        expect(hamburger.className).toMatch(/btn-icon/); // 44×44 px target (styles.css .btn-icon)
         ['notion-key-input', 'notion-db-input', 'byok-api-key', 'byok-provider', 'user-display-name-input', 'user-phone']
             .forEach(id => expect(document.querySelector(`label[for="${id}"]`)).not.toBeNull());
         document.querySelectorAll('.theme-item').forEach(item => {
             expect(item.tagName).toBe('BUTTON');
-            expect(item.getAttribute('aria-label')).toBeTruthy();
+            // Accessible name: visible text (preferred) or an aria-label.
+            expect((item.getAttribute('aria-label') || item.textContent).trim()).toBeTruthy();
         });
     });
 

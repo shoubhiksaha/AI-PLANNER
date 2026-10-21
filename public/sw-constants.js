@@ -8,7 +8,7 @@
  * Keep this file free of DOM/SW APIs — constants only.
  */
 (function (exports) {
-    exports.CACHE_NAME = 'ai-planner-v46';
+    exports.CACHE_NAME = 'ai-planner-v47';
 
     exports.ASSETS_TO_CACHE = [
         '/',
@@ -25,6 +25,18 @@
         '/refund-policy.html',
         '/planner.html',
         '/theme-init.js',
+        '/brand/app-icon.svg',
+        '/brand/favicon.svg',
+        '/brand/offering-by-adt-stacked-light.svg',
+        '/brand/offering-by-adt-stacked-dark.svg',
+        '/brand/offering-by-adt-inline-light.svg',
+        '/brand/offering-by-adt-inline-dark.svg',
+        '/fonts/SpaceGrotesk-500.woff2',
+        '/fonts/SpaceGrotesk-700.woff2',
+        '/fonts/IBMPlexSans-400.woff2',
+        '/fonts/IBMPlexSans-500.woff2',
+        '/fonts/IBMPlexSans-600.woff2',
+        '/favicon-48.png',
         '/icon-192.png',
         '/icon-512.png',
         '/icon-maskable-512.png',

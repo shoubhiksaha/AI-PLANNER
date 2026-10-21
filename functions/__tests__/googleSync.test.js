@@ -125,12 +125,12 @@ describe('syncCalendarEvents', () => {
 
     test('handles empty schedule gracefully', async () => {
         const counts = await syncCalendarEvents(mockCalendar, { date: '6-August-2025', schedule: [] });
-        expect(counts).toEqual({ events: 0, reminders: 0, skippedDuplicates: 0 });
+        expect(counts).toEqual({ events: 0, reminders: 0, skippedDuplicates: 0, created: [] });
     });
 
     test('handles missing schedule key', async () => {
         const counts = await syncCalendarEvents(mockCalendar, { date: '6-August-2025' });
-        expect(counts).toEqual({ events: 0, reminders: 0, skippedDuplicates: 0 });
+        expect(counts).toEqual({ events: 0, reminders: 0, skippedDuplicates: 0, created: [] });
     });
 
     test('event dateTime is local ISO (no Z UTC suffix)', async () => {

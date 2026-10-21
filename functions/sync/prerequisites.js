@@ -5,11 +5,14 @@ const { getDecryptedNotionKeyAndMigrate } = require('../services/notion');
 const { SyncError } = require('./errors');
 
 /**
- * Journal and voice notes require a working Notion connection (400 otherwise);
- * evening uses Notion opportunistically when configured.
+ * When notes go to Notion, journal and voice notes require a working Notion
+ * connection (400 otherwise) and evening uses it for the brain dump when
+ * configured. When notes go to Google Drive, Notion is never needed.
+ * @param {'drive'|'notion'} notesDestination
  * @returns {Promise<string|null>} the decrypted Notion key, or null
  */
-async function resolveNotionKey(mode, userRef, preData, { requestId, uid, email }) {
+async function resolveNotionKey(mode, userRef, preData, { requestId, uid, email }, notesDestination = 'notion') {
+    if (notesDestination !== 'notion') return null;
     if (mode === 'journal' || mode === 'voice_note') {
         if (!preData.notionKey || !preData.notionDbId) {
             throw new SyncError(400, E.NOTION_NOT_CONFIGURED, "Notion not setup. Please provide keys.");

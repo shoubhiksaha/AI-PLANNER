@@ -64,6 +64,9 @@ const {
     pageLimitFor,
     needsGoogleToken,
     needsNotion,
+    resolveNotesDestination,
+    friendlySyncDate,
+    DESTINATION_LABELS,
     readByokSession,
     writeByokSession,
     clearByokSession,
@@ -93,6 +96,9 @@ const {
 } = helpers;
 
 const $ = (id) => document.getElementById(id);
+
+/** Inline icon from the sprite in index.html (Lucide). `name` is always a constant. */
+const icon = (name, cls = '') => `<svg class="icon ${cls}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
 
 // --------------------------------------------------------------------------
 // STATE
@@ -337,18 +343,14 @@ setBuildVersionBadge();
 // GENERIC UI: result cards (UX 5/6), inline notices
 // --------------------------------------------------------------------------
 const statusArea = $('status-area');
+// Result cards use the ADT tokens; the icon and title colour carry the tone, never colour alone.
 const CARD_TONES = {
-    success: 'border-green-300 bg-green-50 text-green-900 dark:bg-green-900/30 dark:border-green-700/60 dark:text-green-100',
-    error: 'border-red-300 bg-red-50 text-red-900 dark:bg-red-900/30 dark:border-red-700/60 dark:text-red-100',
-    processing: 'border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:border-amber-700/60 dark:text-amber-100',
-    info: 'border-blue-300 bg-blue-50 text-blue-900 dark:bg-blue-900/30 dark:border-blue-700/60 dark:text-blue-100',
+    success: { box: 'notice-success', title: 'notice-title-success', icon: 'circle-check' },
+    error: { box: 'notice-danger', title: 'notice-title-danger', icon: 'triangle-alert' },
+    processing: { box: 'notice-warning', title: 'notice-title-warning', icon: 'hourglass' },
+    info: { box: 'notice-info', title: '', icon: 'info' },
 };
-const ACTION_PRIMARY = {
-    success: 'bg-green-700 hover:bg-green-800 text-white',
-    error: 'bg-red-600 hover:bg-red-700 text-white',
-    processing: 'bg-amber-700 hover:bg-amber-800 text-white',
-    info: 'bg-blue-600 hover:bg-blue-700 text-white',
-};
+const prefersReducedMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 const clearStatus = () => {
     if (!statusArea) return;
@@ -363,11 +365,15 @@ const clearStatus = () => {
 const renderCard = ({ tone, title, lines = [], list = [], note = '', actions = [] }) => {
     if (!statusArea) return;
     const card = document.createElement('div');
-    card.className = `status-card border rounded-xl p-4 text-sm space-y-2 ${CARD_TONES[tone] || CARD_TONES.info}`;
+    const style = CARD_TONES[tone] || CARD_TONES.info;
+    card.className = `status-card notice ${style.box} rounded-2xl p-4 space-y-2`;
     card.dataset.tone = tone;
     const h = document.createElement('p');
-    h.className = 'font-bold text-base';
-    h.textContent = title;
+    h.className = `flex items-start gap-2 font-display font-bold text-[17px] ${style.title}`;
+    h.innerHTML = icon(style.icon, 'mt-0.5');
+    const titleText = document.createElement('span');
+    titleText.textContent = title;
+    h.appendChild(titleText);
     card.appendChild(h);
     lines.filter(Boolean).forEach((line) => {
         const p = document.createElement('p');
@@ -377,7 +383,7 @@ const renderCard = ({ tone, title, lines = [], list = [], note = '', actions = [
     });
     if (list.length) {
         const ul = document.createElement('ul');
-        ul.className = 'list-disc list-inside text-xs space-y-0.5';
+        ul.className = 'list-disc list-inside text-sm space-y-0.5';
         list.forEach((item) => {
             const li = document.createElement('li');
             li.textContent = item;
@@ -387,7 +393,7 @@ const renderCard = ({ tone, title, lines = [], list = [], note = '', actions = [
     }
     if (note) {
         const n = document.createElement('p');
-        n.className = 'status-note text-xs font-semibold opacity-90';
+        n.className = 'status-note text-sm font-semibold text-muted';
         n.textContent = note;
         card.appendChild(n);
     }
@@ -396,10 +402,9 @@ const renderCard = ({ tone, title, lines = [], list = [], note = '', actions = [
         row.className = 'flex flex-wrap gap-2 pt-1';
         actions.forEach((action) => {
             const el = document.createElement(action.href ? 'a' : 'button');
-            el.className = `min-h-[44px] px-4 inline-flex items-center justify-center rounded-lg text-sm font-semibold transition-colors ${action.primary
-                ? ACTION_PRIMARY[tone]
-                : 'border border-black/15 dark:border-white/25 bg-white/70 dark:bg-black/20 hover:bg-white dark:hover:bg-black/40'}`;
+            el.className = `btn ${action.primary ? 'btn-primary' : 'btn-secondary'}`;
             el.textContent = action.label;
+            if (action.href) el.insertAdjacentHTML('beforeend', icon('external-link', 'icon-sm'));
             if (action.href) {
                 el.href = action.href;
                 el.target = '_blank';
@@ -417,6 +422,12 @@ const renderCard = ({ tone, title, lines = [], list = [], note = '', actions = [
     statusArea.classList.remove('hidden');
     statusArea.setAttribute('aria-live', tone === 'error' ? 'assertive' : 'polite');
     statusArea.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+    // The result is the peak moment: bring it into view on small screens (UX audit #1).
+    if (!statusArea.closest('.view-hidden')) {
+        requestAnimationFrame(() => {
+            statusArea.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'nearest' });
+        });
+    }
 };
 
 const showFieldError = (id, message) => {
@@ -543,10 +554,22 @@ $('login-retry-btn')?.addEventListener('click', startLogin);
 // --------------------------------------------------------------------------
 // SIGN-IN / PROFILE (UX 1, C6, B-26)
 // --------------------------------------------------------------------------
+const todayInTimeZone = (timeZone) => {
+    try { return new Date().toLocaleDateString('en-CA', { timeZone }); } catch (_) { return new Date().toLocaleDateString('en-CA'); }
+};
+const greetingForHour = (hour) => (hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening');
 const setGreeting = (name) => {
     const el = $('user-display-name');
-    if (el) el.textContent = name ? `Hi, ${name}` : '';
+    if (!el) return;
+    const first = String(name || '').trim().split(/\s+/)[0];
+    el.textContent = first ? `${greetingForHour(new Date().getHours())}, ${first}` : '';
 };
+
+/** Shows the app bar's menu, brand and plan chip only while signed in. */
+const setSignedInChrome = (signedIn) => { document.body.dataset.signedIn = signedIn ? 'true' : 'false'; };
+
+/** Where journal pages, brain dumps and voice notes go for this user ('drive' | 'notion'). */
+const notesDestination = () => resolveNotesDestination(userProfile);
 
 const hasNotionConfigured = () => !!(userProfile && userProfile.notionKey && userProfile.notionDbId);
 const hasStoredByok = () => !!(userProfile && (userProfile.geminiKey || userProfile.byokConfig || userProfile.byokKmsData));
@@ -560,8 +583,7 @@ auth.onAuthStateChanged(async (user) => {
         setGreeting(displayName);
         const emailEl = $('drawer-user-email');
         if (emailEl) emailEl.textContent = user.email || '';
-        $('gamification-bars')?.classList.remove('hidden');
-        $('gamification-bars')?.classList.add('flex');
+        setSignedInChrome(true);
         showLoginError('');
         await checkUserSetup(user);
     } else {
@@ -675,7 +697,7 @@ async function refreshStaleStreakIfNeeded(user, profileData) {
     } catch (_) { /* best-effort — UI already shows computed 0 */ }
 }
 
-const TIER_LABELS = { free: 'Free Plan', standard: 'Standard', pro: 'Pro' };
+const TIER_LABELS = { free: 'Free', standard: 'Standard', pro: 'Pro' };
 const TIER_CREDITS = { standard: 100, pro: 250 };
 
 function onProfileUpdate(data) {
@@ -683,8 +705,8 @@ function onProfileUpdate(data) {
     updateGamificationUI(data);
 
     // Live plan badge (B-17)
-    const planBadge = $('current-plan-badge');
-    if (planBadge) planBadge.textContent = TIER_LABELS[data.tier] || TIER_LABELS.free;
+    const planLabel = $('plan-label');
+    if (planLabel) planLabel.textContent = TIER_LABELS[data.tier] || TIER_LABELS.free;
 
     // Notion status
     const hasNotion = hasNotionConfigured();
@@ -694,8 +716,11 @@ function onProfileUpdate(data) {
         notionOnboardStatus.classList.toggle('flex', hasNotion);
     }
     const advBadge = $('adv-notion-badge');
-    if (advBadge) advBadge.textContent = hasNotion ? '✅ Connected' : 'Not connected';
+    if (advBadge) advBadge.textContent = hasNotion ? 'Connected' : 'Not connected';
+    const advConfigure = $('adv-notion-configure');
+    if (advConfigure) advConfigure.textContent = hasNotion ? 'Change' : 'Set up';
     $('adv-notion-disconnect')?.classList.toggle('hidden', !hasNotion);
+    renderNotesDestination();
 
     // Dedup toggles (default ON)
     const calToggle = $('dedup-calendar');
@@ -720,26 +745,27 @@ function updateGamificationUI(data) {
     const timeZone = data.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
     const normalizedLastSync = normalizeSyncDateStr(data.lastSyncDate, timeZone);
 
-    $('streak-badge').textContent = `🔥 ${currentStreak}`;
-    $('credits-badge').textContent = byok ? '🪙 ∞' : `🪙 ${credits}`;
-    $('freezes-badge').textContent = `❄️ ${streakFreezes}`;
+    // Credits live in one place: the plan chip in the app bar (UX audit #3).
+    const creditsText = byok ? 'own AI key' : `${credits} credit${credits === 1 ? '' : 's'}`;
+    const creditsBadge = $('credits-badge');
+    if (creditsBadge) creditsBadge.textContent = creditsText;
+    const planBadge = $('current-plan-badge');
+    if (planBadge) planBadge.setAttribute('aria-label', `${TIER_LABELS[data.tier] || TIER_LABELS.free} plan, ${creditsText}. View plans and pricing`);
 
-    // U-09: visible text instead of hover-only tooltips
+    // One plain line under the greeting: streak and when you last synced.
     const caption = $('hud-caption');
     if (caption) {
-        const parts = [
-            currentStreak > 0 ? `${currentStreak}-day streak` : 'No streak yet',
-            byok ? 'own AI key' : `${credits} credit${credits === 1 ? '' : 's'}`,
-            `${streakFreezes} freeze${streakFreezes === 1 ? '' : 's'}`,
-        ];
-        if (normalizedLastSync) parts.push(`last sync ${normalizedLastSync}`);
+        const parts = [];
+        if (currentStreak > 0) parts.push(`${currentStreak}-day streak`);
+        const synced = friendlySyncDate(normalizedLastSync, todayInTimeZone(timeZone));
+        parts.push(synced ? `Last synced ${synced}` : 'No syncs yet — add today’s page below');
         caption.textContent = parts.join(' · ');
         caption.classList.remove('hidden');
     }
 
-    $('reports-current-streak').textContent = `🔥 ${currentStreak}`;
+    $('reports-current-streak').textContent = `${currentStreak}`;
     $('reports-highest-streak').textContent = `${highestStreak}`;
-    $('reports-streak-freezes').textContent = `❄️ ${streakFreezes}`;
+    $('reports-streak-freezes').textContent = `${streakFreezes}`;
 }
 
 // --------------------------------------------------------------------------
@@ -777,18 +803,16 @@ function resetAppState() {
     clearByokSession(window.sessionStorage, window.localStorage);
 
     setGreeting('');
+    setSignedInChrome(false);
     const emailEl = $('drawer-user-email');
     if (emailEl) emailEl.textContent = '';
-    $('gamification-bars')?.classList.add('hidden');
-    $('gamification-bars')?.classList.remove('flex');
     const caption = $('hud-caption');
     if (caption) { caption.textContent = ''; caption.classList.add('hidden'); }
     // "…" until the next profile loads — never a misleading 0 (UX 8).
-    ['streak-badge', 'reports-current-streak'].forEach(id => { const el = $(id); if (el) el.textContent = '🔥 …'; });
-    const credits = $('credits-badge'); if (credits) credits.textContent = '🪙 …';
-    ['freezes-badge', 'reports-streak-freezes'].forEach(id => { const el = $(id); if (el) el.textContent = '❄️ …'; });
+    ['reports-current-streak', 'reports-streak-freezes'].forEach(id => { const el = $(id); if (el) el.textContent = '…'; });
+    const credits = $('credits-badge'); if (credits) credits.textContent = '…';
     const highest = $('reports-highest-streak'); if (highest) highest.textContent = '0';
-    const planBadge = $('current-plan-badge'); if (planBadge) planBadge.textContent = TIER_LABELS.free;
+    const planLabel = $('plan-label'); if (planLabel) planLabel.textContent = TIER_LABELS.free;
     const history = $('history-list'); if (history) history.replaceChildren();
     const heatmap = $('heatmap-grid'); if (heatmap) heatmap.replaceChildren();
     ['notion-key-input', 'notion-db-input', 'byok-api-key', 'byok-custom-url', 'byok-custom-model', 'byok-custom-api-version', 'user-display-name-input', 'user-phone']
@@ -811,7 +835,10 @@ const signOutUser = async () => {
 // --------------------------------------------------------------------------
 // NOTION (UX 1, UX 10, C2)
 // --------------------------------------------------------------------------
-const openNotionSetup = (context = '') => {
+// Where Notion setup returns to, and whether connecting should also make Notion the notes destination.
+let notionSetupReturn = { view: 'view-dashboard', makeDestination: false };
+const openNotionSetup = (context = '', { returnTo = 'view-dashboard', makeDestination = false } = {}) => {
+    notionSetupReturn = { view: returnTo, makeDestination };
     const ctx = $('notion-setup-context');
     if (ctx) {
         ctx.textContent = context;
@@ -821,6 +848,71 @@ const openNotionSetup = (context = '') => {
     showFieldError('notion-db-error', '');
     switchView('view-notion-setup');
 };
+const leaveNotionSetup = () => {
+    switchView(notionSetupReturn.view);
+    if (notionSetupReturn.view === 'view-setup') renderNotesDestination();
+};
+
+// --------------------------------------------------------------------------
+// NOTES DESTINATION: Google Drive or Notion (journal pages, brain dumps, voice notes)
+// --------------------------------------------------------------------------
+const showSettingsStatus = (id, message) => {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.toggle('hidden', !message);
+};
+
+function renderNotesDestination() {
+    const dest = notesDestination();
+    document.querySelectorAll('input[name="notes-destination"]').forEach(radio => { radio.checked = radio.value === dest; });
+    const where = DESTINATION_LABELS[dest];
+    const journalDesc = $('journal-desc');
+    if (journalDesc) journalDesc.textContent = `Saves journal pages to ${where}.`;
+    const eveningDesc = $('evening-desc');
+    if (eveningDesc) eveningDesc.textContent = `Ticks off what you did; logs spending and health to Sheets; saves your brain dump to ${where}.`;
+    updateDashButtons();
+}
+
+async function saveNotesDestination(value, { quiet = false } = {}) {
+    showFieldError('notes-destination-error', '');
+    if (!auth.currentUser) return false;
+    try {
+        const idToken = await auth.currentUser.getIdToken();
+        const res = await apiFetch('/updateProfile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken, updates: { notesDestination: value } }),
+        });
+        if (!res.ok) {
+            const apiErr = await readApiError(res);
+            showFieldError('notes-destination-error', describeApiError({ status: res.status, data: apiErr.data || {} }).message);
+            renderNotesDestination();
+            return false;
+        }
+        if (userProfile) userProfile = { ...userProfile, notesDestination: value };
+        renderNotesDestination();
+        if (!quiet) showSettingsStatus('notes-destination-status', `Saved. Journal pages will go to ${DESTINATION_LABELS[value]}.`);
+        return true;
+    } catch (err) {
+        console.error('Failed to save notes destination:', err);
+        showFieldError('notes-destination-error', 'Couldn’t save that. Check your connection and try again.');
+        renderNotesDestination();
+        return false;
+    }
+}
+
+document.querySelectorAll('input[name="notes-destination"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+        if (!radio.checked) return;
+        showSettingsStatus('notes-destination-status', '');
+        if (radio.value === 'notion' && !hasNotionConfigured()) {
+            openNotionSetup('', { returnTo: 'view-setup', makeDestination: true });
+            return;
+        }
+        saveNotesDestination(radio.value);
+    });
+});
 
 const notionDbInput = $('notion-db-input');
 const notionKeyInput = $('notion-key-input');
@@ -883,12 +975,19 @@ $('save-notion-btn')?.addEventListener('click', async () => {
         notionKeyInput.value = '';
         notionDbInput.value = '';
         describeNotionDbInput();
-        switchView('view-dashboard');
-        renderCard({
-            tone: 'success',
-            title: 'Notion connected',
-            lines: ['Journal pages and voice notes will be saved to your database.'],
-        });
+        const { view, makeDestination } = notionSetupReturn;
+        if (makeDestination || notesDestination() !== 'notion') await saveNotesDestination('notion', { quiet: true });
+        switchView(view);
+        if (view === 'view-setup') {
+            renderNotesDestination();
+            showSettingsStatus('notes-destination-status', 'Notion is connected. Journal pages will go to Notion.');
+        } else {
+            renderCard({
+                tone: 'success',
+                title: 'Notion connected',
+                lines: ['Journal pages, brain dumps and voice notes will be saved to your database. You can switch back to Google Drive in Settings.'],
+            });
+        }
     } catch (err) {
         console.error("Failed to save Notion keys:", err);
         showFieldError('notion-db-error', 'Couldn’t reach the server. Check your connection and try again.');
@@ -900,7 +999,7 @@ $('save-notion-btn')?.addEventListener('click', async () => {
 
 $('skip-notion-btn')?.addEventListener('click', (event) => {
     event.preventDefault();
-    switchView('view-dashboard');
+    leaveNotionSetup();
 });
 
 $('change-notion-onboard-btn')?.addEventListener('click', () => {
@@ -911,7 +1010,7 @@ $('change-notion-onboard-btn')?.addEventListener('click', () => {
     notionKeyInput?.focus();
 });
 
-$('adv-notion-configure')?.addEventListener('click', () => openNotionSetup());
+$('adv-notion-configure')?.addEventListener('click', () => openNotionSetup('', { returnTo: 'view-setup' }));
 
 $('adv-notion-disconnect')?.addEventListener('click', async (e) => {
     if (!auth.currentUser) return;
@@ -933,6 +1032,12 @@ $('adv-notion-disconnect')?.addEventListener('click', async (e) => {
         const advBadge = $('adv-notion-badge');
         if (advBadge) advBadge.textContent = 'Not connected';
         btn.classList.add('hidden');
+        // Notes can't go to a disconnected Notion: switch them to Google Drive.
+        if (notesDestination() === 'notion') {
+            if (userProfile) userProfile = { ...userProfile, notionKey: null, notionDbId: null };
+            await saveNotesDestination('drive', { quiet: true });
+            showSettingsStatus('notes-destination-status', 'Notion disconnected. Journal pages will go to Google Drive.');
+        }
     } catch (err) {
         showActionableError({ title: 'Couldn’t disconnect Notion', summary: 'Check your connection and try again.', details: err?.message });
     } finally {
@@ -940,7 +1045,6 @@ $('adv-notion-disconnect')?.addEventListener('click', async (e) => {
     }
 });
 
-$('back-to-dash-from-adv')?.addEventListener('click', () => switchView('view-dashboard'));
 
 // --------------------------------------------------------------------------
 // BYOK (C1, C2, B-04, B-27)
@@ -968,7 +1072,7 @@ function updateByokKeyHint(provider) {
     if (!hintEl) return;
     const hint = BYOK_KEY_HINTS[provider];
     if (hint) {
-        hintEl.textContent = '🔑 ' + hint;
+        hintEl.textContent = hint;
         hintEl.classList.remove('hidden');
     } else {
         hintEl.classList.add('hidden');
@@ -983,13 +1087,13 @@ function showCustomFields(subType) {
     fields.classList.remove('hidden');
     versionGroup.classList.add('hidden');
     if (subType === 'openai-compat' || subType === 'cloud') {
-        label.textContent = '☁️ OpenAI-Compatible API (same request format as OpenAI)';
+        label.textContent = 'OpenAI-compatible API (same request format as OpenAI)';
         urlInput.placeholder = 'https://api.example.com/v1/chat/completions';
     } else if (subType === 'local') {
-        label.textContent = '🏠 Local / Self-Hosted (e.g., Ollama)';
+        label.textContent = 'Local or self-hosted (for example Ollama)';
         urlInput.placeholder = 'https://your-secure-ollama.example.com/v1/chat/completions';
     } else if (subType === 'azure' || subType === 'enterprise') {
-        label.textContent = '🏢 Azure OpenAI Endpoint';
+        label.textContent = 'Azure OpenAI endpoint';
         urlInput.placeholder = 'https://your-resource.openai.azure.com';
         versionGroup.classList.remove('hidden');
     }
@@ -1287,18 +1391,16 @@ document.querySelectorAll('[data-drawer]').forEach(btn => {
             case 'notion':
                 openNotionSetup();
                 break;
-            case 'name': {
+            case 'settings': {
                 const input = $('user-display-name-input');
                 if (input) input.value = userProfile?.displayName || currentUser?.displayName || '';
                 showFieldError('name-error', '');
-                switchView('view-name-prompt');
-                input?.focus();
-                break;
-            }
-            case 'settings':
+                ['name-status', 'notes-destination-status'].forEach(id => showSettingsStatus(id, ''));
+                renderNotesDestination();
                 restoreByokUi();
                 switchView('view-setup');
                 break;
+            }
             case 'export':
                 exportMyData();
                 break;
@@ -1323,26 +1425,24 @@ const dropZone = $('drop-zone');
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif';
 const currentTier = () => userProfile?.tier || 'free';
 
-const uploadLabel = (icon, text, extraAttrs) => `
-        <label class="upload-label min-w-[44px] min-h-[44px] flex flex-col items-center justify-center px-3 py-2 sm:px-4 hover:bg-theme-border/30 active:bg-theme-border/50 rounded-xl transition-colors cursor-pointer">
+const uploadLabel = (iconName, text, extraAttrs) => `
+        <label class="upload-label min-w-[76px] min-h-[64px] flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl bg-bg border border-line hover:border-line-strong transition-colors cursor-pointer">
             <input type="file" accept="${ACCEPT}" ${extraAttrs} class="upload-input sr-only-input">
-            <span class="text-3xl mb-1 pointer-events-none" aria-hidden="true">${icon}</span>
-            <span class="text-xs sm:text-sm font-bold text-theme-text pointer-events-none">${text}</span>
+            ${icon(iconName, 'icon-lg text-ink pointer-events-none')}
+            <span class="text-sm font-semibold text-ink pointer-events-none">${text}</span>
         </label>`;
 
 const defaultUploadUI = () => `
-    <div id="upload-ui" class="w-full flex flex-col items-center gap-3 p-4 relative z-10">
-        <p class="text-sm font-semibold text-theme-text text-center">Photograph today’s planner page</p>
-        <div class="flex items-stretch justify-center gap-2 sm:gap-4">
-            ${uploadLabel('📷', 'Camera', 'capture="environment" aria-label="Take a photo of your page"')}
-            <div class="w-px bg-theme-border/60" aria-hidden="true"></div>
-            ${uploadLabel('🖼️', 'Gallery', 'multiple aria-label="Choose page photos from your gallery"')}
-            <div class="w-px bg-theme-border/60" aria-hidden="true"></div>
-            ${uploadLabel('📁', 'Files', 'multiple aria-label="Choose page image files"')}
+    <div id="upload-ui" class="w-full flex flex-col items-center gap-3 p-5 relative z-10">
+        <p class="font-display font-bold text-ink text-center">Photograph today’s page</p>
+        <div class="flex items-stretch justify-center gap-2 sm:gap-3">
+            ${uploadLabel('camera', 'Camera', 'capture="environment" aria-label="Take a photo of your page"')}
+            ${uploadLabel('image', 'Gallery', 'multiple aria-label="Choose page photos from your gallery"')}
+            ${uploadLabel('folder', 'Files', 'multiple aria-label="Choose page image files"')}
         </div>
-        <p class="text-[11px] text-theme-muted text-center leading-snug">Works with any notebook — best with the
-            <a href="planner.html" target="_blank" rel="noopener" class="underline font-semibold text-emerald-700 dark:text-emerald-400">free printable template (PDF)</a>.</p>
-        <p class="text-[11px] text-theme-muted text-center leading-snug">Example: “9:00 Team call” becomes a 9 AM Calendar event; “☐ Pay rent” becomes a Google Task.</p>
+        <p class="text-sm text-muted text-center leading-snug">Any notebook works. Best with the
+            <a href="planner.html" target="_blank" rel="noopener" class="link font-semibold">free printable template (PDF)</a>.</p>
+        <p class="text-xs text-muted text-center leading-snug">“9:00 Team call” becomes a 9 AM Calendar event; “☐ Pay rent” becomes a Google Task.</p>
     </div>`;
 
 dropZone.addEventListener('change', (e) => {
@@ -1372,20 +1472,20 @@ const renderThumbnails = () => {
             img = document.createElement('div');
             img.setAttribute('role', 'img');
             img.setAttribute('aria-label', `Planner page ${idx + 1} (HEIC photo)`);
-            img.className = 'heic-placeholder h-full w-full flex flex-col items-center justify-center gap-1 border border-theme-border rounded-lg shadow-sm bg-black/5 dark:bg-white/5 text-theme-muted';
-            img.innerHTML = '<span class="text-2xl" aria-hidden="true">🖼️</span><span class="text-[11px] font-semibold leading-tight text-center">HEIC photo</span>';
+            img.className = 'heic-placeholder h-full w-full flex flex-col items-center justify-center gap-1 border border-line rounded-lg bg-raised text-muted';
+            img.innerHTML = `${icon('image', 'icon-lg')}<span class="text-xs font-semibold leading-tight text-center">HEIC photo</span>`;
         } else {
             img = document.createElement('img');
             img.src = b64;
             img.alt = `Planner page ${idx + 1}`;
-            img.className = 'h-full w-full object-cover border border-theme-border rounded-lg shadow-sm';
+            img.className = 'h-full w-full object-cover border border-line rounded-lg';
         }
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'delete-btn absolute -top-4 -right-4 w-11 h-11 flex items-center justify-center z-10';
         del.dataset.idx = String(idx);
         del.setAttribute('aria-label', `Remove page ${idx + 1}`);
-        del.innerHTML = '<span aria-hidden="true" class="w-7 h-7 rounded-full bg-red-600 hover:bg-red-700 text-white text-sm font-bold flex items-center justify-center shadow">✕</span>';
+        del.innerHTML = `<span aria-hidden="true" class="w-7 h-7 rounded-full bg-ink text-bg flex items-center justify-center shadow">${icon('x', 'icon-sm')}</span>`;
         del.disabled = isSyncing;
         del.addEventListener('click', (e) => {
             e.preventDefault();
@@ -1401,18 +1501,18 @@ const renderThumbnails = () => {
         const adders = document.createElement('div');
         adders.className = 'flex flex-col gap-2';
         adders.innerHTML = `
-            <label class="upload-label h-11 w-11 shrink-0 border-2 border-dashed border-theme-border flex items-center justify-center text-theme-muted hover:text-theme-text transition-colors rounded-lg cursor-pointer" title="Take another photo">
+            <label class="upload-label h-11 w-11 shrink-0 border-2 border-dashed border-line-strong flex items-center justify-center text-muted hover:text-ink transition-colors rounded-lg cursor-pointer" title="Take another photo">
                 <input type="file" accept="${ACCEPT}" capture="environment" class="upload-input sr-only-input" aria-label="Take another photo">
-                <span class="text-lg pointer-events-none" aria-hidden="true">📷</span>
+                ${icon('camera', 'pointer-events-none')}
             </label>
-            <label class="upload-label h-11 w-11 shrink-0 border-2 border-dashed border-theme-border flex items-center justify-center text-theme-muted hover:text-theme-text transition-colors rounded-lg cursor-pointer" title="Add from gallery">
+            <label class="upload-label h-11 w-11 shrink-0 border-2 border-dashed border-line-strong flex items-center justify-center text-muted hover:text-ink transition-colors rounded-lg cursor-pointer" title="Add from gallery">
                 <input type="file" accept="${ACCEPT}" multiple class="upload-input sr-only-input" aria-label="Add more pages from your gallery">
-                <span class="text-lg pointer-events-none" aria-hidden="true">🖼️</span>
+                ${icon('plus', 'pointer-events-none')}
             </label>`;
         wrap.appendChild(adders);
     }
     const counter = document.createElement('div');
-    counter.className = 'absolute bottom-2 right-2 bg-emerald-700 text-white text-xs px-2 py-1 rounded-full font-medium pointer-events-none shadow-sm z-20';
+    counter.className = 'absolute bottom-2 right-2 badge bg-ink text-bg pointer-events-none z-20';
     counter.textContent = `${filesAsBase64.length}/${max} page${max === 1 ? '' : 's'}`;
     dropZone.replaceChildren(wrap, counter);
     updateDashButtons();
@@ -1489,7 +1589,7 @@ const handleFiles = async (files) => {
     const toProcess = images.slice(0, remainingSlots);
     if (images.length > remainingSlots) problems.push(`Only ${remainingSlots} more page${remainingSlots === 1 ? '' : 's'} fit${remainingSlots === 1 ? 's' : ''} your plan; the rest were skipped.`);
 
-    dropZone.innerHTML = '<div class="flex flex-col items-center p-6" role="status"><div class="spinner border-theme-text" aria-hidden="true"></div><p class="mt-2 text-sm text-theme-muted">Preparing your photos…</p></div>';
+    dropZone.innerHTML = '<div class="flex flex-col items-center p-6" role="status"><div class="spinner" aria-hidden="true"></div><p class="mt-2 text-sm text-muted">Preparing your photos…</p></div>';
 
     try {
         for (const file of toProcess) {
@@ -1531,10 +1631,10 @@ const handleFiles = async (files) => {
     dropZone.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
 });
 ['dragenter', 'dragover'].forEach(eventName => {
-    dropZone.addEventListener(eventName, () => dropZone.classList.add('bg-blue-50', 'border-blue-400', 'dark:bg-emerald-900/20'), false);
+    dropZone.addEventListener(eventName, () => dropZone.classList.add('drop-zone-active'), false);
 });
 ['dragleave', 'drop'].forEach(eventName => {
-    dropZone.addEventListener(eventName, () => dropZone.classList.remove('bg-blue-50', 'border-blue-400', 'dark:bg-emerald-900/20'), false);
+    dropZone.addEventListener(eventName, () => dropZone.classList.remove('drop-zone-active'), false);
 });
 dropZone.addEventListener('drop', (e) => handleFiles(Array.from(e.dataTransfer?.files || [])));
 
@@ -1566,8 +1666,8 @@ function updateDashButtons() {
     const sub = $('primary-sync-sub');
     if (sub) {
         sub.textContent = defaultMode === 'morning'
-            ? '☀️ Morning plan → Calendar & Tasks'
-            : '🌙 Evening review → Tasks & Sheets';
+            ? 'Morning plan → Calendar and Tasks'
+            : 'Evening review → Tasks and Sheets';
     }
 
     const hint = $('sync-hint');
@@ -1575,7 +1675,7 @@ function updateDashButtons() {
         if (isSyncing) hint.textContent = 'Syncing… please keep this tab open.';
         else if (profileLoading) hint.textContent = 'Loading your account…';
         else if (isRecording) hint.textContent = 'Recording a voice note…';
-        else if (!hasImages) hint.textContent = 'Add a page photo first — or record a voice note.';
+        else if (!hasImages) hint.textContent = 'Add a page photo first.';
         else hint.textContent = `${filesAsBase64.length} page${filesAsBase64.length === 1 ? '' : 's'} ready.`;
     }
 
@@ -1584,8 +1684,7 @@ function updateDashButtons() {
         if (!userProfile) costLine.textContent = '';
         else if (usingByok()) costLine.textContent = 'Using your own AI key · no credits used';
         else {
-            const left = (userProfile.tierCredits || 0) + (userProfile.boosterCredits || 0);
-            costLine.textContent = `1 credit per page · ${left} left`;
+            costLine.textContent = 'Uses 1 credit per page. A sync that saves nothing is free.';
         }
     }
 
@@ -1595,8 +1694,8 @@ function updateDashButtons() {
     const voiceDesc = $('voice-note-desc');
     if (voiceDesc && !isRecording) {
         voiceDesc.textContent = (!isPro && userProfile)
-            ? 'Pro feature — tap to see what’s included.'
-            : 'Record a thought; it’s transcribed into Notion.';
+            ? 'Pro — tap to see what’s included.'
+            : `Record a thought; it’s typed up and saved to ${DESTINATION_LABELS[notesDestination()]}.`;
     }
 }
 
@@ -1617,11 +1716,11 @@ let discardRecording = false;
 
 function setVoiceUi(recording) {
     const btn = modeButtons.voice_note;
-    $('voice-note-icon').textContent = recording ? '⏹️' : '🎤';
+    $('voice-note-icon').innerHTML = icon(recording ? 'circle-x' : 'mic');
     $('voice-note-label').textContent = recording ? 'Stop recording' : 'Voice note';
     $('voice-recording-pulse')?.classList.toggle('hidden', !recording);
     btn?.classList.toggle('ring-2', recording);
-    btn?.classList.toggle('ring-red-400', recording);
+    btn?.classList.toggle('ring-danger', recording);
     btn?.setAttribute('aria-pressed', recording ? 'true' : 'false');
 }
 
@@ -1651,11 +1750,11 @@ modeButtons.voice_note?.addEventListener('click', async () => {
     }
     if (isSyncing) return;
     if (currentTier() !== 'pro') {
-        openUpgradeFlow({ outcome: 'advanced', context: 'Voice notes are part of Pro. Record a thought and it lands in Notion as text.' });
+        openUpgradeFlow({ outcome: 'advanced', context: 'Voice notes are part of Pro. Record a thought and it’s typed up and saved to your Drive or Notion.' });
         return;
     }
-    if (!hasNotionConfigured()) {
-        openNotionSetup('Voice notes are saved to Notion. Connect it once, then record.');
+    if (notesDestination() === 'notion' && !hasNotionConfigured()) {
+        openNotionSetup('You chose Notion for voice notes. Connect it once, then record.');
         return;
     }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -1716,8 +1815,8 @@ modeButtons.voice_note?.addEventListener('click', async () => {
 const PROGRESS_STEPS = {
     morning: [[0, 'Reading your handwriting…'], [8000, 'Finding events and to-dos…'], [18000, 'Adding them to Google Calendar & Tasks…'], [35000, 'Almost there…']],
     evening: [[0, 'Reading your handwriting…'], [8000, 'Spotting finished tasks, expenses and health notes…'], [18000, 'Updating Google Tasks and your Sheets log…'], [35000, 'Almost there…']],
-    journal: [[0, 'Reading your journal pages…'], [12000, 'Saving them to Notion…'], [35000, 'Almost there…']],
-    voice_note: [[0, 'Uploading your voice note…'], [5000, 'Transcribing…'], [18000, 'Saving it to Notion…'], [35000, 'Almost there…']],
+    journal: [[0, 'Reading your journal pages…'], [12000, 'Saving them to {where}…'], [35000, 'Almost there…']],
+    voice_note: [[0, 'Uploading your voice note…'], [5000, 'Typing it up…'], [18000, 'Saving it to {where}…'], [35000, 'Almost there…']],
 };
 let progressTimers = [];
 const setLoaderText = (text) => { const el = $('dash-loader-text'); if (el) el.textContent = text; };
@@ -1726,8 +1825,9 @@ const startProgress = (mode) => {
     const loader = $('dash-loader');
     loader?.classList.remove('hidden');
     loader?.classList.add('flex');
+    const where = DESTINATION_LABELS[notesDestination()];
     (PROGRESS_STEPS[mode] || PROGRESS_STEPS.morning).forEach(([t, msg]) => {
-        progressTimers.push(setTimeout(() => setLoaderText(msg), t));
+        progressTimers.push(setTimeout(() => setLoaderText(msg.replace('{where}', where)), t));
     });
     progressTimers.push(setTimeout(() => setLoaderText('Taking longer than usual — keep this tab open.'), 60000));
 };
@@ -1765,10 +1865,11 @@ function startSync(modeInput, { tokenPromise = null } = {}) {
         return;
     }
 
-    if (needsNotion(mode) && userProfile && !hasNotionConfigured()) {
+    const dest = notesDestination();
+    if (needsNotion(mode, dest) && userProfile && !hasNotionConfigured()) {
         openNotionSetup(mode === 'journal'
-            ? 'Journal pages are saved to Notion. Connect it once — your photos stay on the dashboard.'
-            : 'Voice notes are saved to Notion. Connect it once, then try again.');
+            ? 'You chose Notion for journal pages. Connect it once — your photos stay on the dashboard. (Or switch to Google Drive in Settings.)'
+            : 'You chose Notion for voice notes. Connect it once, then try again.');
         return;
     }
 
@@ -1788,7 +1889,7 @@ function startSync(modeInput, { tokenPromise = null } = {}) {
 
     // B-02 / B-21: proactively refresh an expiring Google token inside the click gesture
     let pendingToken = tokenPromise;
-    if (!pendingToken && needsGoogleToken(mode) && !isTokenFresh(googleTokenExpiresAt)) {
+    if (!pendingToken && needsGoogleToken(mode, dest) && !isTokenFresh(googleTokenExpiresAt)) {
         pendingToken = reconnectGoogle();
         pendingToken.catch(() => { /* handled in runSync */ });
     }
@@ -1833,7 +1934,7 @@ async function runSync({ mode, images, clientRequestId, tokenPromise }) {
 
     try {
         let googleToken = null;
-        if (needsGoogleToken(mode)) {
+        if (needsGoogleToken(mode, notesDestination())) {
             if (tokenPromise) {
                 setLoaderText('Waiting for Google sign-in…');
                 try {
@@ -1931,32 +2032,72 @@ const reconnectAction = ({ mode, images, clientRequestId }) => ({
     },
 });
 
-const openLinksFor = (mode) => {
-    if (mode === 'morning') return [
-        { label: 'Open Calendar', href: 'https://calendar.google.com/calendar/r' },
-        { label: 'Open Tasks', href: 'https://tasks.google.com/' },
-    ];
-    if (mode === 'evening') return [
-        { label: 'Open Tasks', href: 'https://tasks.google.com/' },
-        { label: 'Open Calendar', href: 'https://calendar.google.com/calendar/r' },
-    ];
-    return [{ label: 'Open Notion', href: 'https://www.notion.so/' }];
+const SAFE_LINK = {
+    drive: /^https:\/\/drive\.google\.com\//,
+    notion: /^https:\/\/(www\.)?notion\.so\//,
+};
+const openLinksFor = (mode, data = {}) => {
+    const links = (data && typeof data.links === 'object' && data.links) || {};
+    const out = [];
+    if (mode === 'morning') {
+        out.push({ label: 'Open Calendar', href: 'https://calendar.google.com/calendar/r' }, { label: 'Open Tasks', href: 'https://tasks.google.com/' });
+    } else if (mode === 'evening') {
+        out.push({ label: 'Open Tasks', href: 'https://tasks.google.com/' });
+    }
+    if (typeof links.drive === 'string' && SAFE_LINK.drive.test(links.drive)) out.push({ label: 'Open in Drive', href: links.drive });
+    else if (typeof links.notion === 'string' && SAFE_LINK.notion.test(links.notion)) out.push({ label: 'Open in Notion', href: links.notion });
+    else if (mode === 'journal' || mode === 'voice_note') {
+        out.push(data.savedTo === 'drive'
+            ? { label: 'Open Drive', href: 'https://drive.google.com/drive/my-drive' }
+            : { label: 'Open Notion', href: 'https://www.notion.so/' });
+    }
+    return out.slice(0, 3);
+};
+
+const clean = (arr) => (Array.isArray(arr) ? arr.filter(x => typeof x === 'string' && x.trim()) : []);
+
+/** "9:00 AM Team call" from { title, start } (start is local, no offset). */
+const describeEvent = (ev) => {
+    const title = typeof ev?.title === 'string' ? ev.title : '';
+    const m = typeof ev?.start === 'string' && ev.start.match(/T(\d{2}):(\d{2})/);
+    if (!m) return title;
+    const h = Number(m[1]);
+    const time = `${((h + 11) % 12) + 1}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
+    return title ? `${time} ${title}` : time;
 };
 
 function renderSyncSuccess({ mode, data, pages }) {
-    const summary = summarizeCounts(data.counts);
-    const lines = [summary || data.text || 'Your page was synced.'];
-    if (summary && data.text && data.text !== summary) lines.push(data.text);
+    const summary = summarizeCounts(data.counts, { savedTo: data.savedTo });
+    // One summary line; the server's longer `text` would only repeat it (UX audit #4).
+    const lines = [summary || (data.duplicate ? 'This page was already synced.' : 'Nothing new to add from this page.')];
+    // Skip notes that only repeat the summary ("Brain dump saved to Google Drive.").
+    const said = (summary || '').toLowerCase();
+    lines.push(...clean(data.notes).filter(note => !said.includes(note.toLowerCase().replace(/[.!]+$/, ''))));
+    const items = data.items && typeof data.items === 'object' ? data.items : {};
+    const added = [
+        ...(Array.isArray(items.events) ? items.events.map(describeEvent) : []),
+        ...clean(items.tasks),
+    ].filter(Boolean).slice(0, 8);
+    const warnings = clean(data.warnings);
     const streak = userProfile ? computeDisplayStreak(userProfile) : 0;
-    const warnings = Array.isArray(data.warnings) ? data.warnings.filter(w => typeof w === 'string' && w.trim()) : [];
-    if (warnings.length) lines.push('Please review:');
+    const where = data.savedTo ? DESTINATION_LABELS[data.savedTo] : '';
+    const titles = {
+        morning: 'Added to Calendar and Tasks',
+        evening: 'Evening review saved',
+        journal: where ? `Saved to ${where}` : 'Journal saved',
+        voice_note: where ? `Voice note saved to ${where}` : 'Voice note saved',
+    };
+    lines.push(...warnings.map(w => `Please review: ${w}`));
     renderCard({
         tone: 'success',
-        title: data.duplicate ? `✓ Already synced — ${SYNC_MODES[mode].label}` : `✓ Synced — ${SYNC_MODES[mode].label}`,
+        title: data.duplicate ? `Already synced — ${SYNC_MODES[mode].label}` : (titles[mode] || 'Synced'),
         lines,
-        list: warnings,
-        note: [creditNoteForSuccess(data, { byok: usingByok() }), streak > 0 ? `🔥 Day ${streak} streak` : ''].filter(Boolean).join(' · '),
-        actions: openLinksFor(mode),
+        list: added,
+        note: [
+            creditNoteForSuccess(data, { byok: usingByok() }),
+            streak > 0 ? `Day ${streak} streak` : '',
+        ].filter(Boolean).join(' · '),
+        actions: openLinksFor(mode, data),
     });
     void pages;
 }
@@ -1982,6 +2123,7 @@ function renderSyncError({ info, data, mode, images, clientRequestId }) {
         actions.push(reconnectAction({ mode, images, clientRequestId }));
     } else if (info.errorCode === 'NOTION_NOT_CONFIGURED') {
         actions.push({ label: 'Connect Notion', primary: true, onClick: () => openNotionSetup('Connect Notion, then sync again — your photos stay on the dashboard.') });
+        actions.push({ label: 'Use Google Drive', onClick: async () => { if (await saveNotesDestination('drive', { quiet: true })) clearStatus(); } });
     } else if (info.errorCode === 'BYOK_INVALID') {
         actions.push({ label: 'Check AI key', primary: true, onClick: () => { restoreByokUi(); switchView('view-setup'); } });
         if (hasStoredByok() || hasSessionByok()) {
@@ -2006,7 +2148,7 @@ function renderSyncError({ info, data, mode, images, clientRequestId }) {
                 if (isSyncing) return;
                 // Retry keeps the same clientRequestId (C4) so the server can de-duplicate.
                 let tokenPromise = null;
-                if (needsGoogleToken(mode) && !isTokenFresh(googleTokenExpiresAt)) {
+                if (needsGoogleToken(mode, notesDestination()) && !isTokenFresh(googleTokenExpiresAt)) {
                     tokenPromise = reconnectGoogle();
                     tokenPromise.catch(() => { /* surfaced by runSync */ });
                 }
@@ -2183,7 +2325,6 @@ const selectUpgradePlan = (plan) => {
     });
     const nextButton = $('upgrade-next-plan');
     if (nextButton) nextButton.disabled = false;
-    nextButton?.classList.remove('opacity-50');
     const annualPrice = $('annual-option-price');
     const monthlyPrice = $('monthly-option-price');
     const sprintPrice = $('sprint-option-price');
@@ -2201,7 +2342,6 @@ const selectUpgradeOutcome = (outcome) => {
     });
     const nextButton = $('upgrade-next-outcome');
     if (nextButton) nextButton.disabled = false;
-    nextButton?.classList.remove('opacity-50');
 
     const recommendedPlan = recommendedPlanForOutcome(outcome);
     selectUpgradePlan(recommendedPlan);
@@ -2259,11 +2399,9 @@ function openUpgradeFlow({ outcome = null, context = '' } = {}) {
     const nextPlan = $('upgrade-next-plan');
     const contextMessage = $('upgrade-context-message');
     if (nextOutcome) nextOutcome.disabled = true;
-    nextOutcome?.classList.add('opacity-50');
     if (nextPlan) nextPlan.disabled = true;
-    nextPlan?.classList.add('opacity-50');
     if (contextMessage) {
-        contextMessage.textContent = context || 'Choose the result you want, then see the plan that fits.';
+        contextMessage.textContent = context || 'Pick what you need, then see the plan that fits.';
     }
     if (outcome) selectUpgradeOutcome(outcome);
     showUpgradeStep(1);
@@ -2320,6 +2458,7 @@ $('save-name-btn')?.addEventListener('click', async () => {
     }
     const btn = $('save-name-btn');
     btn.disabled = true;
+    showSettingsStatus('name-status', '');
     try {
         if (!auth.currentUser) throw new Error('signed out');
         const idToken = await auth.currentUser.getIdToken();
@@ -2334,7 +2473,7 @@ $('save-name-btn')?.addEventListener('click', async () => {
             return;
         }
         setGreeting(name);
-        switchView('view-dashboard');
+        showSettingsStatus('name-status', 'Saved.');
     } catch (e) {
         console.error('Failed to save name:', e);
         showFieldError('name-error', 'Couldn’t save your name. Check your connection and try again.');
@@ -2342,7 +2481,6 @@ $('save-name-btn')?.addEventListener('click', async () => {
         btn.disabled = false;
     }
 });
-$('cancel-name-btn')?.addEventListener('click', () => switchView('view-dashboard'));
 
 // --------------------------------------------------------------------------
 // REPORTS HEATMAP (B-22: user's time zone)
@@ -2350,7 +2488,8 @@ $('cancel-name-btn')?.addEventListener('click', () => switchView('view-dashboard
 const loadHeatmap = async (email) => {
     const heatmapGrid = $('heatmap-grid');
     if (!heatmapGrid) return;
-    heatmapGrid.innerHTML = '<div class="w-full flex justify-center py-4" role="status"><div class="spinner border-theme-text w-5 h-5" aria-hidden="true"></div><span class="sr-only">Loading heatmap</span></div>';
+    heatmapGrid.innerHTML = '<div class="w-full flex justify-center py-4" role="status"><div class="spinner" aria-hidden="true"></div><span class="sr-only">Loading your last 30 days</span></div>';
+    const setTotal = (id, value) => { const el = $(id); if (el) el.textContent = value; };
     try {
         const { db, collection, query, where, getDocs } = await loadDb();
         const thirtyDaysAgo = new Date();
@@ -2360,25 +2499,36 @@ const loadHeatmap = async (email) => {
             where("timestamp", ">=", thirtyDaysAgo)
         ));
         const dates = [];
+        // What the user actually got done in the last 30 days (UX audit #7).
+        const totals = { pages: 0, events: 0, tasks: 0, done: 0 };
         snap.forEach(d => {
             const data = d.data();
-            if (data.status === 'success' && data.timestamp) dates.push(data.timestamp.toDate());
+            if (data.status !== 'success' || !data.timestamp) return;
+            dates.push(data.timestamp.toDate());
+            const c = data.counts || {};
+            const n = (v) => (Number.isFinite(v) && v > 0 ? v : 0);
+            if (data.syncType !== 'voice_note') totals.pages += n(Number(data.imageCount)) || 1;
+            totals.events += n(c.events);
+            totals.tasks += n(c.tasks);
+            totals.done += n(c.completedTasks);
         });
+        setTotal('reports-pages', totals.pages);
+        setTotal('reports-events', totals.events);
+        setTotal('reports-tasks', totals.tasks);
+        setTotal('reports-done', totals.done);
         let timeZone = userProfile?.timeZone;
         try { timeZone = timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (_) { /* fallback below */ }
         const days = buildHeatmapDays(dates, timeZone || 'UTC');
         const boxes = days.map(({ date, count }) => {
-            let colorClass = 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
-            if (count === 1) colorClass = 'bg-emerald-200 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-800';
-            else if (count === 2) colorClass = 'bg-emerald-400 dark:bg-emerald-700/60 border-emerald-500 dark:border-emerald-600';
-            else if (count >= 3) colorClass = 'bg-emerald-600 dark:bg-emerald-500 border-emerald-700 dark:border-emerald-400';
+            const level = count >= 3 ? 3 : count;
             const label = `${date}: ${count} sync${count === 1 ? '' : 's'}`;
-            return `<div role="img" aria-label="${label}" title="${label}" class="w-5 h-5 sm:w-6 sm:h-6 rounded border ${colorClass}"></div>`;
+            return `<div role="img" aria-label="${label}" title="${label}" class="heat-cell${level ? ` heat-cell-${level}` : ''}"></div>`;
         });
         heatmapGrid.innerHTML = boxes.join('');
     } catch (err) {
         console.error(err);
-        heatmapGrid.innerHTML = '<div class="text-xs text-red-600 dark:text-red-400 w-full text-center">Failed to load heatmap</div>';
+        ['reports-pages', 'reports-events', 'reports-tasks', 'reports-done'].forEach(id => setTotal(id, '—'));
+        heatmapGrid.innerHTML = '<div class="text-sm text-danger w-full">Couldn’t load your last 30 days. Check your connection and try again.</div>';
     }
 };
 
@@ -2438,12 +2588,12 @@ const collectPhoneNumber = () => {
     });
 };
 
-const showPaymentResult = ({ icon, title, text }) => {
+const showPaymentResult = ({ iconName = 'circle-check', title, text }) => {
     showPricingModal();
     [1, 2, 3].forEach(n => $(`upgrade-step-${n}`)?.classList.add('hidden'));
     const panel = $('payment-result');
     panel?.classList.remove('hidden');
-    $('payment-result-icon').textContent = icon;
+    $('payment-result-icon').innerHTML = `<span class="mode-icon w-14 h-14 rounded-2xl bg-signal-soft text-signal-ink">${icon(iconName, 'icon-lg')}</span>`;
     $('payment-result-title').textContent = title;
     $('payment-result-text').textContent = text || '';
     setTimeout(() => $('payment-result-close')?.focus(), 0);
@@ -2463,10 +2613,10 @@ function checkPendingPayment(profile) {
     pendingPayment = null;
     const total = creditTotal(profile);
     if (kind === 'booster') {
-        showPaymentResult({ icon: '🪙', title: `Credits added · ${total} available`, text: 'Thanks! Your booster credits are ready to use.' });
+        showPaymentResult({ iconName: 'coins', title: `Credits added · ${total} available`, text: 'Thanks! Your booster credits are ready to use.' });
     } else {
         const label = profile.tier === 'pro' ? 'Pro' : profile.tier === 'standard' ? 'Standard' : 'Your plan';
-        showPaymentResult({ icon: '🎉', title: `${label} active · ${total} credits`, text: 'Thanks! Everything in your plan is unlocked now.' });
+        showPaymentResult({ iconName: 'circle-check', title: `${label} active · ${total} credits`, text: 'Thanks! Everything in your plan is unlocked now.' });
     }
 }
 
@@ -2527,17 +2677,17 @@ const handlePaymentClick = async (e, basePrice, kind) => {
         if (result?.error) {
             pendingPayment = null;
             showPaymentResult({
-                icon: '↩️',
+                iconName: 'rotate-ccw',
                 title: 'Payment not completed',
                 text: result.error.message ? `${result.error.message} You have not been charged.` : 'You have not been charged. You can try again any time.',
             });
         } else if (result?.paymentDetails || !result?.redirect) {
             pendingPayment.confirmedByGateway = true;
-            showPaymentResult({ icon: '⏳', title: 'Payment received', text: 'Activating your purchase… this usually takes a few seconds.' });
+            showPaymentResult({ iconName: 'hourglass', title: 'Payment received', text: 'Activating your purchase… this usually takes a few seconds.' });
             pendingPayment.timer = setTimeout(() => {
                 if (!pendingPayment) return;
                 pendingPayment = null;
-                showPaymentResult({ icon: '✅', title: 'Payment received', text: 'Your plan will update shortly. If it hasn’t in a few minutes, reload the page or contact support.' });
+                showPaymentResult({ iconName: 'circle-check', title: 'Payment received', text: 'Your plan will update shortly. If it hasn’t in a few minutes, reload the page or contact support.' });
             }, 60000);
             if (userProfile) checkPendingPayment(userProfile);
         }
@@ -2568,11 +2718,11 @@ $('checkout-selected-plan-btn')?.addEventListener('click', (e) => {
 // HISTORY
 // --------------------------------------------------------------------------
 const HISTORY_TYPES = {
-    morning: ['☀️', 'Morning plan'],
-    evening: ['🌙', 'Evening review'],
-    night: ['🌙', 'Evening review'],
-    journal: ['📖', 'Journal'],
-    voice_note: ['🎤', 'Voice note'],
+    morning: ['sun', 'Morning plan'],
+    evening: ['moon', 'Evening review'],
+    night: ['moon', 'Evening review'],
+    journal: ['book-open', 'Journal'],
+    voice_note: ['mic', 'Voice note'],
 };
 const escapeHTML = str => String(str ?? '').replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag]));
 
@@ -2580,7 +2730,7 @@ const loadSyncHistory = async (email) => {
     const historyList = $('history-list');
     if (!historyList) return;
     try {
-        historyList.innerHTML = '<div class="flex justify-center py-4" role="status"><div class="spinner border-theme-text w-5 h-5" aria-hidden="true"></div><span class="sr-only">Loading history</span></div>';
+        historyList.innerHTML = '<div class="flex justify-center py-6" role="status"><div class="spinner" aria-hidden="true"></div><span class="sr-only">Loading history</span></div>';
         const { db, collection, query, orderBy, limit, getDocs } = await loadDb();
         // Never leave an endless spinner: give up after 15 s and offer a retry.
         const querySnapshot = await Promise.race([
@@ -2593,7 +2743,7 @@ const loadSyncHistory = async (email) => {
         ]);
 
         if (querySnapshot.empty) {
-            historyList.innerHTML = '<div class="text-center text-sm text-theme-muted py-6">No syncs yet. Sync a planner page to see results here.</div>';
+            historyList.innerHTML = '<div class="card p-6 text-center text-muted">No syncs yet. Your synced pages will show up here.</div>';
             return;
         }
 
@@ -2602,28 +2752,29 @@ const loadSyncHistory = async (email) => {
             const data = doc.data();
             const d = data.timestamp ? data.timestamp.toDate() : new Date();
             const timeString = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-            const [typeIcon, typeLabel] = HISTORY_TYPES[data.syncType] || ['📄', 'Sync'];
+            const [typeIcon, typeLabel] = HISTORY_TYPES[data.syncType] || ['file-text', 'Sync'];
             // C11: interrupted syncs (failed + failureReason 'interrupted') read "Interrupted — credit refunded".
             const { state, message } = describeHistoryEntry(data);
             const statusColor = {
-                success: 'text-emerald-700 dark:text-emerald-400',
-                pending: 'text-amber-700 dark:text-amber-300',
-                interrupted: 'text-amber-700 dark:text-amber-300',
-                failed: 'text-red-600 dark:text-red-400',
+                success: 'text-signal-ink',
+                pending: 'text-warning',
+                interrupted: 'text-warning',
+                failed: 'text-danger',
             }[state];
-            const statusIcon = { success: '✓', pending: '⏳', interrupted: '↩️', failed: '⚠️' }[state];
-            const unit = data.syncType === 'voice_note' ? 'clip' : 'pg';
+            const statusIcon = { success: 'circle-check', pending: 'hourglass', interrupted: 'rotate-ccw', failed: 'triangle-alert' }[state];
+            const count = Number(data.imageCount) || 1;
+            const unit = data.syncType === 'voice_note' ? 'recording' : (count === 1 ? 'page' : 'pages');
 
             html += `
-                <div class="p-3 border flex justify-between items-center rounded-xl border-theme-border mb-2 bg-theme-bg/50">
-                    <div>
-                        <span class="font-medium text-theme-text text-sm flex items-center gap-2 mb-1">
-                            <span aria-hidden="true">${typeIcon}</span> <span>${escapeHTML(typeLabel)}</span>
-                            <span class="text-[10px] text-theme-muted font-normal bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full">${Number(data.imageCount) || 1} ${unit}</span>
-                        </span>
-                        <p class="text-xs ${statusColor} font-medium leading-snug"><span aria-hidden="true">${statusIcon}</span> ${escapeHTML(message)}</p>
+                <div class="card p-4 flex justify-between items-start gap-3">
+                    <div class="flex gap-3 min-w-0">
+                        <span class="mode-icon bg-bg" aria-hidden="true">${icon(typeIcon)}</span>
+                        <div class="min-w-0">
+                            <p class="font-semibold text-ink">${escapeHTML(typeLabel)} <span class="text-sm font-normal text-muted">· ${count} ${unit}</span></p>
+                            <p class="text-sm ${statusColor} flex items-start gap-1.5 mt-0.5">${icon(statusIcon, 'icon-sm mt-0.5')}<span>${escapeHTML(message)}</span></p>
+                        </div>
                     </div>
-                    <span class="text-[10px] text-theme-muted ml-2 text-right">${escapeHTML(timeString)}</span>
+                    <span class="text-xs text-muted text-right shrink-0">${escapeHTML(timeString)}</span>
                 </div>
             `;
         });
@@ -2632,8 +2783,8 @@ const loadSyncHistory = async (email) => {
         console.error("Error loading history:", e);
         historyList.innerHTML = `
             <div class="text-center py-6 space-y-3" role="alert">
-                <p class="text-sm text-red-600 dark:text-red-400">Couldn’t load your sync history. Check your connection and try again.</p>
-                <button type="button" id="history-retry-btn" class="min-h-[44px] px-4 rounded-xl border border-theme-border text-sm font-semibold text-theme-text hover:bg-theme-border/30">Retry</button>
+                <p class="text-sm text-danger">Couldn’t load your sync history. Check your connection and try again.</p>
+                <button type="button" id="history-retry-btn" class="btn btn-secondary">Retry</button>
             </div>`;
         $('history-retry-btn')?.addEventListener('click', () => loadSyncHistory(email));
     }

@@ -10,7 +10,11 @@ test.describe('Dashboard UI Smoke Checks', () => {
         // Wait until app.js has applied the initial (signed-out) auth state, otherwise it
         // can switch back to the login view after we open the dashboard shell.
         await page.waitForFunction(() => document.documentElement.dataset.authReady === 'true');
-        await page.evaluate(() => window.AppHelpers.switchView('view-dashboard'));
+        await page.evaluate(() => {
+            // The menu button and plan chip only show for a signed-in user.
+            document.body.dataset.signedIn = 'true';
+            window.AppHelpers.switchView('view-dashboard');
+        });
         await expect(page.locator('#view-dashboard')).toBeVisible();
     });
 

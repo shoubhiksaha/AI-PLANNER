@@ -1,6 +1,7 @@
 {
     "short_name": "AI Planner",
-    "name": "AI Agenda Planner",
+    "name": "AI Planner",
+    "description": "Photograph a page of your paper planner or journal and sync it to Google Calendar, Tasks, Drive or Notion.",
     "icons": [
         {
             "src": "/icon-192.png",
@@ -19,11 +20,17 @@
             "type": "image/png",
             "sizes": "512x512",
             "purpose": "maskable"
+        },
+        {
+            "src": "/brand/app-icon.svg",
+            "type": "image/svg+xml",
+            "sizes": "any",
+            "purpose": "any"
         }
     ],
     "start_url": "/",
     "scope": "/",
     "display": "standalone",
-    "theme_color": "#f8fafc",
-    "background_color": "#f8fafc"
+    "theme_color": "#0A0A0A",
+    "background_color": "#0A0A0A"
 }

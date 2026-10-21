@@ -1,4 +1,4 @@
-/** Evening sync → completed Google Tasks + Sheets (expenses, health) + Notion brain dump. */
+/** Evening sync → completed Google Tasks + Sheets (expenses, health) + brain dump (Google Drive or Notion). */
 const { FieldValue } = require('firebase-admin/firestore');
 const { logger } = require('firebase-functions/logger');
 const { ERROR_CODES: E } = require('../../services/requestGuard');
@@ -15,6 +15,8 @@ const {
     syncBrainDumpToNotion,
     normalizeBrainDumpText,
 } = require('../../services/notion');
+const { folderUrl } = require('../../services/googleDrive');
+const { saveBrainDumpToDrive } = require('./driveNotes');
 const { todayInTimeZone, extensionForMime, redactSensitive } = require('../../utils');
 const { SyncError } = require('../errors');
 
@@ -32,11 +34,26 @@ function appendEveningNotionOutcomeMessage(successMessages, outcome) {
 }
 
 /**
+ * Plain-language note (for the result card) about a brain-dump outcome.
+ * @param {'drive'|'notion'} destination
+ */
+function brainDumpNote(destination, outcome) {
+    const where = destination === 'drive' ? 'Google Drive' : 'Notion';
+    if (outcome.ok) {
+        return outcome.status === 'duplicate'
+            ? `Brain dump for this date was already saved to ${where}.`
+            : `Brain dump saved to ${where}.`;
+    }
+    return `Brain dump not saved to ${where}: ${outcome.reason}`;
+}
+
+/**
  * Refund policy: the credit is kept when at least one destination received
  * data; the caller refunds when `dataSynced` is false.
  */
 async function runEveningSync(ctx) {
     const { mode, requestId, uid, parsedImages, byokConfig, aiOptions, userData, preData, userRef, timeZone, warnings, google, auth, decryptedNotionKey } = ctx;
+    const notesDestination = ctx.notesDestination || 'notion';
     const tasks = google.tasks({ version: 'v1', auth });
     const sheets = google.sheets({ version: 'v4', auth });
     logger.info("Parsing planner images for evening sync...", { requestId, uid });
@@ -52,9 +69,13 @@ async function runEveningSync(ctx) {
         hasBrainDumpText: !!normalizeBrainDumpText(plannerData.brainDump),
         expenseCount: plannerData.expenses.length,
         completedTodoCount: plannerData.todos.length,
+        notesDestination,
     });
 
+    // successMessages build the stored history text; notes are the short
+    // sentences the client shows next to the counts.
     const successMessages = [];
+    const notes = [];
     const targetDate = /^\d{4}-\d{2}-\d{2}$/.test(String(plannerData.date)) ? plannerData.date : todayInTimeZone(timeZone);
 
     const createAndStoreSpreadsheet = async () => {
@@ -92,8 +113,12 @@ async function runEveningSync(ctx) {
         { name: 'Sheets', promise: sheetsBranch() },
     ];
 
-    // Handle Notion Branch
-    if (preData.notionKey && preData.notionDbId) {
+    // Brain dump: Google Drive, or Notion when that is the user's choice and it is connected.
+    let brainDumpBranchName = null;
+    if (notesDestination === 'drive') {
+        brainDumpBranchName = 'Drive';
+        branches.push({ name: 'Drive', promise: saveBrainDumpToDrive(ctx, { plannerData, date: targetDate }) });
+    } else if (preData.notionKey && preData.notionDbId) {
         if (decryptedNotionKey) {
             const brainDumpBranch = async () => {
                 const brainDumpText = normalizeBrainDumpText(plannerData.brainDump);
@@ -112,12 +137,15 @@ async function runEveningSync(ctx) {
                 }
                 return syncBrainDumpToNotion({ ...plannerData, brainDump: brainDumpText }, decryptedNotionKey, preData.notionDbId, fileId);
             };
+            brainDumpBranchName = 'Notion';
             branches.push({ name: 'Notion', promise: brainDumpBranch() });
         } else {
             successMessages.push("(Skipped Notion - Failed to decrypt key).");
+            warnings.push("Your Notion connection needs to be set up again in Settings, so the brain dump wasn't saved.");
         }
     } else {
         successMessages.push("(Skipped Notion - Keys missing).");
+        notes.push("Notion isn't connected, so the brain dump wasn't saved.");
     }
 
     const results = await Promise.allSettled(branches.map(b => b.promise));
@@ -127,7 +155,7 @@ async function runEveningSync(ctx) {
         const name = branches[i].name;
         byName[name] = result;
         if (result.status === 'rejected') {
-            failedBranches.push(name);
+            failedBranches.push(name === 'Drive' ? 'Google Drive' : name);
             logger.error(`${name} Sync Failed`, { error: redactSensitive(result.reason?.message || result.reason), requestId, uid });
         }
     });
@@ -139,7 +167,10 @@ async function runEveningSync(ctx) {
     let addedHealth = 0;
     if (byName.Sheets.status === 'fulfilled') {
         const sheetResult = byName.Sheets.value;
-        if (sheetResult.created) successMessages.push("(Created new 'AI Planner Data' Sheet).");
+        if (sheetResult.created) {
+            successMessages.push("(Created new 'AI Planner Data' Sheet).");
+            notes.push('Created your AI Planner Data sheet in Google Sheets.');
+        }
         if (sheetResult.expenses.status === 'fulfilled') addedExpenses = sheetResult.expenses.value;
         else {
             failedBranches.push('Expenses');
@@ -154,34 +185,59 @@ async function runEveningSync(ctx) {
     if (addedExpenses > 0) successMessages.push(`Added ${addedExpenses} expenses to Sheet.`);
     if (addedHealth > 0) successMessages.push(`Logged Health & Wellness.`);
 
-    let notionCreated = false;
-    if (byName.Notion) {
-        if (byName.Notion.status === 'rejected') {
-            const detail = byName.Notion.reason?.message || String(byName.Notion.reason);
-            successMessages.push(`(Notion not saved: ${detail})`);
+    // Brain-dump outcome (Drive or Notion).
+    let brainDumpSaved = false;
+    let savedTo;
+    let links;
+    const brainDump = brainDumpBranchName ? byName[brainDumpBranchName] : null;
+    const destinationKey = brainDumpBranchName === 'Drive' ? 'drive' : 'notion';
+    if (brainDump) {
+        if (brainDump.status === 'rejected') {
+            const detail = brainDump.reason?.message || String(brainDump.reason);
+            successMessages.push(`(${brainDumpBranchName === 'Drive' ? 'Google Drive' : 'Notion'} not saved: ${detail})`);
         } else {
-            appendEveningNotionOutcomeMessage(successMessages, byName.Notion.value);
-            notionCreated = !!(byName.Notion.value && byName.Notion.value.ok && byName.Notion.value.status === 'created');
+            const outcome = brainDump.value;
+            if (destinationKey === 'notion') appendEveningNotionOutcomeMessage(successMessages, outcome);
+            else if (!outcome.empty) successMessages.push(brainDumpNote('drive', outcome));
+            if (outcome.ok) notes.push(brainDumpNote(destinationKey, outcome));
+            else if (!outcome.empty) warnings.push(brainDumpNote(destinationKey, outcome));
+            brainDumpSaved = !!(outcome && outcome.ok && outcome.status === 'created');
+            if (outcome && outcome.ok) {
+                savedTo = destinationKey;
+                if (destinationKey === 'drive' && outcome.folderId) links = { drive: folderUrl(outcome.folderId) };
+            }
         }
     }
 
     const counts = { completedTasks: updatedTasks, expenses: addedExpenses, health: addedHealth > 0 ? 1 : 0 };
-    const dataSynced = updatedTasks > 0 || addedExpenses > 0 || addedHealth > 0 || notionCreated;
+    if (brainDumpSaved) counts.brainDump = 1;
+    const dataSynced = updatedTasks > 0 || addedExpenses > 0 || addedHealth > 0 || brainDumpSaved;
 
     // Refund policy: the credit is kept when at least one destination received
     // data; when nothing synced the caller refunds it.
     let partial = false;
     if (failedBranches.length > 0) {
         partial = true;
-        successMessages.push(dataSynced
+        const failure = dataSynced
             ? `⚠️ Could not sync: ${failedBranches.join(', ')}. Everything else was saved.`
-            : `⚠️ Could not sync: ${failedBranches.join(', ')}. Your credit was refunded — please try again.`);
+            : `⚠️ Could not sync: ${failedBranches.join(', ')}. Your credit was refunded — please try again.`;
+        successMessages.push(failure);
+        warnings.push(failure.replace(/^⚠️\s*/, ''));
     }
 
     const msg = successMessages.length === 0
         ? "Night Sync output: No items found to sync."
         : "Night Sync Complete: " + successMessages.join(" ");
-    return { msg, counts, dataSynced, extractionOk: true, partial };
+    return {
+        msg,
+        counts,
+        dataSynced,
+        extractionOk: true,
+        partial,
+        notes,
+        ...(savedTo ? { savedTo } : {}),
+        ...(links ? { links } : {}),
+    };
 }
 
-module.exports = { runEveningSync, appendEveningNotionOutcomeMessage };
+module.exports = { runEveningSync, appendEveningNotionOutcomeMessage, brainDumpNote };

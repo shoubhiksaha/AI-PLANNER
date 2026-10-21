@@ -27,6 +27,8 @@ const {
     pageLimitFor,
     needsGoogleToken,
     needsNotion,
+    resolveNotesDestination,
+    friendlySyncDate,
     BYOK_SESSION_KEY,
     readByokSession,
     writeByokSession,
@@ -276,53 +278,54 @@ describe('applyTheme', () => {
 
     beforeEach(() => {
         document.body.innerHTML = `
-            <button id="theme-btn"></button>
-            <button class="theme-item" data-theme="light">☀️</button>
-            <button class="theme-item" data-theme="dark">🌙</button>
-            <button class="theme-item" data-theme="oled">🖤</button>
-            <button class="theme-item" data-theme="auto">⚙️</button>
+            <button id="theme-btn"><svg><use href="#i-monitor"></use></svg></button>
+            <button class="theme-item" data-theme="auto">Match device</button>
+            <button class="theme-item" data-theme="light">Light</button>
+            <button class="theme-item" data-theme="dark">Dark</button>
         `;
         html = document.documentElement;
+        html.classList.remove('dark-mode', 'oled-mode');
         btn = document.getElementById('theme-btn');
         items = document.querySelectorAll('.theme-item');
     });
+
+    const iconOf = () => btn.querySelector('use').getAttribute('href');
 
     test('applies light mode (removes all dark classes)', () => {
         html.classList.add('dark-mode'); // start in dark
         applyTheme('light', html, btn, items);
         expect(html.classList.contains('dark-mode')).toBe(false);
         expect(html.classList.contains('oled-mode')).toBe(false);
-        expect(btn.textContent).toBe('☀️');
+        expect(iconOf()).toBe('#i-sun');
+        expect(btn.getAttribute('aria-label')).toBe('Theme: Light. Change theme');
     });
 
     test('applies dark mode', () => {
         applyTheme('dark', html, btn, items);
         expect(html.classList.contains('dark-mode')).toBe(true);
-        expect(html.classList.contains('oled-mode')).toBe(false);
-        expect(btn.textContent).toBe('🌙');
+        expect(iconOf()).toBe('#i-moon');
     });
 
-    test('applies OLED mode', () => {
+    test('the retired OLED choice maps to the near-black dark theme', () => {
         applyTheme('oled', html, btn, items);
-        expect(html.classList.contains('oled-mode')).toBe(true);
-        expect(html.classList.contains('dark-mode')).toBe(false);
-        expect(btn.textContent).toBe('🖤');
+        expect(html.classList.contains('dark-mode')).toBe(true);
+        expect(html.classList.contains('oled-mode')).toBe(false);
+        expect([...items].find(el => el.classList.contains('selected')).dataset.theme).toBe('dark');
     });
 
     test('auto mode resolves to dark when system prefers dark', () => {
         applyTheme('auto', html, btn, items, true);
         expect(html.classList.contains('dark-mode')).toBe(true);
-        expect(btn.textContent).toBe('⚙️');
+        expect(iconOf()).toBe('#i-monitor');
     });
 
     test('auto mode resolves to light when system prefers light', () => {
         applyTheme('auto', html, btn, items, false);
         expect(html.classList.contains('dark-mode')).toBe(false);
-        expect(html.classList.contains('oled-mode')).toBe(false);
-        expect(btn.textContent).toBe('⚙️');
+        expect(iconOf()).toBe('#i-monitor');
     });
 
-    test('B-30: highlights the selected theme item by data-theme (emoji labels)', () => {
+    test('B-30: highlights the selected theme item by data-theme', () => {
         applyTheme('dark', html, btn, items);
         const selected = [...items].filter(el => el.classList.contains('selected'));
         expect(selected).toHaveLength(1);
@@ -333,7 +336,6 @@ describe('applyTheme', () => {
     test('B-30: null/unknown mode is treated as auto', () => {
         applyTheme(null, html, btn, items, true);
         expect(html.classList.contains('dark-mode')).toBe(true);
-        expect(btn.textContent).toBe('⚙️');
         expect([...items].find(el => el.classList.contains('selected')).dataset.theme).toBe('auto');
     });
 
@@ -487,14 +489,43 @@ describe('sync modes and plan limits (B-05, UX 3)', () => {
         expect(pageLimitFor('free', 'journal')).toBe(1);
         expect(pageLimitFor('pro', 'evening')).toBe(5);
     });
-    test('Google token / Notion requirements per mode', () => {
-        expect(needsGoogleToken('morning')).toBe(true);
-        expect(needsGoogleToken('night')).toBe(true);
-        expect(needsGoogleToken('journal')).toBe(false);
-        expect(needsGoogleToken('voice_note')).toBe(false);
-        expect(needsNotion('journal')).toBe(true);
-        expect(needsNotion('voice_note')).toBe(true);
-        expect(needsNotion('morning')).toBe(false);
+    test('Google token / Notion requirements per mode and notes destination', () => {
+        expect(needsGoogleToken('morning', 'notion')).toBe(true);
+        expect(needsGoogleToken('night', 'notion')).toBe(true);
+        expect(needsGoogleToken('journal', 'drive')).toBe(true);
+        expect(needsGoogleToken('voice_note', 'drive')).toBe(true);
+        expect(needsGoogleToken('journal', 'notion')).toBe(false);
+        expect(needsGoogleToken('voice_note', 'notion')).toBe(false);
+        expect(needsNotion('journal', 'notion')).toBe(true);
+        expect(needsNotion('voice_note', 'notion')).toBe(true);
+        expect(needsNotion('journal', 'drive')).toBe(false);
+        expect(needsNotion('morning', 'notion')).toBe(false);
+    });
+
+    test('notes destination: explicit choice wins, else Notion users keep Notion, else Drive', () => {
+        expect(resolveNotesDestination({ notesDestination: 'drive', notionKey: 'k', notionDbId: 'd' })).toBe('drive');
+        expect(resolveNotesDestination({ notesDestination: 'notion' })).toBe('notion');
+        expect(resolveNotesDestination({ notionKey: 'k', notionDbId: 'd' })).toBe('notion');
+        expect(resolveNotesDestination({ notionKey: 'k' })).toBe('drive');
+        expect(resolveNotesDestination(null)).toBe('drive');
+        expect(resolveNotesDestination({ notesDestination: 'dropbox' })).toBe('drive');
+    });
+
+    test('summary names where notes were saved', () => {
+        expect(summarizeCounts({ journalPages: 2 }, { savedTo: 'drive' })).toBe('2 journal pages saved to Google Drive');
+        expect(summarizeCounts({ journalPages: 1 }, { savedTo: 'notion' })).toBe('1 journal page saved to Notion');
+        expect(summarizeCounts({ completedTasks: 1, brainDump: 1 }, { savedTo: 'drive' })).toBe('1 task completed · brain dump saved to Google Drive');
+        expect(summarizeCounts({ voiceNotes: 1 }, { savedTo: 'drive' })).toBe('voice note saved to Google Drive');
+    });
+
+    test('friendly last-sync dates', () => {
+        expect(friendlySyncDate('2026-10-21', '2026-10-21')).toBe('today');
+        expect(friendlySyncDate('2026-10-20', '2026-10-21')).toBe('yesterday');
+        expect(friendlySyncDate('2026-03-01', '2026-03-02')).toBe('yesterday');
+        expect(friendlySyncDate('2026-10-02', '2026-10-21')).toBe('on 2 Oct');
+        expect(friendlySyncDate('2025-12-30', '2026-01-02')).toBe('on 30 Dec 2025');
+        expect(friendlySyncDate('', '2026-10-21')).toBe('');
+        expect(friendlySyncDate('not-a-date', '2026-10-21')).toBe('');
     });
 });
 

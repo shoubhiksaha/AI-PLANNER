@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<title>c1b tick on a ruled line: the loop-to-tick written on a page line</title>
+<path fill="none" stroke="#0A0A0A" stroke-width="40" stroke-linecap="round" stroke-linejoin="miter" d="M 44 320 C 124 294 232 212 232 142 C 232 98 204 72 172 72 C 136 72 112 102 112 146 C 112 212 170 288 240 376 L 476 100"/>
+<path fill="none" stroke="#0A0A0A" stroke-width="40" stroke-linecap="butt" d="M 36 460 H 476"/>
+</svg>
