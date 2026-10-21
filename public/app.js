@@ -58,7 +58,8 @@ const {
     creditNoteForSuccess,
     summarizeCounts,
     SYNC_MODES,
-    defaultSyncModeForHour,
+    suggestSyncMode,
+    modesSyncedOn,
     normalizeSyncMode,
     maxUploadForTier,
     pageLimitFor,
@@ -114,6 +115,7 @@ let isPaying = false;
 let isRecording = false;
 let lastAttempt = null;            // { id, mode, sig } — reuse clientRequestId for retries of the same pages
 let lastVoicePayload = null;       // audio kept for Retry after a failed voice sync
+let syncedToday = { date: null, modes: [] }; // modes synced successfully today (device date), for the suggested sync
 let pendingPayment = null;         // { kind, before, timer }
 
 const GOOGLE_TOKEN_DEFAULT_TTL_S = 55 * 60;
@@ -796,6 +798,7 @@ function resetAppState() {
     filesAsBase64 = [];
     lastAttempt = null;
     lastVoicePayload = null;
+    syncedToday = { date: null, modes: [] };
     setGoogleToken(null);
     stopRecording({ discard: true });
     if (pendingPayment?.timer) clearTimeout(pendingPayment.timer);
@@ -1648,7 +1651,22 @@ const modeButtons = {
     journal: $('btn-journal'),
     voice_note: $('btn-voice-note'),
 };
-const currentDefaultMode = () => defaultSyncModeForHour(new Date().getHours());
+const localToday = () => new Date().toLocaleDateString('en-CA');
+const markSyncedToday = (mode) => {
+    const today = localToday();
+    const modes = syncedToday.date === today ? syncedToday.modes : [];
+    syncedToday = { date: today, modes: [...new Set([...modes, normalizeSyncMode(mode)])] };
+};
+/** The mode the big "Sync page" button suggests: time of day plus what's already synced today. */
+const currentDefaultMode = () => suggestSyncMode({
+    hour: new Date().getHours(),
+    syncedToday: syncedToday.date === localToday() ? syncedToday.modes : [],
+});
+const PRIMARY_SUB = {
+    morning: () => 'Morning plan → Calendar and Tasks',
+    evening: () => 'Evening review → Tasks and Sheets',
+    journal: () => `Journal → ${DESTINATION_LABELS[notesDestination()]}`,
+};
 
 function updateDashButtons() {
     const hasImages = filesAsBase64.length > 0;
@@ -1665,9 +1683,7 @@ function updateDashButtons() {
     const defaultMode = currentDefaultMode();
     const sub = $('primary-sync-sub');
     if (sub) {
-        sub.textContent = defaultMode === 'morning'
-            ? 'Morning plan → Calendar and Tasks'
-            : 'Evening review → Tasks and Sheets';
+        sub.textContent = (PRIMARY_SUB[defaultMode] || PRIMARY_SUB.morning)();
     }
 
     const hint = $('sync-hint');
@@ -1982,6 +1998,7 @@ async function runSync({ mode, images, clientRequestId, tokenPromise }) {
         const { res, data, error } = outcome;
         if (res && res.ok && data) {
             renderSyncSuccess({ mode, data, pages: images.length });
+            markSyncedToday(mode);
             if (isVoice) lastVoicePayload = null;
             else if (imagesSignature(filesAsBase64) === imagesSignature(images)) {
                 filesAsBase64 = []; // B-16: only clear the photos after a success that used them
@@ -2741,6 +2758,15 @@ const loadSyncHistory = async (email) => {
             )),
             new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('History took too long to load.'), { code: 'timeout' })), 15000)),
         ]);
+
+        // The newest entries also tell the dashboard what was already synced today.
+        const entries = [];
+        querySnapshot.forEach((d) => {
+            const v = d.data();
+            entries.push({ syncType: v.syncType, status: v.status, timestamp: v.timestamp ? v.timestamp.toDate() : null });
+        });
+        syncedToday = { date: localToday(), modes: modesSyncedOn(entries, localToday()) };
+        if (!isSyncing) updateDashButtons();
 
         if (querySnapshot.empty) {
             historyList.innerHTML = '<div class="card p-6 text-center text-muted">No syncs yet. Your synced pages will show up here.</div>';

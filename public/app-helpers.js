@@ -348,8 +348,39 @@
         voice_note: { label: 'Voice note', icon: 'mic', description: 'Record a thought; it’s typed up and saved. Pro.' },
     };
 
-    /** Default mode for the primary "Sync page" button by local hour. */
-    exports.defaultSyncModeForHour = (hour) => (Number(hour) < 15 ? 'morning' : 'evening');
+    /**
+     * Mode suggested by the primary "Sync page" button, from the local hour and the
+     * modes already synced today (Hick's law: one sensible default, the rest one tap away).
+     * - Evening review already done today → the day is closed: Journal.
+     * - After midnight until 4 AM → still the evening before: Evening review.
+     * - From 6 PM → Evening review.
+     * - Morning plan not done yet → Morning plan (until 6 PM, so a late plan still fits).
+     * - Morning plan done → Evening review from noon; before noon, Morning plan again
+     *   (adding more of today's plans; duplicate prevention skips repeats).
+     */
+    exports.suggestSyncMode = ({ hour, syncedToday = [] } = {}) => {
+        const h = Number(hour);
+        const done = new Set((syncedToday || []).map(m => exports.normalizeSyncMode(m)));
+        if (done.has('evening')) return 'journal';
+        if (h < 4 || h >= 18) return 'evening';
+        if (!done.has('morning')) return 'morning';
+        return h >= 12 ? 'evening' : 'morning';
+    };
+
+    /**
+     * Modes synced successfully on `todayStr` (YYYY-MM-DD, the user's local date), from
+     * sync-history entries { syncType, status, timestamp: Date }.
+     */
+    exports.modesSyncedOn = (entries, todayStr, timeZone) => {
+        const out = new Set();
+        (entries || []).forEach((e) => {
+            if (!e || e.status !== 'success' || !(e.timestamp instanceof Date)) return;
+            let day;
+            try { day = e.timestamp.toLocaleDateString('en-CA', timeZone ? { timeZone } : undefined); } catch (_) { day = e.timestamp.toLocaleDateString('en-CA'); }
+            if (day === todayStr) out.add(exports.normalizeSyncMode(e.syncType));
+        });
+        return [...out];
+    };
 
     exports.normalizeSyncMode = (mode) => (mode === 'night' ? 'evening' : mode);
 
