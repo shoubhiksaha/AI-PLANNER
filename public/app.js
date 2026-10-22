@@ -58,7 +58,6 @@ const {
     creditNoteForSuccess,
     summarizeCounts,
     SYNC_MODES,
-    defaultSyncModeForHour,
     normalizeSyncMode,
     maxUploadForTier,
     pageLimitFor,
@@ -1541,14 +1540,12 @@ dropZone.addEventListener('drop', (e) => handleFiles(Array.from(e.dataTransfer?.
 // --------------------------------------------------------------------------
 // DASHBOARD: buttons (UX 3, 8, 9)
 // --------------------------------------------------------------------------
-const primaryBtn = $('btn-sync-primary');
 const modeButtons = {
     morning: $('btn-morning'),
     evening: $('btn-night'),
     journal: $('btn-journal'),
     voice_note: $('btn-voice-note'),
 };
-const currentDefaultMode = () => defaultSyncModeForHour(new Date().getHours());
 
 function updateDashButtons() {
     const hasImages = filesAsBase64.length > 0;
@@ -1556,19 +1553,10 @@ function updateDashButtons() {
     // loads would skip the Notion check and show the wrong cost.
     const profileLoading = !!currentUser && !userProfile;
     const pageModesDisabled = isSyncing || isRecording || !hasImages || profileLoading;
-    if (primaryBtn) primaryBtn.disabled = pageModesDisabled;
     ['morning', 'evening', 'journal'].forEach(mode => {
         if (modeButtons[mode]) modeButtons[mode].disabled = pageModesDisabled;
     });
     if (modeButtons.voice_note) modeButtons.voice_note.disabled = isSyncing || profileLoading; // B-16
-
-    const defaultMode = currentDefaultMode();
-    const sub = $('primary-sync-sub');
-    if (sub) {
-        sub.textContent = defaultMode === 'morning'
-            ? '☀️ Morning plan → Calendar & Tasks'
-            : '🌙 Evening review → Tasks & Sheets';
-    }
 
     const hint = $('sync-hint');
     if (hint) {
@@ -1600,7 +1588,6 @@ function updateDashButtons() {
     }
 }
 
-primaryBtn?.addEventListener('click', () => startSync(currentDefaultMode()));
 modeButtons.morning?.addEventListener('click', () => startSync('morning'));
 modeButtons.evening?.addEventListener('click', () => startSync('evening'));
 modeButtons.journal?.addEventListener('click', () => startSync('journal'));

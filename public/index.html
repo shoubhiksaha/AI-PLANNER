@@ -11,9 +11,9 @@
     <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
     <script src="theme-init.js?v=1"></script>
-    <link rel="stylesheet" href="tailwind.css?v=27">
+    <link rel="stylesheet" href="tailwind.css?v=28">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="sw-register.js?v=27" defer></script>
+    <script src="sw-register.js?v=28" defer></script>
     <style>
         /* Respect users who ask for less motion (UX 13) */
         @media (prefers-reduced-motion: reduce) {
@@ -788,20 +788,15 @@
                 <!-- Upload UI and previews are rendered by app.js -->
             </div>
 
-            <!-- Primary action (UX 3) -->
+            <!-- Why the sync buttons are disabled, and what a sync costs (UX 3) -->
             <div class="space-y-2">
-                <button id="btn-sync-primary" type="button" disabled
-                    class="dash-btn w-full min-h-[56px] px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-white shadow-md transition-colors flex flex-col items-center justify-center">
-                    <span class="font-bold text-base">Sync page</span>
-                    <span id="primary-sync-sub" class="text-xs opacity-90">☀️ Morning plan → Calendar &amp; Tasks</span>
-                </button>
                 <p id="sync-hint" class="text-xs text-theme-muted text-center">Add a page photo first.</p>
                 <p id="credit-cost-line" class="text-xs text-theme-muted text-center"></p>
             </div>
 
-            <!-- Secondary modes -->
+            <!-- Sync modes -->
             <div>
-                <p class="text-[11px] font-bold uppercase tracking-wider text-theme-muted mb-2">Or choose what to sync</p>
+                <p class="text-[11px] font-bold uppercase tracking-wider text-theme-muted mb-2">Choose what to sync</p>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button id="btn-morning" type="button" data-mode="morning"
                         class="dash-btn mode-btn min-h-[44px] p-3 text-left rounded-xl border border-theme-border bg-theme-bg hover:bg-orange-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-start gap-2">
@@ -1326,8 +1321,8 @@
     </div>
 
     <script src="env-config.js"></script>
-    <script src="app-helpers.js?v=27"></script>
-    <script type="module" src="app.js?v=27"></script>
+    <script src="app-helpers.js?v=28"></script>
+    <script type="module" src="app.js?v=28"></script>
 </body>
 
 </html>

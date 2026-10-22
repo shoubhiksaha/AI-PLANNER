@@ -60,7 +60,7 @@ test.describe('E2E Sync Flow', () => {
     expect(syncBodies[0].googleToken).toBe('e2e-google-token');
     expect(syncBodies[0].clientRequestId).toMatch(/^[0-9a-f-]{36}$/);
     // B-16: photos are cleared only after a successful sync
-    await expect(page.locator('#btn-sync-primary')).toBeDisabled();
+    await expect(page.locator('#btn-morning')).toBeDisabled();
   });
 
 });
