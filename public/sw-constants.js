@@ -8,7 +8,7 @@
  * Keep this file free of DOM/SW APIs — constants only.
  */
 (function (exports) {
-    exports.CACHE_NAME = 'ai-planner-v47';
+    exports.CACHE_NAME = 'ai-planner-v48';
 
     exports.ASSETS_TO_CACHE = [
         '/',

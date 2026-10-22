@@ -46,7 +46,6 @@ describe('Critical DOM Elements', () => {
             'save-setup-btn',
             'adv-notion-status',
             // Audit remediation
-            'btn-sync-primary',
             'sync-hint',
             'credit-cost-line',
             'status-area',

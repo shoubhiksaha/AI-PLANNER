@@ -21,8 +21,6 @@ const {
     creditNoteForError,
     creditNoteForSuccess,
     summarizeCounts,
-    suggestSyncMode,
-    modesSyncedOn,
     normalizeSyncMode,
     maxUploadForTier,
     pageLimitFor,
@@ -467,44 +465,6 @@ describe('summarizeCounts', () => {
 });
 
 describe('sync modes and plan limits (B-05, UX 3)', () => {
-    test('suggested sync: morning plan until it is done (up to 6 PM)', () => {
-        expect(suggestSyncMode({ hour: 7 })).toBe('morning');
-        expect(suggestSyncMode({ hour: 14 })).toBe('morning');
-        // The old rule switched to the evening review at 3 PM even with no plan synced yet.
-        expect(suggestSyncMode({ hour: 16, syncedToday: [] })).toBe('morning');
-        expect(suggestSyncMode({ hour: 17 })).toBe('morning');
-    });
-
-    test('suggested sync: evening review after the morning plan (from noon) or from 6 PM', () => {
-        expect(suggestSyncMode({ hour: 13, syncedToday: ['morning'] })).toBe('evening');
-        expect(suggestSyncMode({ hour: 10, syncedToday: ['morning'] })).toBe('morning');
-        expect(suggestSyncMode({ hour: 18 })).toBe('evening');
-        expect(suggestSyncMode({ hour: 22, syncedToday: [] })).toBe('evening');
-        // After midnight still counts as the evening before.
-        expect(suggestSyncMode({ hour: 1 })).toBe('evening');
-        expect(suggestSyncMode({ hour: 4 })).toBe('morning');
-    });
-
-    test('suggested sync: journal once the evening review is done', () => {
-        expect(suggestSyncMode({ hour: 21, syncedToday: ['morning', 'evening'] })).toBe('journal');
-        expect(suggestSyncMode({ hour: 20, syncedToday: ['night'] })).toBe('journal');
-        expect(suggestSyncMode({ hour: 9, syncedToday: ['journal'] })).toBe('morning');
-    });
-
-    test('modes synced today come from successful history entries on that date', () => {
-        const at = (iso) => new Date(iso);
-        const entries = [
-            { syncType: 'morning', status: 'success', timestamp: at('2026-10-22T08:00:00') },
-            { syncType: 'night', status: 'success', timestamp: at('2026-10-22T21:00:00') },
-            { syncType: 'journal', status: 'failed', timestamp: at('2026-10-22T21:30:00') },
-            { syncType: 'journal', status: 'success', timestamp: at('2026-10-21T21:30:00') },
-            { syncType: 'morning', status: 'pending', timestamp: null },
-            null,
-        ];
-        expect(modesSyncedOn(entries, '2026-10-22').sort()).toEqual(['evening', 'morning']);
-        expect(modesSyncedOn(entries, '2026-10-21')).toEqual(['journal']);
-        expect(modesSyncedOn([], '2026-10-22')).toEqual([]);
-    });
     test('"night" is normalised to "evening"', () => {
         expect(normalizeSyncMode('night')).toBe('evening');
         expect(normalizeSyncMode('journal')).toBe('journal');

@@ -58,8 +58,6 @@ const {
     creditNoteForSuccess,
     summarizeCounts,
     SYNC_MODES,
-    suggestSyncMode,
-    modesSyncedOn,
     normalizeSyncMode,
     maxUploadForTier,
     pageLimitFor,
@@ -115,7 +113,6 @@ let isPaying = false;
 let isRecording = false;
 let lastAttempt = null;            // { id, mode, sig } — reuse clientRequestId for retries of the same pages
 let lastVoicePayload = null;       // audio kept for Retry after a failed voice sync
-let syncedToday = { date: null, modes: [] }; // modes synced successfully today (device date), for the suggested sync
 let pendingPayment = null;         // { kind, before, timer }
 
 const GOOGLE_TOKEN_DEFAULT_TTL_S = 55 * 60;
@@ -634,7 +631,10 @@ async function checkUserSetup(user) {
     try {
         const { db, doc, getDoc, onSnapshot } = await loadDb();
         const userRef = doc(db, "users", user.email);
-        const snap = await getDoc(userRef);
+        // The first Firestore read can fail while its connection is still opening
+        // ("client is offline"); retry once quietly before showing an error.
+        const snap = await getDoc(userRef).catch(() =>
+            new Promise((resolve) => setTimeout(resolve, 1500)).then(() => getDoc(userRef)));
         if (currentUser !== user) return; // signed out meanwhile
 
         const existing = snap.exists() ? snap.data() : null;
@@ -675,6 +675,10 @@ async function checkUserSetup(user) {
         loadSyncHistory(user.email);
     } catch (err) {
         console.error("Profile Load Error:", err);
+        logToGCP({
+            message: `Profile load failed: ${err?.code || err?.name || 'error'}: ${err?.message || ''}`.slice(0, 900),
+            error: { stack: String(err?.stack || '').slice(0, 4000) },
+        });
         renderCard({
             tone: 'error',
             title: 'Couldn’t load your profile',
@@ -798,7 +802,6 @@ function resetAppState() {
     filesAsBase64 = [];
     lastAttempt = null;
     lastVoicePayload = null;
-    syncedToday = { date: null, modes: [] };
     setGoogleToken(null);
     stopRecording({ discard: true });
     if (pendingPayment?.timer) clearTimeout(pendingPayment.timer);
@@ -1644,28 +1647,11 @@ dropZone.addEventListener('drop', (e) => handleFiles(Array.from(e.dataTransfer?.
 // --------------------------------------------------------------------------
 // DASHBOARD: buttons (UX 3, 8, 9)
 // --------------------------------------------------------------------------
-const primaryBtn = $('btn-sync-primary');
 const modeButtons = {
     morning: $('btn-morning'),
     evening: $('btn-night'),
     journal: $('btn-journal'),
     voice_note: $('btn-voice-note'),
-};
-const localToday = () => new Date().toLocaleDateString('en-CA');
-const markSyncedToday = (mode) => {
-    const today = localToday();
-    const modes = syncedToday.date === today ? syncedToday.modes : [];
-    syncedToday = { date: today, modes: [...new Set([...modes, normalizeSyncMode(mode)])] };
-};
-/** The mode the big "Sync page" button suggests: time of day plus what's already synced today. */
-const currentDefaultMode = () => suggestSyncMode({
-    hour: new Date().getHours(),
-    syncedToday: syncedToday.date === localToday() ? syncedToday.modes : [],
-});
-const PRIMARY_SUB = {
-    morning: () => 'Morning plan → Calendar and Tasks',
-    evening: () => 'Evening review → Tasks and Sheets',
-    journal: () => `Journal → ${DESTINATION_LABELS[notesDestination()]}`,
 };
 
 function updateDashButtons() {
@@ -1674,17 +1660,10 @@ function updateDashButtons() {
     // loads would skip the Notion check and show the wrong cost.
     const profileLoading = !!currentUser && !userProfile;
     const pageModesDisabled = isSyncing || isRecording || !hasImages || profileLoading;
-    if (primaryBtn) primaryBtn.disabled = pageModesDisabled;
     ['morning', 'evening', 'journal'].forEach(mode => {
         if (modeButtons[mode]) modeButtons[mode].disabled = pageModesDisabled;
     });
     if (modeButtons.voice_note) modeButtons.voice_note.disabled = isSyncing || profileLoading; // B-16
-
-    const defaultMode = currentDefaultMode();
-    const sub = $('primary-sync-sub');
-    if (sub) {
-        sub.textContent = (PRIMARY_SUB[defaultMode] || PRIMARY_SUB.morning)();
-    }
 
     const hint = $('sync-hint');
     if (hint) {
@@ -1715,7 +1694,6 @@ function updateDashButtons() {
     }
 }
 
-primaryBtn?.addEventListener('click', () => startSync(currentDefaultMode()));
 modeButtons.morning?.addEventListener('click', () => startSync('morning'));
 modeButtons.evening?.addEventListener('click', () => startSync('evening'));
 modeButtons.journal?.addEventListener('click', () => startSync('journal'));
@@ -1998,7 +1976,6 @@ async function runSync({ mode, images, clientRequestId, tokenPromise }) {
         const { res, data, error } = outcome;
         if (res && res.ok && data) {
             renderSyncSuccess({ mode, data, pages: images.length });
-            markSyncedToday(mode);
             if (isVoice) lastVoicePayload = null;
             else if (imagesSignature(filesAsBase64) === imagesSignature(images)) {
                 filesAsBase64 = []; // B-16: only clear the photos after a success that used them
@@ -2758,15 +2735,6 @@ const loadSyncHistory = async (email) => {
             )),
             new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('History took too long to load.'), { code: 'timeout' })), 15000)),
         ]);
-
-        // The newest entries also tell the dashboard what was already synced today.
-        const entries = [];
-        querySnapshot.forEach((d) => {
-            const v = d.data();
-            entries.push({ syncType: v.syncType, status: v.status, timestamp: v.timestamp ? v.timestamp.toDate() : null });
-        });
-        syncedToday = { date: localToday(), modes: modesSyncedOn(entries, localToday()) };
-        if (!isSyncing) updateDashButtons();
 
         if (querySnapshot.empty) {
             historyList.innerHTML = '<div class="card p-6 text-center text-muted">No syncs yet. Your synced pages will show up here.</div>';
