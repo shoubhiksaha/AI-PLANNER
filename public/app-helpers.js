@@ -342,9 +342,6 @@
         voice_note: { label: 'Voice note', icon: '🎤', description: 'Record a thought; it’s transcribed into Notion. Pro.' },
     };
 
-    /** Default mode for the primary "Sync page" button by local hour. */
-    exports.defaultSyncModeForHour = (hour) => (Number(hour) < 15 ? 'morning' : 'evening');
-
     exports.normalizeSyncMode = (mode) => (mode === 'night' ? 'evening' : mode);
 
     /** Most pages a tier may attach at upload time (B-05). */

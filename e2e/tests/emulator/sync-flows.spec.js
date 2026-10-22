@@ -26,8 +26,8 @@ test.describe('Sync flows on the emulator stack', () => {
         await expect.poll(async () => (await h.userDoc(request, user.email))?.tierCredits).toBe(15);
         await expect(page.locator('#credits-badge')).toContainText('15');
 
-        // UX 3: primary action is disabled with a reason until a page is added.
-        await expect(page.locator('#btn-sync-primary')).toBeDisabled();
+        // UX 3: the sync buttons are disabled with a reason until a page is added.
+        await expect(page.locator('#btn-morning')).toBeDisabled();
         await expect(page.locator('#sync-hint')).toBeVisible();
 
         await h.addPhoto(page, 'planner-page.png');

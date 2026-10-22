@@ -37,7 +37,7 @@ test.describe('Dashboard UI Smoke Checks', () => {
     });
 
     test('Touch targets are at least 44×44 (U-08)', async ({ page }) => {
-        for (const selector of ['#hamburger-btn', '#current-plan-badge', '#theme-btn', '#btn-sync-primary']) {
+        for (const selector of ['#hamburger-btn', '#current-plan-badge', '#theme-btn', '#btn-morning']) {
             const box = await page.locator(selector).boundingBox();
             expect(box, selector).not.toBeNull();
             // Round: the view's fade-in transform can report 43.99998px mid-animation.
@@ -46,8 +46,9 @@ test.describe('Dashboard UI Smoke Checks', () => {
         }
     });
 
-    test('Primary sync is disabled with a reason until a page is added (UX 3)', async ({ page }) => {
-        await expect(page.locator('#btn-sync-primary')).toBeDisabled();
+    test('Sync buttons are disabled with a reason until a page is added (UX 3)', async ({ page }) => {
+        for (const id of ['#btn-morning', '#btn-night', '#btn-journal']) await expect(page.locator(id)).toBeDisabled();
+        await expect(page.locator('#btn-sync-primary')).toHaveCount(0);
         await expect(page.locator('#sync-hint')).toContainText('Add a page photo first');
         await expect(page.locator('#drop-zone')).toContainText('free printable template');
     });

@@ -21,7 +21,6 @@ const {
     creditNoteForError,
     creditNoteForSuccess,
     summarizeCounts,
-    defaultSyncModeForHour,
     normalizeSyncMode,
     maxUploadForTier,
     pageLimitFor,
@@ -464,12 +463,6 @@ describe('summarizeCounts', () => {
 });
 
 describe('sync modes and plan limits (B-05, UX 3)', () => {
-    test('primary mode defaults by time of day', () => {
-        expect(defaultSyncModeForHour(7)).toBe('morning');
-        expect(defaultSyncModeForHour(14)).toBe('morning');
-        expect(defaultSyncModeForHour(15)).toBe('evening');
-        expect(defaultSyncModeForHour(22)).toBe('evening');
-    });
     test('"night" is normalised to "evening"', () => {
         expect(normalizeSyncMode('night')).toBe('evening');
         expect(normalizeSyncMode('journal')).toBe('journal');
