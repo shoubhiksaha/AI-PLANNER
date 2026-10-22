@@ -26,8 +26,8 @@ test.describe('Sync flows on the emulator stack', () => {
         await expect.poll(async () => (await h.userDoc(request, user.email))?.tierCredits).toBe(15);
         await expect(page.locator('#credits-badge')).toContainText('15');
 
-        // UX 3: primary action is disabled with a reason until a page is added.
-        await expect(page.locator('#btn-sync-primary')).toBeDisabled();
+        // UX 3: the sync buttons are disabled with a reason until a page is added.
+        await expect(page.locator('#btn-morning')).toBeDisabled();
         await expect(page.locator('#sync-hint')).toBeVisible();
 
         await h.addPhoto(page, 'planner-page.png');
@@ -54,28 +54,6 @@ test.describe('Sync flows on the emulator stack', () => {
         await h.openDrawerItem(page, 'history');
         await expect(page.locator('#view-history')).toBeVisible();
         await expect(page.locator('#history-list')).toContainText(/morning/i);
-    });
-
-    test('the suggested sync follows what was already synced today', async ({ page }) => {
-        await h.signIn(page, user);
-        const expected = (synced) => page.evaluate((modes) => {
-            const mode = window.AppHelpers.suggestSyncMode({ hour: new Date().getHours(), syncedToday: modes });
-            return { morning: 'Morning plan', evening: 'Evening review', journal: 'Journal' }[mode];
-        }, synced);
-        await expect(page.locator('#primary-sync-sub')).toContainText(await expected([]));
-
-        await h.addPhoto(page, 'planner-page.png');
-        await page.click('#btn-morning');
-        await expect(page.locator('#status-area .status-card')).toHaveAttribute('data-tone', 'success');
-        await expect(page.locator('#primary-sync-sub')).toContainText(await expected(['morning']));
-
-        // Signing out clears it; signing back in rebuilds it from the sync history.
-        // (Same page: a reload aborts Firestore's open channel, which WebKit reports as a page error.)
-        await h.openDrawerItem(page, 'logout');
-        await expect(page.locator('#view-login')).toBeVisible();
-        await page.evaluate(([u, p, t]) => window.e2eLogin(u, p, t), [user.email, user.password, 'e2e-google-token']);
-        await expect(page.locator('#view-dashboard')).toBeVisible();
-        await expect(page.locator('#primary-sync-sub')).toContainText(await expected(['morning']));
     });
 
     test('AI failure: red card, no credit used, photo kept for retry', async ({ page, request }) => {

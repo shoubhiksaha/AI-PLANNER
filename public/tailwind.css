@@ -1305,10 +1305,6 @@ button.chip:hover {
   min-height: 52px;
 }
 
-.min-h-\[60px\] {
-  min-height: 60px;
-}
-
 .min-h-\[64px\] {
   min-height: 64px;
 }
@@ -1504,10 +1500,6 @@ button.chip:hover {
 
 .justify-between {
   justify-content: space-between;
-}
-
-.gap-0 {
-  gap: 0px;
 }
 
 .gap-1 {
@@ -1886,10 +1878,6 @@ button.chip:hover {
 .text-4xl {
   font-size: 2.25rem;
   line-height: 2.5rem;
-}
-
-.text-\[13px\] {
-  font-size: 13px;
 }
 
 .text-\[15px\] {
