@@ -167,8 +167,12 @@ async function syncPlannerHandler(req, res) {
             requestId, uid, syncMode: mode, imageCount: parsedImages.length
         }));
 
+        // Event and task titles come from the user's page: they go back in this response but are
+        // never stored (privacy policy, "Zero Storage"), so a replayed duplicate shows counts only.
+        const storedExtras = { ...extras };
+        delete storedExtras.items;
         await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg, {
-            counts, warnings, notes, ...extras, creditsCharged, partial, refunded: credit.refunded
+            counts, warnings, notes, ...storedExtras, creditsCharged, partial, refunded: credit.refunded
         }, historyRef);
         if (dataSynced) await incrementUsageCounters(userRef, parsedImages.length);
 

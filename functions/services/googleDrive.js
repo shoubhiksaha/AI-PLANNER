@@ -121,6 +121,11 @@ async function createDoc(drive, { name, text, parentId }) {
     return { id, webViewLink: res.data.webViewLink || `https://docs.google.com/document/d/${id}/edit` };
 }
 
+/** Moves a file this app created to the Drive trash, where the user can still restore it for 30 days. */
+async function trashFile(drive, fileId) {
+    await drive.files.update({ fileId, requestBody: { trashed: true } });
+}
+
 /** Whether a (non-folder) file with this name already exists in the folder. */
 async function fileExists(drive, { name, parentId }) {
     return !!(await findByName(drive, { name, parentId, folder: false }));
@@ -138,5 +143,6 @@ module.exports = {
     ensureNotesFolder,
     uploadFile,
     createDoc,
+    trashFile,
     fileExists,
 };

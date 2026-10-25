@@ -10,6 +10,7 @@ const {
     ensureNotesFolder,
     uploadFile,
     createDoc,
+    trashFile,
     fileExists,
     folderUrl,
     quoteQuery,
@@ -206,6 +207,12 @@ describe('Drive files', () => {
             .resolves.toEqual({ id: 'x1', webViewLink: 'https://drive.google.com/file/d/x1/view' });
         await expect(createDoc(drive, { name: 'a', text: 'b', parentId: 'p' }))
             .resolves.toEqual({ id: 'x1', webViewLink: 'https://docs.google.com/document/d/x1/edit' });
+    });
+
+    test('trashFile moves a file to the Drive trash instead of deleting it', async () => {
+        const drive = { files: { update: jest.fn().mockResolvedValue({ data: {} }) } };
+        await trashFile(drive, 'id-7');
+        expect(drive.files.update).toHaveBeenCalledWith({ fileId: 'id-7', requestBody: { trashed: true } });
     });
 
     test('fileExists matches files (not folders) by exact name in the folder', async () => {
