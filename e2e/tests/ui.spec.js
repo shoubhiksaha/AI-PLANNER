@@ -39,9 +39,15 @@ test.describe('Dashboard UI Smoke Checks', () => {
         await expect(page.locator('#btn-morning')).toHaveAccessibleName(/^Morning plan/);
         // Same type as Minimalist modern; only colours and icons change.
         expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"IBM Plex Sans"/);
-        // Cheerful paints ADT's black-on-aqua logo into the app icon's own box.
+        // Cheerful paints the same AI Planner icon, black on aqua, into the app icon's own box,
+        // and the "An offering by ADT" footer in aqua.
         await expect(page.locator('.app-bar img.brand-tile')).toBeVisible();
-        await expect(page.locator('.app-bar img.brand-tile')).toHaveCSS('background-image', /brand\/adt-profile-stacked-aqua\.svg/);
+        await expect(page.locator('.app-bar img.brand-tile')).toHaveCSS('background-image', /brand\/app-icon-aqua\.svg/);
+        const footerLockup = page.locator('#adt-footer .signed-in-only img.on-light');
+        await expect(footerLockup).toBeVisible();
+        await expect(footerLockup).toHaveCSS('background-color', 'rgb(1, 249, 201)');
+        expect(await footerLockup.evaluate(img => getComputedStyle(img).maskImage || getComputedStyle(img).webkitMaskImage))
+            .toMatch(/brand\/offering-by-adt-inline-light\.svg/);
 
         // The light/dark mode is separate from the style.
         await page.click('#theme-btn');

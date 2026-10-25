@@ -10,7 +10,7 @@ Every style has a light and a dark version. Styles change only how the app looks
 | Style | id | What it looks like |
 |---|---|---|
 | Minimalist modern (default) | `minimal` | ADT's system: Signal Aqua on Deep Black, Space Grotesk and IBM Plex Sans, line icons. Defined in `public/styles.css`. |
-| Cheerful | `cheerful` | The colours of the original look, as on production before the redesign: slate greys, emerald buttons, emoji icons and softer corners. The app icon shows ADT's logo (black on Signal Aqua), plans are indigo, credits are an amber coin chip, the mode cards have tinted icon tiles, and a soft colour wash fills the page. Layout and type are Minimalist modern's. `public/themes/cheerful.css`. |
+| Cheerful | `cheerful` | The colours of the original look, as on production before the redesign: slate greys, emerald buttons, emoji icons and softer corners. The app icon is the same AI Planner icon in black on Signal Aqua, the "An offering by ADT" footer is Signal Aqua, plans are indigo, credits are an amber coin chip, the mode cards have tinted icon tiles, and a soft colour wash fills the page. Layout and type are Minimalist modern's. `public/themes/cheerful.css`. |
 
 ## How it works
 
@@ -43,4 +43,4 @@ The tests check that a pack is wired up completely:
 - **Readable:** every text colour pair meets WCAG AA (4.5:1, or 3:1 for large text and control boundaries) in light and in dark. Check the pairs before writing the tokens, and let the axe test confirm.
 - **Calm by default:** Minimalist modern stays the default, and louder packs are opt-in. AI Planner is for people who want fewer distractions.
 - **No motion that can't be turned off:** gloss, shimmer and similar effects stay static or respect `prefers-reduced-motion`. The base stylesheet already turns animations off for users who ask.
-- **Brand:** every pack shows an ADT logo and the "An offering by ADT" footer. Minimalist modern uses the AI Planner family logo and sign-in lockup. Cheerful uses ADT's bright logo, black on Signal Aqua (`public/brand/adt-profile-stacked-aqua.svg`, copied unchanged from the ADT brand kit). Copy brand files; never edit them, and never add shadows or gradients to a logo.
+- **Brand:** every pack shows an ADT logo and the "An offering by ADT" footer. Minimalist modern uses the AI Planner family logo and sign-in lockup. Cheerful uses the same AI Planner icon with its colours swapped, black on Signal Aqua (`public/brand/app-icon-aqua.svg`, ADT's approved "aqua as a large flat field with the one-colour black logo on top"), and shows the footer lockup in Signal Aqua by masking the unchanged brand file with an aqua fill. The aqua footer on Cheerful's light background is the owner's choice (2026-10-26) and the one exception to "no aqua on light backgrounds". Copy brand files; never edit them, and never add shadows or gradients to a logo.
