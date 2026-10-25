@@ -8,7 +8,7 @@
  * Keep this file free of DOM/SW APIs — constants only.
  */
 (function (exports) {
-    exports.CACHE_NAME = 'ai-planner-v50';
+    exports.CACHE_NAME = 'ai-planner-v51';
 
     exports.ASSETS_TO_CACHE = [
         '/',
@@ -28,6 +28,7 @@
         '/theme-init.js',
         '/brand/app-icon.svg',
         '/brand/favicon.svg',
+        '/brand/adt-profile-stacked-aqua.svg',
         '/brand/offering-by-adt-stacked-light.svg',
         '/brand/offering-by-adt-stacked-dark.svg',
         '/brand/offering-by-adt-inline-light.svg',

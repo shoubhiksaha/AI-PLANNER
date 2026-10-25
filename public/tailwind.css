@@ -7,8 +7,8 @@
 
 /* AI Planner — "Cheerful" theme pack (docs/THEMES.md; registered in themes/packs.js).
    The original AI Planner look on the current app, as on production before the redesign:
-   Outfit, slate text, emerald accents, indigo for plans, emoji icons (from packs.js), the
-   🌿 leaf header and everything on one soft frosted panel. A few uplifting touches on top:
+   Outfit, slate text, emerald accents, indigo for plans, emoji icons (from packs.js), a big
+   logo header and everything on one soft frosted panel. A few uplifting touches on top:
    a gentle colour wash behind the panel, tinted tiles for the four sync modes, colourful
    chips and a fresher primary button. Every text colour pair meets WCAG AA in light and dark.
    Inlined into tailwind.css by `npm run build:css`, so url()s are relative to public/. */
@@ -110,7 +110,6 @@ html[data-style="cheerful"] {
         radial-gradient(56rem 32rem at -10% -8%, rgba(16, 185, 129, 0.13), transparent 62%),
         radial-gradient(48rem 30rem at 110% 0%, rgba(99, 102, 241, 0.10), transparent 62%),
         radial-gradient(56rem 36rem at 50% 108%, rgba(245, 158, 11, 0.10), transparent 62%);
-  --leaf-tile: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(20, 184, 166, 0.10));
   --primary-fill: linear-gradient(135deg, #047857, #0F766E);
   --primary-fill-hover: linear-gradient(135deg, #065F46, #115E59);
   --primary-shadow: 0 6px 16px -6px rgba(4, 120, 87, 0.55);
@@ -185,7 +184,6 @@ html[data-style="cheerful"].dark-mode {
         radial-gradient(56rem 32rem at -10% -8%, rgba(16, 185, 129, 0.14), transparent 62%),
         radial-gradient(48rem 30rem at 110% 0%, rgba(99, 102, 241, 0.14), transparent 62%),
         radial-gradient(56rem 36rem at 50% 108%, rgba(245, 158, 11, 0.06), transparent 62%);
-  --leaf-tile: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(20, 184, 166, 0.12));
   --primary-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.6);
   --plan-ink: #A5B4FC;
   --plan-soft: #312E81;
@@ -222,7 +220,9 @@ html[data-style="cheerful"] body {
   letter-spacing: 0;
 }
 
-/* The 🌿 leaf mark (decorative: the "AI Planner" text next to it is the name) */
+/* The ADT logo, black on Signal Aqua: brand/adt-profile-stacked-aqua.svg, copied unchanged from
+   the ADT brand kit (final/social). Decorative: the "AI Planner" text next to it is the name.
+   No shadow or gradient on the logo (brand/logo/LOGO.md). */
 
 html[data-style="cheerful"] img.brand-tile {
   display: none;
@@ -230,20 +230,13 @@ html[data-style="cheerful"] img.brand-tile {
 
 html[data-style="cheerful"] :has(> img.brand-tile)::before,
 html[data-style="cheerful"] #view-login > h1::before {
-  content: "🌿";
-  content: "🌿" / "";
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  content: "";
+  display: block;
   flex-shrink: 0;
   width: 32px;
   height: 32px;
-  border-radius: 10px;
-  font-size: 18px;
-  line-height: 1;
-  background: var(--leaf-tile);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  border-radius: 22%;
+  background: #01F9C9 url("brand/adt-profile-stacked-aqua.svg") center / cover no-repeat;
 }
 
 /* === LAYOUT (app): the app bar and the content form one rounded panel === */
@@ -324,7 +317,7 @@ html[data-style="cheerful"] body[data-signed-in="false"] #app-main {
   }
 }
 
-/* Signed in: the leaf header on top, then menu · plan · credits, then a divider */
+/* Signed in: the logo header on top, then menu · plan · credits, then a divider */
 
 html[data-style="cheerful"] body[data-signed-in="true"] .app-bar > div {
   display: grid;
@@ -369,8 +362,6 @@ html[data-style="cheerful"] body[data-signed-in] .app-bar a[href="/"] {
 html[data-style="cheerful"] body[data-signed-in] .app-bar a[href="/"]::before {
   width: 3.5rem;
   height: 3.5rem;
-  border-radius: 16px;
-  font-size: 1.875rem;
 }
 
 html[data-style="cheerful"] body[data-signed-in] .app-bar a[href="/"] > span {
@@ -432,7 +423,7 @@ html[data-style="cheerful"] #credits-badge::before {
   font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
 }
 
-/* === SIGN-IN: leaf header, friendly cards, the green privacy note, emoji links === */
+/* === SIGN-IN: logo header, friendly cards, the green privacy note, emoji links === */
 
 html[data-style="cheerful"] #view-login > h1 {
   display: flex;
@@ -444,8 +435,6 @@ html[data-style="cheerful"] #view-login > h1 {
 html[data-style="cheerful"] #view-login > h1::before {
   width: 3.5rem;
   height: 3.5rem;
-  border-radius: 16px;
-  font-size: 1.875rem;
 }
 
 html[data-style="cheerful"] #view-login > h1 img {
@@ -3652,6 +3641,10 @@ body[data-signed-in="true"] .signed-out-only {
 
   .sm\:grid-cols-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sm\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .sm\:grid-cols-4 {

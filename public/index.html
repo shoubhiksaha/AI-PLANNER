@@ -16,8 +16,8 @@
     <script src="theme-init.js?v=3"></script>
     <link rel="preload" href="fonts/SpaceGrotesk-700.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="fonts/IBMPlexSans-400.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="tailwind.css?v=31">
-    <script src="sw-register.js?v=31" defer></script>
+    <link rel="stylesheet" href="tailwind.css?v=32">
+    <script src="sw-register.js?v=32" defer></script>
 </head>
 
 <body class="min-h-screen" data-signed-in="false">
@@ -246,6 +246,33 @@
                 </div>
                 <p id="name-error" class="hidden field-error" role="alert"></p>
                 <p id="name-status" class="hidden field-help" role="status"></p>
+            </section>
+
+            <!-- Appearance: the same choices as the theme menu in the app bar (docs/THEMES.md) -->
+            <section aria-labelledby="settings-appearance-title" class="space-y-3">
+                <h3 id="settings-appearance-title" class="section-title">Appearance</h3>
+                <fieldset class="space-y-2">
+                    <legend class="field-label">Mode</legend>
+                    <div class="grid gap-2 sm:grid-cols-3">
+                        <label class="choice items-center">
+                            <input type="radio" name="theme-mode" value="auto">
+                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-monitor"></use></svg> Match device</span>
+                        </label>
+                        <label class="choice items-center">
+                            <input type="radio" name="theme-mode" value="light">
+                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-sun"></use></svg> Light</span>
+                        </label>
+                        <label class="choice items-center">
+                            <input type="radio" name="theme-mode" value="dark">
+                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg> Dark</span>
+                        </label>
+                    </div>
+                </fieldset>
+                <fieldset class="space-y-2">
+                    <legend class="field-label">Style</legend>
+                    <!-- One choice per theme pack (themes/packs.js), added by app.js -->
+                    <div id="settings-style-choices" class="space-y-2"></div>
+                </fieldset>
             </section>
 
             <!-- Where notes go -->
@@ -867,8 +894,8 @@
     </div>
 
     <script src="env-config.js"></script>
-    <script src="app-helpers.js?v=31"></script>
-    <script type="module" src="app.js?v=31"></script>
+    <script src="app-helpers.js?v=32"></script>
+    <script type="module" src="app.js?v=32"></script>
 </body>
 
 </html>

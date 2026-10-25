@@ -38,6 +38,10 @@ test.describe('Dashboard UI Smoke Checks', () => {
         await expect(page.locator('#hamburger-btn svg.icon')).toBeVisible();
         await expect(page.locator('#btn-morning')).toHaveAccessibleName(/^Morning plan/);
         expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"?Outfit/);
+        // Cheerful shows ADT's black-on-aqua logo in place of the app icon.
+        expect(await page.evaluate(() => getComputedStyle(document.querySelector('.app-bar a[href="/"]'), '::before').backgroundImage))
+            .toContain('brand/adt-profile-stacked-aqua.svg');
+        await expect(page.locator('.app-bar img.brand-tile')).toBeHidden();
 
         // The light/dark mode is separate from the style.
         await page.click('#theme-btn');
@@ -61,6 +65,44 @@ test.describe('Dashboard UI Smoke Checks', () => {
         await expect(html).toHaveAttribute('data-style', 'minimal');
         await expect(page.locator('.icon-twin')).toHaveCount(0);
         expect(await barColours()).toEqual(['#0A0A0A', '#0A0A0A']);
+    });
+
+    test('Settings › Appearance offers the theme menu\'s choices and stays in step with it', async ({ page }) => {
+        const html = page.locator('html');
+        const openSettings = () => page.evaluate(() => window.AppHelpers.switchView('view-setup'));
+        const appearance = page.locator('section[aria-labelledby="settings-appearance-title"]');
+        const radio = (name) => appearance.getByRole('radio', { name });
+        await openSettings();
+        await expect(radio('Match device')).toBeChecked();
+        await expect(radio(/^Minimalist modern/)).toBeChecked();
+        await expect(appearance.getByRole('radio')).toHaveCount(5);
+
+        await radio('Dark').check();
+        await expect(html).toHaveClass(/dark-mode/);
+        await radio(/^Cheerful/).check();
+        await expect(html).toHaveAttribute('data-style', 'cheerful');
+        await expect(radio(/^Cheerful/)).toHaveAccessibleName(/The original look/);
+
+        // The theme menu shows the same choices...
+        await page.click('#theme-btn');
+        await expect(page.locator('#theme-dropdown [data-theme="dark"]')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('[data-style-choice="cheerful"]')).toHaveAttribute('aria-pressed', 'true');
+        // ...and a pick there updates Settings.
+        await page.click('#theme-dropdown [data-theme="light"]');
+        await page.click('#theme-btn');
+        await page.click('[data-style-choice="minimal"]');
+        await expect(html).not.toHaveClass(/dark-mode/);
+        await expect(radio('Light')).toBeChecked();
+        await expect(radio(/^Minimalist modern/)).toBeChecked();
+
+        // Remembered after a reload.
+        await radio(/^Cheerful/).check();
+        await page.reload();
+        await page.waitForFunction(() => document.documentElement.dataset.authReady === 'true');
+        await openSettings();
+        await expect(html).toHaveAttribute('data-style', 'cheerful');
+        await expect(radio('Light')).toBeChecked();
+        await expect(radio(/^Cheerful/)).toBeChecked();
     });
 
     test('Theme menu closes with Escape (from the button or the menu) and when Tab leaves it', async ({ page }) => {
