@@ -63,12 +63,24 @@ test.describe('Dashboard UI Smoke Checks', () => {
         expect(await barColours()).toEqual(['#0A0A0A', '#0A0A0A']);
     });
 
-    test('Tabbing out of the theme menu closes it', async ({ page }) => {
+    test('Theme menu closes with Escape (from the button or the menu) and when Tab leaves it', async ({ page }) => {
+        const menu = page.locator('#theme-dropdown');
         await page.click('#theme-btn');
-        await expect(page.locator('#theme-dropdown')).toHaveClass(/active/);
+        await expect(menu).toHaveClass(/active/);
+        await page.keyboard.press('Escape');
+        await expect(menu).not.toHaveClass(/active/);
+        await expect(page.locator('#theme-btn')).toBeFocused();
+
+        await page.click('#theme-btn');
+        await page.locator('[data-style-choice="minimal"]').focus();
+        await page.keyboard.press('Escape');
+        await expect(menu).not.toHaveClass(/active/);
+        await expect(page.locator('#theme-btn')).toBeFocused();
+
+        await page.click('#theme-btn');
         await page.locator('[data-style-choice="cheerful"]').focus();
         await page.keyboard.press('Tab');
-        await expect(page.locator('#theme-dropdown')).not.toHaveClass(/active/);
+        await expect(menu).not.toHaveClass(/active/);
         await expect(page.locator('#theme-btn')).toHaveAttribute('aria-expanded', 'false');
     });
 

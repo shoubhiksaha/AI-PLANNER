@@ -2797,9 +2797,12 @@ const setThemeMenu = (open) => {
 const closeThemeMenuAfterPick = () => { setThemeMenu(false); themeBtn?.focus(); };
 
 themeBtn?.addEventListener('click', () => setThemeMenu(!themeMenu.classList.contains('active')));
-themeMenu?.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { setThemeMenu(false); themeBtn?.focus(); }
-});
+// Escape closes the menu from inside it or from the theme button (focus stays there after a click).
+const closeThemeMenuOnEscape = (e) => {
+    if (e.key === 'Escape' && themeMenu?.classList.contains('active')) { setThemeMenu(false); themeBtn?.focus(); }
+};
+themeMenu?.addEventListener('keydown', closeThemeMenuOnEscape);
+themeBtn?.addEventListener('keydown', closeThemeMenuOnEscape);
 // Tabbing out of the menu closes it.
 themeMenu?.addEventListener('focusout', (e) => {
     const next = e.relatedTarget;
