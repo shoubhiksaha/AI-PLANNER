@@ -18,6 +18,60 @@ test.describe('Dashboard UI Smoke Checks', () => {
         await expect(page.locator('#view-dashboard')).toBeVisible();
     });
 
+    test('Style menu switches between Minimalist modern and Cheerful and remembers it', async ({ page }) => {
+        const html = page.locator('html');
+        await expect(html).toHaveAttribute('data-style', 'minimal');
+        await expect(html).toHaveAttribute('data-icons', 'line');
+
+        await page.click('#theme-btn');
+        await expect(page.locator('#style-items .theme-item')).toHaveText(['Minimalist modern', 'Cheerful']);
+        await expect(page.locator('[data-style-choice="minimal"]')).toHaveAttribute('aria-pressed', 'true');
+        await page.click('[data-style-choice="cheerful"]');
+        await expect(html).toHaveAttribute('data-style', 'cheerful');
+        await expect(page.locator('#theme-dropdown')).not.toHaveClass(/active/);
+        await expect(page.locator('#theme-btn')).toBeFocused();
+
+        // Emoji stand in for content icons; controls keep their line icons.
+        await expect(page.locator('#btn-morning .icon-twin')).toHaveText('☀️');
+        await expect(page.locator('#btn-morning .icon-twin')).toBeVisible();
+        await expect(page.locator('#btn-morning svg.icon')).toBeHidden();
+        await expect(page.locator('#hamburger-btn svg.icon')).toBeVisible();
+        await expect(page.locator('#btn-morning')).toHaveAccessibleName(/^Morning plan/);
+        expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"?Outfit/);
+
+        // The light/dark mode is separate from the style.
+        await page.click('#theme-btn');
+        await page.click('#theme-dropdown [data-theme="dark"]');
+        await expect(html).toHaveClass(/dark-mode/);
+        await expect(html).toHaveAttribute('data-style', 'cheerful');
+        // A chosen Dark mode gives the browser bar the pack's dark colour whatever the device says.
+        const barColours = () => page.locator('meta[name="theme-color"]').evaluateAll(ms => ms.map(m => m.content));
+        expect(await barColours()).toEqual(['#0F172A', '#0F172A']);
+
+        // Remembered across reloads, applied before app.js runs, and the self-hosted font loads.
+        await page.reload();
+        await expect(html).toHaveAttribute('data-style', 'cheerful');
+        await expect(html).toHaveClass(/dark-mode/);
+        expect(await barColours()).toEqual(['#0F172A', '#0F172A']);
+        expect(await page.evaluate(async () => (await document.fonts.load('16px Outfit')).map(f => f.status))).toContain('loaded');
+
+        await page.click('#theme-btn');
+        await expect(page.locator('[data-style-choice="cheerful"]')).toHaveAttribute('aria-pressed', 'true');
+        await page.click('[data-style-choice="minimal"]');
+        await expect(html).toHaveAttribute('data-style', 'minimal');
+        await expect(page.locator('.icon-twin')).toHaveCount(0);
+        expect(await barColours()).toEqual(['#0A0A0A', '#0A0A0A']);
+    });
+
+    test('Tabbing out of the theme menu closes it', async ({ page }) => {
+        await page.click('#theme-btn');
+        await expect(page.locator('#theme-dropdown')).toHaveClass(/active/);
+        await page.locator('[data-style-choice="cheerful"]').focus();
+        await page.keyboard.press('Tab');
+        await expect(page.locator('#theme-dropdown')).not.toHaveClass(/active/);
+        await expect(page.locator('#theme-btn')).toHaveAttribute('aria-expanded', 'false');
+    });
+
     test('Hamburger Menu opens and closes the navigation drawer', async ({ page }) => {
         const drawer = page.locator('#drawer-container');
         await expect(drawer).toHaveClass(/hidden/);

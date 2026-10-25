@@ -636,6 +636,7 @@
 
         htmlElement.classList.remove('dark-mode', 'oled-mode');
         if (effect === 'dark') htmlElement.classList.add('dark-mode');
+        if (htmlElement.dataset) htmlElement.dataset.themeMode = mode;
 
         (themeItems || []).forEach(el => {
             const selected = (el.dataset && el.dataset.theme) === mode;
@@ -650,7 +651,7 @@
         themeBtn.dataset.themeIcon = icons[mode];
         const use = themeBtn.querySelector && themeBtn.querySelector('use');
         if (use) use.setAttribute('href', `#i-${icons[mode]}`);
-        if (themeBtn.setAttribute) themeBtn.setAttribute('aria-label', `Theme: ${labels[mode]}. Change theme`);
+        if (themeBtn.setAttribute) themeBtn.setAttribute('aria-label', `Theme: ${labels[mode]}. Change theme or style`);
     };
 
     // ------------------------------------------------------------------

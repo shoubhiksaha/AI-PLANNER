@@ -186,7 +186,8 @@ const buffer = Buffer.from(base64Data, 'base64');
 public/
 ├── index.html       # HTML markup only
 ├── app.js           # Application logic (ES module)
-├── styles.css       # Custom CSS (themes, glass, animations)
+├── styles.css       # Design tokens and components (default style)
+├── themes/          # Theme packs: packs.js registry + one stylesheet per extra style
 ├── tailwind.css     # Prebuilt Tailwind utilities
 └── sw.js            # Service Worker v2
 
@@ -259,4 +260,4 @@ Config:
 
 ## Brand
 
-AI Planner uses the ADT design system: Signal Aqua `#01F9C9` on Deep Black `#0A0A0A`, Space Grotesk (headings) and IBM Plex Sans (body). The tokens live in `public/styles.css`; never put aqua text or thin aqua lines on light backgrounds. The logo is an ADT family mark (ADT's wave, ending in a tick instead of a square pulse); its rationale, the stranger tests and the usage rules are in [`brand/logo/LOGO.md`](brand/logo/LOGO.md).
+AI Planner uses the ADT design system: Signal Aqua `#01F9C9` on Deep Black `#0A0A0A`, Space Grotesk (headings) and IBM Plex Sans (body). The tokens live in `public/styles.css`; never put aqua text or thin aqua lines on light backgrounds. People can also pick the **Cheerful** style (the pre-redesign look) in the theme menu; styles are theme packs in `public/themes/`, see [`docs/THEMES.md`](docs/THEMES.md). The logo is an ADT family mark (ADT's wave, ending in a tick instead of a square pulse); its rationale, the stranger tests and the usage rules are in [`brand/logo/LOGO.md`](brand/logo/LOGO.md).

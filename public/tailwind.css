@@ -3,6 +3,281 @@
    only ever a fill (with deep-black text) or a mark on dark; on light, thin aqua things
    (text, links, focus rings, small icons, toggles) use --signal-ink instead (1.4:1 vs 5.4:1). */
 
+/* Theme packs other than the default (docs/THEMES.md). Imports must come first. */
+
+/* AI Planner — "Cheerful" theme pack (docs/THEMES.md; registered in themes/packs.js).
+   The pre-redesign look on the current app: Outfit, slate greys, emerald accents, emoji
+   icons (from packs.js), rounder shapes, soft shadows and one rounded panel around the
+   content. Every text colour pair meets WCAG AA in light and dark.
+   Inlined into tailwind.css by `npm run build:css`, so url()s are relative to public/. */
+
+/* === FONT (self-hosted, Latin subset; SIL OFL 1.1, see third-party-licenses.txt) ===
+   Downloaded only when this pack is in use. */
+
+@font-face {
+  font-family: "Outfit";
+
+  src: url("fonts/Outfit-400.woff2") format("woff2");
+
+  font-weight: 400;
+
+  font-style: normal;
+
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Outfit";
+
+  src: url("fonts/Outfit-500.woff2") format("woff2");
+
+  font-weight: 500;
+
+  font-style: normal;
+
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Outfit";
+
+  src: url("fonts/Outfit-600.woff2") format("woff2");
+
+  font-weight: 600;
+
+  font-style: normal;
+
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Outfit";
+
+  src: url("fonts/Outfit-700.woff2") format("woff2");
+
+  font-weight: 700;
+
+  font-style: normal;
+
+  font-display: swap;
+}
+
+/* === TOKENS (light) === */
+
+html[data-style="cheerful"] {
+  --bg: #F8FAFC;
+  --surface: #FFFFFF;
+  --raised: #F1F5F9;
+  --line: #E2E8F0;
+  --line-strong: #64748B;
+  --ink: #1E293B;
+  --ink-muted: #475569;
+  --ink-subtle: #5A687D;
+  --signal: #047857;
+  --signal-hover: #065F46;
+  --on-signal: #FFFFFF;
+  --signal-ink: #047857;
+  --signal-soft: #ECFDF5;
+  --focus: #047857;
+  --success: #047857;
+  --success-soft: #ECFDF5;
+  --warning: #B45309;
+  --warning-soft: #FFFBEB;
+  --danger: #B91C1C;
+  --danger-soft: #FEF2F2;
+  --on-danger: #FFFFFF;
+  --toggle-on: #059669;
+  --toggle-knob: #FFFFFF;
+  --overlay: rgba(15, 23, 42, 0.45);
+  --shadow-raise: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px -8px rgba(15, 23, 42, 0.10);
+  --shadow-overlay: 0 24px 48px -12px rgba(15, 23, 42, 0.25);
+  --shadow-panel: 0 20px 50px -20px rgba(15, 23, 42, 0.18);
+  --font-display: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --pro: #4F46E5;
+  --notice-success-line: #A7F3D0;
+  --notice-warning-line: #FDE68A;
+  --notice-danger-line: #FECACA;
+}
+
+/* === TOKENS (dark) === */
+
+html[data-style="cheerful"].dark-mode {
+  --bg: #0F172A;
+  --surface: #1E293B;
+  --raised: #273449;
+  --line: #334155;
+  --line-strong: #6B7C93;
+  --ink: #F1F5F9;
+  --ink-muted: #94A3B8;
+  --ink-subtle: #9AA9BD;
+  --signal: #047857;
+  --signal-hover: #036B4E;
+  --on-signal: #FFFFFF;
+  --signal-ink: #34D399;
+  --signal-soft: #0B3A30;
+  --focus: #34D399;
+  --success: #34D399;
+  --success-soft: #0B3A30;
+  --warning: #FBBF24;
+  --warning-soft: #3B2A0A;
+  --danger: #F87171;
+  --danger-soft: #3B1518;
+  --on-danger: #0F172A;
+  --toggle-on: #10B981;
+  --toggle-knob: #FFFFFF;
+  --overlay: rgba(2, 6, 23, 0.65);
+  --shadow-raise: 0 0 0 1px #334155;
+  --shadow-overlay: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+  --shadow-panel: 0 20px 50px -20px rgba(0, 0, 0, 0.7);
+  --notice-success-line: #065F46;
+  --notice-warning-line: #78350F;
+  --notice-danger-line: #7F1D1D;
+}
+
+/* === LAYOUT: the content sits on one rounded panel, as it did before the redesign === */
+
+html[data-style="cheerful"] #app-main {
+  width: calc(100% - 1.5rem);
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: var(--shadow-panel);
+}
+
+html[data-style="cheerful"] .app-bar {
+  border-bottom-color: transparent;
+}
+
+/* === TYPE === */
+
+html[data-style="cheerful"] body {
+  letter-spacing: 0;
+}
+
+html[data-style="cheerful"] .eyebrow {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+/* === BUTTONS AND CHIPS === */
+
+html[data-style="cheerful"] .btn {
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+html[data-style="cheerful"] .btn-primary,
+html[data-style="cheerful"] .upgrade-primary {
+  box-shadow: 0 6px 16px -6px rgba(4, 120, 87, 0.55);
+}
+
+html[data-style="cheerful"] .btn-primary:disabled,
+html[data-style="cheerful"] .upgrade-primary:disabled {
+  box-shadow: none;
+}
+
+html[data-style="cheerful"] .btn-secondary {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+html[data-style="cheerful"] .btn-secondary:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--surface);
+}
+
+html[data-style="cheerful"] .chip {
+  font-weight: 600;
+  background: var(--surface);
+}
+
+html[data-style="cheerful"] #credits-badge::before {
+  content: "🪙";
+  margin-right: 0.3em;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+
+html[data-style="cheerful"] #voice-pro-lock {
+  background: var(--pro);
+  color: #FFFFFF;
+}
+
+/* === SURFACES === */
+
+html[data-style="cheerful"] .card {
+  box-shadow: var(--shadow-raise);
+}
+
+html[data-style="cheerful"] .notice-success {
+  border-color: var(--notice-success-line);
+}
+
+html[data-style="cheerful"] .notice-warning {
+  border-color: var(--notice-warning-line);
+}
+
+html[data-style="cheerful"] .notice-danger {
+  border-color: var(--notice-danger-line);
+}
+
+html[data-style="cheerful"] .theme-menu {
+  border-radius: 16px;
+}
+
+html[data-style="cheerful"] .upgrade-shell {
+  border-radius: 24px;
+}
+
+/* === MODE BUTTONS: bare emoji and a colour tint for each mode === */
+
+html[data-style="cheerful"] .mode-card {
+  background: var(--surface);
+}
+
+html[data-style="cheerful"] .mode-card .mode-icon {
+  background: transparent;
+}
+
+html[data-style="cheerful"] .mode-card .mode-icon .icon-twin {
+  font-size: 1.45em;
+  width: 1.5em;
+  height: 1.5em;
+}
+
+html[data-style="cheerful"] #btn-morning:hover:not(:disabled) {
+  background: rgba(249, 115, 22, 0.10);
+  border-color: rgba(249, 115, 22, 0.5);
+}
+
+html[data-style="cheerful"] #btn-night:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.10);
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+html[data-style="cheerful"] #btn-journal:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.10);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+html[data-style="cheerful"] #btn-voice-note:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.10);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+/* Upload choices (Camera / Gallery / Files) show bigger emoji */
+
+html[data-style="cheerful"] .upload-label .icon-twin.icon-lg {
+  font-size: 1.6em;
+  width: 1.6em;
+  height: 1.6em;
+}
+
 *, ::before, ::after {
   --tw-border-spacing-x: 0;
   --tw-border-spacing-y: 0;
@@ -647,7 +922,7 @@ video {
   gap: 0.5rem;
   min-height: 44px;
   padding: 0.5rem 1rem;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-family: var(--font-display);
   font-weight: 500;
   font-size: 15px;
@@ -722,7 +997,7 @@ video {
   width: 44px;
   height: 44px;
   padding: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .btn-block {
@@ -744,13 +1019,13 @@ video {
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
 }
 
 .sheet {
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-overlay);
 }
 
@@ -774,7 +1049,7 @@ video {
   width: 100%;
   min-height: 44px;
   padding: 0.625rem 0.75rem;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--ink);
   border: 1px solid var(--line-strong);
@@ -822,7 +1097,7 @@ video {
   padding: 0.75rem;
   min-height: 44px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   background: var(--bg);
 }
@@ -848,7 +1123,7 @@ video {
 
 .notice {
   border: 1px solid;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 0.75rem;
   font-size: 14px;
 }
@@ -957,7 +1232,7 @@ button.chip:hover {
   padding: 0.75rem;
   text-align: left;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--bg);
   transition: border-color 0.15s ease, background-color 0.15s ease;
   cursor: pointer;
@@ -982,7 +1257,7 @@ button.chip:hover {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
   background: var(--surface);
   color: var(--ink);
@@ -1012,7 +1287,7 @@ button.chip:hover {
   width: 100%;
   min-height: 44px;
   padding: 0.5rem 0.75rem;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   text-align: left;
   font-size: 15px;
   font-weight: 500;
@@ -1134,6 +1409,11 @@ button.chip:hover {
 .mx-auto {
   margin-left: auto;
   margin-right: auto;
+}
+
+.my-1 {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
 }
 
 .my-3 {
@@ -2162,6 +2442,12 @@ button.chip:hover {
   --shadow-overlay: 0 16px 40px rgba(10, 10, 10, 0.16);
   --font-display: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
   --font-sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --radius-sm: 8px;
+  /* buttons, fields, menu rows */
+  --radius-md: 12px;
+  /* mode cards */
+  --radius-lg: 16px;
+  /* cards, sheets, dialogs */
   color-scheme: light;
   /* Older names, still used by the policy pages */
   --bg-main: var(--bg);
@@ -2243,6 +2529,42 @@ h1, h2, h3, .font-display {
   width: 0;
   height: 0;
   overflow: hidden;
+}
+
+/* Emoji stand-ins for line icons, used by packs with an emoji map (themes/packs.js) */
+
+.icon-twin {
+  display: none;
+}
+
+html[data-icons="emoji"] svg.icon-swapped {
+  display: none;
+}
+
+html[data-icons="emoji"] .icon-twin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.25em;
+  height: 1.25em;
+  font-size: 1.05em;
+  line-height: 1;
+  font-weight: 400;
+  font-style: normal;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+
+html[data-icons="emoji"] .icon-twin.icon-sm {
+  width: 1em;
+  height: 1em;
+  font-size: 0.85em;
+}
+
+html[data-icons="emoji"] .icon-twin.icon-lg {
+  width: 1.5em;
+  height: 1.5em;
+  font-size: 1.3em;
 }
 
 /* Respect users who ask for less motion */
@@ -2345,7 +2667,7 @@ h1, h2, h3, .font-display {
   gap: 0.625rem;
   min-height: 44px;
   padding: 0 0.75rem;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 14px;
   color: var(--ink);
   text-align: left;
@@ -2364,6 +2686,32 @@ h1, h2, h3, .font-display {
   content: "✓";
   margin-left: auto;
   color: var(--signal-ink);
+}
+
+.theme-menu-label {
+  padding: 0.5rem 0.75rem 0.25rem;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.style-swatch {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.style-swatch > span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.style-swatch > span + span {
+  margin-left: -4px;
 }
 
 /* === DRAWER === */
@@ -2404,7 +2752,7 @@ h1, h2, h3, .font-display {
   max-height: 92vh;
   max-height: calc(92dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--ink);
   border: 1px solid var(--line);
@@ -2433,7 +2781,7 @@ h1, h2, h3, .font-display {
 .upgrade-primary {
   display: block;
   width: 100%;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--signal);
   color: var(--on-signal);
   font-family: var(--font-display);
