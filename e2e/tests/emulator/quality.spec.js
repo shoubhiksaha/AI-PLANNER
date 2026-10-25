@@ -94,13 +94,18 @@ test.describe('Browser quality', () => {
         expect(problems).toEqual([]);
     });
 
-    test('Cheerful style: accessible in light and dark on every signed-in view, font allowed by the CSP', async ({ page, request }) => {
+    test('Cheerful style: accessible in light and dark on every signed-in view, logo allowed by the CSP', async ({ page, request }) => {
         const problems = h.watchConsole(page);
         const user = await h.createUser(request, { email: h.uniqueEmail('cheerful') });
         await page.addInitScript(() => { try { localStorage.setItem('style', 'cheerful'); } catch (_) { /* blocked */ } });
         await h.signIn(page, user);
         await expect(page.locator('html')).toHaveAttribute('data-style', 'cheerful');
-        expect(await page.evaluate(async () => (await document.fonts.load('16px Outfit')).map(f => f.status))).toContain('loaded');
+        expect(await page.evaluate(() => new Promise((resolve) => {
+            const logo = new Image();
+            logo.onload = () => resolve('loaded');
+            logo.onerror = () => resolve('blocked');
+            logo.src = '/brand/adt-profile-stacked-aqua.svg';
+        }))).toBe('loaded');
 
         await h.addPhoto(page, 'planner-page.png');
         await page.click('#btn-morning');

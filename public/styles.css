@@ -105,16 +105,16 @@ h1, h2, h3, .font-display { font-family: var(--font-display); }
 .view-hidden { display: none !important; }
 .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 
-/* Emoji stand-ins for line icons, used by packs with an emoji map (themes/packs.js) */
+/* Emoji stand-ins for line icons, used by packs with an emoji map (themes/packs.js). A twin takes
+   its icon's place at exactly the icon's size (the sizes sit next to .icon below, so size
+   utilities copied from the icon still win) and on the same baseline as an inline SVG. */
 .icon-twin { display: none; }
 html[data-icons="emoji"] svg.icon-swapped { display: none; }
 html[data-icons="emoji"] .icon-twin {
-    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-    width: 1.25em; height: 1.25em; font-size: 1.05em; line-height: 1; font-weight: 400; font-style: normal;
+    display: inline-block; overflow: hidden; vertical-align: baseline; flex-shrink: 0;
+    text-align: center; font-weight: 400; font-style: normal; letter-spacing: 0; text-indent: 0;
     font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
 }
-html[data-icons="emoji"] .icon-twin.icon-sm { width: 1em; height: 1em; font-size: 0.85em; }
-html[data-icons="emoji"] .icon-twin.icon-lg { width: 1.5em; height: 1.5em; font-size: 1.3em; }
 
 /* Respect users who ask for less motion */
 @media (prefers-reduced-motion: reduce) {
@@ -141,6 +141,11 @@ html[data-icons="emoji"] .icon-twin.icon-lg { width: 1.5em; height: 1.5em; font-
     }
     .icon-sm { width: 1em; height: 1em; }
     .icon-lg { width: 1.5em; height: 1.5em; }
+    /* Emoji twins: the glyph is drawn a little larger, and the box is divided by the same
+       factor, so it measures exactly 1.25em / 1em / 1.5em of the surrounding text, like the icon. */
+    .icon-twin { font-size: 1.05em; width: calc(1.25em / 1.05); height: calc(1.25em / 1.05); line-height: calc(1.25em / 1.05); }
+    .icon-twin.icon-sm { font-size: 0.85em; width: calc(1em / 0.85); height: calc(1em / 0.85); line-height: calc(1em / 0.85); }
+    .icon-twin.icon-lg { font-size: 1.3em; width: calc(1.5em / 1.3); height: calc(1.5em / 1.3); line-height: calc(1.5em / 1.3); }
 
     /* Buttons */
     .btn {

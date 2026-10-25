@@ -6,63 +6,15 @@
 /* Theme packs other than the default (docs/THEMES.md). Imports must come first. */
 
 /* AI Planner — "Cheerful" theme pack (docs/THEMES.md; registered in themes/packs.js).
-   The original AI Planner look on the current app, as on production before the redesign:
-   Outfit, slate text, emerald accents, indigo for plans, emoji icons (from packs.js), a big
-   logo header and everything on one soft frosted panel. A few uplifting touches on top:
-   a gentle colour wash behind the panel, tinted tiles for the four sync modes, colourful
-   chips and a fresher primary button. Every text colour pair meets WCAG AA in light and dark.
-   Inlined into tailwind.css by `npm run build:css`, so url()s are relative to public/. */
-
-/* === FONT (self-hosted, Latin subset; SIL OFL 1.1, see third-party-licenses.txt) ===
-   Downloaded only when this pack is in use. */
-
-@font-face {
-  font-family: "Outfit";
-
-  src: url("fonts/Outfit-400.woff2") format("woff2");
-
-  font-weight: 400;
-
-  font-style: normal;
-
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Outfit";
-
-  src: url("fonts/Outfit-500.woff2") format("woff2");
-
-  font-weight: 500;
-
-  font-style: normal;
-
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Outfit";
-
-  src: url("fonts/Outfit-600.woff2") format("woff2");
-
-  font-weight: 600;
-
-  font-style: normal;
-
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Outfit";
-
-  src: url("fonts/Outfit-700.woff2") format("woff2");
-
-  font-weight: 700;
-
-  font-style: normal;
-
-  font-display: swap;
-}
+   The original AI Planner colours on the current app: slate text, emerald accents, indigo for
+   plans, amber credits, emoji icons (from packs.js), ADT's aqua logo and a soft colour wash.
+   Same sizes in every pack: this file changes colours, icons, corner rounding, shadows and the
+   page background only. It never sets a width, height, padding, margin, gap, border width,
+   position, font or text size (the one exception, the sign-in logo, is painted over the
+   original lockup's box and takes no space); the "same as Minimalist modern" test in e2e/tests/ui.spec.js
+   measures every box and every line of text in both styles. Every text colour pair meets
+   WCAG AA in light and dark. Inlined into tailwind.css by `npm run build:css`, so url()s are
+   relative to public/. */
 
 /* === TOKENS (light) === */
 
@@ -93,16 +45,11 @@ html[data-style="cheerful"] {
   --overlay: rgba(15, 23, 42, 0.4);
   --shadow-raise: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-overlay: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
-  --font-display: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-sans: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius-sm: 12px;
   --radius-md: 12px;
   --radius-lg: 16px;
   color-scheme: light;
   /* Cheerful only */
-  --panel: rgba(255, 255, 255, 0.72);
-  --panel-line: rgba(226, 232, 240, 0.95);
-  --panel-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
   --card: #FFFFFF;
   --hover: rgba(226, 232, 240, 0.55);
   --dropzone-line: #CBD5E1;
@@ -122,6 +69,7 @@ html[data-style="cheerful"] {
   --plan-line: #6366F1;
   --coin-ink: #92400E;
   --coin-soft: rgba(245, 158, 11, 0.14);
+  --coin-line: rgba(180, 83, 9, 0.45);
   --notice-success-bg: linear-gradient(135deg, #F0FDF4, #ECFDF5 60%, #F0FDFA);
   --notice-success-line: #86EFAC;
   --notice-success-ink: #14532D;
@@ -174,9 +122,6 @@ html[data-style="cheerful"].dark-mode {
   --shadow-raise: none;
   --shadow-overlay: 0 30px 80px rgba(0, 0, 0, 0.5);
   color-scheme: dark;
-  --panel: rgba(30, 41, 59, 0.55);
-  --panel-line: rgba(51, 65, 85, 0.95);
-  --panel-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.35);
   --card: rgba(15, 23, 42, 0.6);
   --hover: rgba(51, 65, 85, 0.45);
   --dropzone-line: #475569;
@@ -190,6 +135,7 @@ html[data-style="cheerful"].dark-mode {
   --plan-hover-soft: rgba(49, 46, 129, 0.5);
   --plan-line: #A5B4FC;
   --coin-ink: #FCD34D;
+  --coin-line: rgba(252, 211, 77, 0.45);
   --notice-success-bg: rgba(20, 83, 45, 0.32);
   --notice-success-line: rgba(21, 128, 61, 0.6);
   --notice-success-ink: #DCFCE7;
@@ -212,348 +158,76 @@ html[data-style="cheerful"].dark-mode {
   --tint-voice: rgba(239, 68, 68, 0.16);
 }
 
-/* === PAGE: a soft colour wash behind the panel === */
+/* === PAGE: a soft colour wash behind everything === */
 
 html[data-style="cheerful"] body {
   background-color: var(--bg);
   background-image: var(--wash);
-  letter-spacing: 0;
 }
 
-/* The ADT logo, black on Signal Aqua: brand/adt-profile-stacked-aqua.svg, copied unchanged from
-   the ADT brand kit (final/social). Decorative: the "AI Planner" text next to it is the name.
-   No shadow or gradient on the logo (brand/logo/LOGO.md). */
+html[data-style="cheerful"] .app-bar {
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+}
+
+/* === LOGO: ADT's logo, black on Signal Aqua (brand/adt-profile-stacked-aqua.svg, copied unchanged
+   from the ADT brand kit, final/social). It is painted as the background of the same <img> box and
+   the image's own picture is moved out of view, so the box keeps its size. No shadow or gradient
+   on a logo (brand/logo/LOGO.md). */
 
 html[data-style="cheerful"] img.brand-tile {
-  display: none;
+  -o-object-position: -9999px 0;
+     object-position: -9999px 0;
+  background: #01F9C9 url("brand/adt-profile-stacked-aqua.svg") center / cover no-repeat;
 }
 
-html[data-style="cheerful"] :has(> img.brand-tile)::before,
+/* Sign-in: the same 280 × 87 lockup box holds the aqua tile and the name, both painted on top of
+   it (absolutely positioned, so nothing moves). The heading's name is still its sr-only text. */
+
+html[data-style="cheerful"] #view-login > h1 {
+  position: relative;
+}
+
+html[data-style="cheerful"] #view-login > h1 img {
+  -o-object-position: -9999px 0;
+     object-position: -9999px 0;
+}
+
+html[data-style="cheerful"] #view-login > h1::before,
+html[data-style="cheerful"] #view-login > h1::after {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 html[data-style="cheerful"] #view-login > h1::before {
   content: "";
-  display: block;
-  flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  left: 4px;
+  width: 64px;
+  height: 64px;
   border-radius: 22%;
   background: #01F9C9 url("brand/adt-profile-stacked-aqua.svg") center / cover no-repeat;
 }
 
-/* === LAYOUT (app): the app bar and the content form one rounded panel === */
-
-html[data-style="cheerful"] body[data-signed-in] .app-bar,
-html[data-style="cheerful"] #app-main {
-  width: calc(100% - 1.5rem);
-  max-width: 32rem;
-  margin-left: auto;
-  margin-right: auto;
-  background: var(--panel);
-  border: 1px solid var(--panel-line);
-}
-
-html[data-style="cheerful"] body[data-signed-in] .app-bar {
-  position: relative;
-  top: auto;
-  margin-top: calc(0.75rem + env(safe-area-inset-top, 0px));
-  padding: 0 1rem;
-  border-bottom: 0;
-  border-radius: 16px 16px 0 0;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-html[data-style="cheerful"] #app-main {
-  margin-top: 0;
-  margin-bottom: 1rem;
-  padding: 1.25rem 1rem 1.5rem;
-  border-top: 0;
-  border-radius: 0 0 16px 16px;
-  box-shadow: var(--panel-shadow);
-}
-
-@media (min-width: 640px) {
-  html[data-style="cheerful"] body[data-signed-in] .app-bar {
-    margin-top: 2rem;
-    padding: 0 2rem;
-  }
-
-  html[data-style="cheerful"] #app-main {
-    padding: 1.75rem 2rem 2rem;
-    margin-bottom: 1.5rem;
-  }
-}
-
-html[data-style="cheerful"] body[data-signed-in] .app-bar > div {
-  max-width: none;
-  padding: 0;
-}
-
-/* Signed out: one whole panel, with the theme button floating in its top corner */
-
-html[data-style="cheerful"] body[data-signed-in="false"] .app-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  background: transparent;
-  border-color: transparent;
-}
-
-html[data-style="cheerful"] body[data-signed-in="false"] .app-bar > div {
-  height: 3.25rem;
-}
-
-html[data-style="cheerful"] body[data-signed-in="false"] #app-main {
-  margin-top: calc(0.75rem + env(safe-area-inset-top, 0px));
-  padding-top: 1rem;
-  border-top: 1px solid var(--panel-line);
-  border-radius: 16px;
-}
-
-@media (min-width: 640px) {
-  html[data-style="cheerful"] body[data-signed-in="false"] #app-main {
-    margin-top: 2rem;
-    padding-top: 1.5rem;
-  }
-}
-
-/* Signed in: the logo header on top, then menu · plan · credits, then a divider */
-
-html[data-style="cheerful"] body[data-signed-in="true"] .app-bar > div {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas: "brand brand" "menu plan";
-  row-gap: 1.25rem;
-  height: auto;
-  padding: 1.5rem 0 0.75rem;
-  border-bottom: 1px solid var(--line);
-}
-
-html[data-style="cheerful"] body[data-signed-in="true"] .app-bar > div > .flex-1 {
-  display: none;
-}
-
-html[data-style="cheerful"] body[data-signed-in="true"] #hamburger-btn {
-  grid-area: menu;
-  justify-self: start;
-}
-
-html[data-style="cheerful"] body[data-signed-in="true"] #current-plan-badge {
-  grid-area: plan;
-  justify-self: end;
-}
-
-html[data-style="cheerful"] body[data-signed-in="true"] .app-bar > div > .relative {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-}
-
-html[data-style="cheerful"] body[data-signed-in] .app-bar a[href="/"] {
-  grid-area: brand;
-  justify-self: center;
-  flex-direction: column;
-  gap: 0.875rem;
-  padding: 0;
-  min-height: 0;
-  border-radius: 16px;
-}
-
-html[data-style="cheerful"] body[data-signed-in] .app-bar a[href="/"]::before {
-  width: 3.5rem;
-  height: 3.5rem;
-}
-
-html[data-style="cheerful"] body[data-signed-in] .app-bar a[href="/"] > span {
-  display: block;
-  font-size: 2.25rem;
-  line-height: 2.5rem;
+html[data-style="cheerful"] #view-login > h1::after {
+  content: "AI Planner";
+  content: "AI Planner" / "";
+  left: 84px;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 40px;
   font-weight: 700;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
   color: var(--ink);
 }
 
-/* Plan and credits, as the FREE PLAN pill and the coin chip */
-
-html[data-style="cheerful"] #current-plan-badge {
-  background: transparent;
-  border: 0;
-  padding: 0;
-  gap: 0.5rem;
-  font-weight: 700;
-}
-
-html[data-style="cheerful"] #current-plan-badge > [aria-hidden="true"] {
-  display: none;
-}
-
-html[data-style="cheerful"] #plan-label {
-  display: inline-flex;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 0.875rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--card);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink);
-}
-
-html[data-style="cheerful"] #current-plan-badge:hover #plan-label {
-  border-color: var(--line-strong);
-}
-
-html[data-style="cheerful"] #credits-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 0.625rem;
-  border-radius: 8px;
-  background: var(--coin-soft);
-  color: var(--coin-ink);
-  font-size: 13px;
-}
-
-html[data-style="cheerful"] #credits-badge::before {
-  content: "🪙";
-  content: "🪙" / "";
-  margin-right: 0.3em;
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-}
-
-/* === SIGN-IN: logo header, friendly cards, the green privacy note, emoji links === */
-
-html[data-style="cheerful"] #view-login > h1 {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-html[data-style="cheerful"] #view-login > h1::before {
-  width: 3.5rem;
-  height: 3.5rem;
-}
-
-html[data-style="cheerful"] #view-login > h1 img {
-  display: none;
-}
-
-html[data-style="cheerful"] #view-login > h1 .sr-only {
-  position: static;
-  width: auto;
-  height: auto;
-  margin: 0;
-  padding: 0;
-  overflow: visible;
-  clip: auto;
-  white-space: normal;
-  font-size: 2.25rem;
-  line-height: 2.5rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  color: var(--ink);
-}
-
-html[data-style="cheerful"] #view-login > h1 + p {
-  margin-top: 0.75rem;
-  font-size: 17px;
-  font-weight: 500;
-  color: var(--ink-muted);
-}
-
-html[data-style="cheerful"] #login-btn {
-  border-radius: 16px;
-}
-
-html[data-style="cheerful"] #view-login .card .mode-icon {
-  background: transparent;
-}
-
-html[data-style="cheerful"] #view-login .card .mode-icon .icon-twin {
-  font-size: 1.5rem;
-  width: 1.75rem;
-  height: 1.75rem;
-}
+/* === SIGN-IN === */
 
 html[data-style="cheerful"] #view-login > p.flex {
-  padding: 0.875rem;
-  border: 1px solid var(--privacy-line);
-  border-radius: 12px;
-  background: var(--privacy-bg);
   color: var(--privacy-ink);
 }
 
-html[data-style="cheerful"] nav[aria-label="Policies and resources"] a {
-  gap: 0.5rem;
-}
-
-html[data-style="cheerful"] nav[aria-label="Policies and resources"] a::before {
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-}
-
-html[data-style="cheerful"] nav[aria-label="Policies and resources"] a[href="planner.html"]::before {
-  content: "📄";
-  content: "📄" / "";
-}
-
-html[data-style="cheerful"] nav[aria-label="Policies and resources"] a[href="privacy.html"]::before {
-  content: "🛡️";
-  content: "🛡️" / "";
-}
-
-html[data-style="cheerful"] nav[aria-label="Policies and resources"] a[href="pricing-policy.html"]::before {
-  content: "💳";
-  content: "💳" / "";
-}
-
-html[data-style="cheerful"] nav[aria-label="Policies and resources"] a[href="refund-policy.html"]::before {
-  content: "💸";
-  content: "💸" / "";
-}
-
-/* === CONTENT PAGES (privacy, pricing, refunds, template) sit on the same panel === */
-
-html[data-style="cheerful"] main.doc {
-  width: calc(100% - 1.5rem);
-  margin-top: 0.5rem;
-  margin-bottom: 1.5rem;
-  padding: 1.75rem 1.25rem;
-  background: var(--panel);
-  border: 1px solid var(--panel-line);
-  border-radius: 16px;
-  box-shadow: var(--panel-shadow);
-}
-
-@media (min-width: 640px) {
-  html[data-style="cheerful"] main.doc {
-    padding: 2.5rem 2.25rem;
-  }
-}
-
-html[data-style="cheerful"] body:not([data-signed-in]) .app-bar {
-  background: transparent;
-  border-bottom-color: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-/* === TYPE === */
-
-html[data-style="cheerful"] .eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
-
 /* === BUTTONS === */
-
-html[data-style="cheerful"] .btn {
-  font-weight: 600;
-  letter-spacing: 0;
-}
 
 html[data-style="cheerful"] .btn-primary {
   background: var(--primary-fill);
@@ -587,6 +261,18 @@ html[data-style="cheerful"] .theme-item:hover {
   background: var(--hover);
 }
 
+/* Plan and credits: the amber coin chip */
+
+html[data-style="cheerful"] #current-plan-badge {
+  background: var(--coin-soft);
+  border-color: transparent;
+  color: var(--coin-ink);
+}
+
+html[data-style="cheerful"] #current-plan-badge:hover {
+  border-color: var(--coin-line);
+}
+
 /* === SURFACES === */
 
 html[data-style="cheerful"] .card {
@@ -594,8 +280,12 @@ html[data-style="cheerful"] .card {
   box-shadow: var(--shadow-raise);
 }
 
-html[data-style="cheerful"] .sheet {
-  border-radius: 16px;
+html[data-style="cheerful"] .choice {
+  background: var(--card);
+}
+
+html[data-style="cheerful"] .choice:has(input:checked) {
+  background: var(--signal-soft);
 }
 
 html[data-style="cheerful"] #voice-pro-lock {
@@ -642,8 +332,6 @@ html[data-style="cheerful"] .notice-info {
 /* Theme menu */
 
 html[data-style="cheerful"] .theme-menu {
-  border-radius: 16px;
-  border-color: var(--panel-line);
   box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.18);
 }
 
@@ -651,24 +339,11 @@ html[data-style="cheerful"] .theme-menu {
 
 html[data-style="cheerful"] #drop-zone {
   border-color: var(--dropzone-line);
-  border-radius: 16px;
   background: var(--card);
-}
-
-html[data-style="cheerful"] .upload-label {
-  background: transparent;
-  border-color: transparent;
 }
 
 html[data-style="cheerful"] .upload-label:hover {
   background: var(--signal-soft);
-  border-color: transparent;
-}
-
-html[data-style="cheerful"] .upload-label .icon-twin.icon-lg {
-  font-size: 2rem;
-  width: 2.25rem;
-  height: 2.25rem;
 }
 
 /* Sync modes: a tinted tile and hover colour for each one */
@@ -680,18 +355,6 @@ html[data-style="cheerful"] .mode-card {
 
 html[data-style="cheerful"] .mode-card:disabled {
   opacity: 0.6;
-}
-
-html[data-style="cheerful"] .mode-card .mode-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-}
-
-html[data-style="cheerful"] .mode-card .mode-icon .icon-twin {
-  font-size: 1.35em;
-  width: 1.5em;
-  height: 1.5em;
 }
 
 html[data-style="cheerful"] #btn-morning .mode-icon {
@@ -731,10 +394,6 @@ html[data-style="cheerful"] #btn-voice-note:hover:not(:disabled) {
 }
 
 /* === PLANS AND CREDITS: indigo, as before === */
-
-html[data-style="cheerful"] .upgrade-shell {
-  border-radius: 24px;
-}
 
 html[data-style="cheerful"] .upgrade-eyebrow {
   color: var(--plan-ink);
@@ -1419,6 +1078,30 @@ video {
 .icon-lg {
   width: 1.5em;
   height: 1.5em;
+}
+
+/* Emoji twins: the glyph is drawn a little larger, and the box is divided by the same
+       factor, so it measures exactly 1.25em / 1em / 1.5em of the surrounding text, like the icon. */
+
+.icon-twin {
+  font-size: 1.05em;
+  width: calc(1.25em / 1.05);
+  height: calc(1.25em / 1.05);
+  line-height: calc(1.25em / 1.05);
+}
+
+.icon-twin.icon-sm {
+  font-size: 0.85em;
+  width: calc(1em / 0.85);
+  height: calc(1em / 0.85);
+  line-height: calc(1em / 0.85);
+}
+
+.icon-twin.icon-lg {
+  font-size: 1.3em;
+  width: calc(1.5em / 1.3);
+  height: calc(1.5em / 1.3);
+  line-height: calc(1.5em / 1.3);
 }
 
 /* Buttons */
@@ -3039,7 +2722,9 @@ h1, h2, h3, .font-display {
   overflow: hidden;
 }
 
-/* Emoji stand-ins for line icons, used by packs with an emoji map (themes/packs.js) */
+/* Emoji stand-ins for line icons, used by packs with an emoji map (themes/packs.js). A twin takes
+   its icon's place at exactly the icon's size (the sizes sit next to .icon below, so size
+   utilities copied from the icon still win) and on the same baseline as an inline SVG. */
 
 .icon-twin {
   display: none;
@@ -3050,29 +2735,16 @@ html[data-icons="emoji"] svg.icon-swapped {
 }
 
 html[data-icons="emoji"] .icon-twin {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: baseline;
   flex-shrink: 0;
-  width: 1.25em;
-  height: 1.25em;
-  font-size: 1.05em;
-  line-height: 1;
+  text-align: center;
   font-weight: 400;
   font-style: normal;
+  letter-spacing: 0;
+  text-indent: 0;
   font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-}
-
-html[data-icons="emoji"] .icon-twin.icon-sm {
-  width: 1em;
-  height: 1em;
-  font-size: 0.85em;
-}
-
-html[data-icons="emoji"] .icon-twin.icon-lg {
-  width: 1.5em;
-  height: 1.5em;
-  font-size: 1.3em;
 }
 
 /* Respect users who ask for less motion */
