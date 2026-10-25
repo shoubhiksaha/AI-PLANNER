@@ -1,6 +1,7 @@
 /* AI Planner — "Cheerful" theme pack (docs/THEMES.md; registered in themes/packs.js).
    The original AI Planner colours on the current app: slate text, emerald accents, indigo for
-   plans, amber credits, emoji icons (from packs.js), ADT's aqua logo and a soft colour wash.
+   plans, amber credits, emoji icons (from packs.js), the app icon in black on aqua, the ADT
+   footer in aqua and a soft colour wash.
    Same sizes in every pack: this file changes colours, icons, corner rounding, shadows and the
    page background only. It never sets a width, height, padding, margin, gap, border width,
    position, font or text size (the one exception, the sign-in logo, is painted over the
@@ -158,13 +159,14 @@ html[data-style="cheerful"] body {
 }
 html[data-style="cheerful"] .app-bar { background: color-mix(in srgb, var(--bg) 85%, transparent); }
 
-/* === LOGO: ADT's logo, black on Signal Aqua (brand/adt-profile-stacked-aqua.svg, copied unchanged
-   from the ADT brand kit, final/social). It is painted as the background of the same <img> box and
-   the image's own picture is moved out of view, so the box keeps its size. No shadow or gradient
-   on a logo (brand/logo/LOGO.md). */
+/* === LOGO: the same AI Planner icon as Minimalist modern, with the colours swapped: black mark on
+   Signal Aqua (brand/app-icon-aqua.svg; ADT's approved "aqua as a large flat field with the
+   one-colour black logo on top"). It is painted as the background of the same <img> box and the
+   image's own picture is moved out of view, so the box keeps its size. No shadow or gradient on
+   a logo (brand/logo/LOGO.md). */
 html[data-style="cheerful"] img.brand-tile {
     object-position: -9999px 0;
-    background: #01F9C9 url("brand/adt-profile-stacked-aqua.svg") center / cover no-repeat;
+    background: url("brand/app-icon-aqua.svg") center / cover no-repeat;
 }
 /* Sign-in: the same 280 × 87 lockup box holds the aqua tile and the name, both painted on top of
    it (absolutely positioned, so nothing moves). The heading's name is still its sr-only text. */
@@ -175,14 +177,26 @@ html[data-style="cheerful"] #view-login > h1::after {
     position: absolute; top: 50%; transform: translateY(-50%);
 }
 html[data-style="cheerful"] #view-login > h1::before {
-    content: ""; left: 4px; width: 64px; height: 64px; border-radius: 22%;
-    background: #01F9C9 url("brand/adt-profile-stacked-aqua.svg") center / cover no-repeat;
+    content: ""; left: 4px; width: 64px; height: 64px;
+    background: url("brand/app-icon-aqua.svg") center / cover no-repeat;
 }
 html[data-style="cheerful"] #view-login > h1::after {
     content: "AI Planner"; content: "AI Planner" / "";
     left: 84px; white-space: nowrap;
     font-family: var(--font-display); font-size: 34px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em;
     color: var(--ink);
+}
+
+/* === FOOTER: "An offering by ADT" in Signal Aqua. The lockup's own shape masks an aqua fill in the
+   same <img> box, so the brand file stays unchanged and nothing moves. */
+html[data-style="cheerful"] img[src^="brand/offering-by-adt-"] { object-position: -9999px 0; background: #01F9C9; }
+html[data-style="cheerful"] img[src^="brand/offering-by-adt-stacked-"] {
+    -webkit-mask: url("brand/offering-by-adt-stacked-light.svg") center / contain no-repeat;
+    mask: url("brand/offering-by-adt-stacked-light.svg") center / contain no-repeat;
+}
+html[data-style="cheerful"] img[src^="brand/offering-by-adt-inline-"] {
+    -webkit-mask: url("brand/offering-by-adt-inline-light.svg") center / contain no-repeat;
+    mask: url("brand/offering-by-adt-inline-light.svg") center / contain no-repeat;
 }
 
 /* === SIGN-IN === */

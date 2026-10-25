@@ -60,6 +60,7 @@ Aqua on deep black ≈ 14.5 : 1; **aqua on white ≈ 1.4 : 1 — never**. On lig
 | `final/logo-primary.svg` | Main logo on white and light backgrounds (deep black) |
 | `final/logo-primary-reversed.svg` | Dark backgrounds: aqua wave, white ADT, aqua AI PLANNER (ADT's reversed pattern) |
 | `final/app-icon.svg` | App icon, PWA, store listing, Google sign-in screen, avatars |
+| `final/app-icon-aqua.svg` | The same icon in black on Signal Aqua (ADT's approved "aqua as a large flat field with the one-colour black logo on top"), for the app's Cheerful style |
 | `final/favicon.svg` | Browser tab, 16–32 px |
 | `final/logo-mark.svg` / `logo-mark-aqua.svg` | Wave alone (deep black on light; aqua on dark only) |
 | `final/logo-mono-black.svg` / `logo-mono-white.svg` | One-colour print, stamps, the printable planner template |
