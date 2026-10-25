@@ -2877,7 +2877,6 @@ if (themePacks) {
     window.addEventListener('storage', (e) => { if (themePacks.isStyleChange(e)) markSelectedStyle(); });
 }
 
-// Initial dashboard render (empty state) and periodic primary-mode refresh.
+// Initial dashboard render (empty state).
 renderThumbnails();
 setBusy();
-setInterval(() => { if (!isSyncing) updateDashButtons(); }, 5 * 60 * 1000);
