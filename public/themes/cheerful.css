@@ -1,7 +1,9 @@
 /* AI Planner — "Cheerful" theme pack (docs/THEMES.md; registered in themes/packs.js).
-   The pre-redesign look on the current app: Outfit, slate greys, emerald accents, emoji
-   icons (from packs.js), rounder shapes, soft shadows and one rounded panel around the
-   content. Every text colour pair meets WCAG AA in light and dark.
+   The original AI Planner look on the current app, as on production before the redesign:
+   Outfit, slate text, emerald accents, indigo for plans, emoji icons (from packs.js), the
+   🌿 leaf header and everything on one soft frosted panel. A few uplifting touches on top:
+   a gentle colour wash behind the panel, tinted tiles for the four sync modes, colourful
+   chips and a fresher primary button. Every text colour pair meets WCAG AA in light and dark.
    Inlined into tailwind.css by `npm run build:css`, so url()s are relative to public/. */
 
 /* === FONT (self-hosted, Latin subset; SIL OFL 1.1, see third-party-licenses.txt) ===
@@ -14,11 +16,11 @@
 /* === TOKENS (light) === */
 html[data-style="cheerful"] {
     --bg: #F8FAFC;
-    --surface: #FFFFFF;
-    --raised: #F1F5F9;
+    --surface: #F1F5F9;
+    --raised: #E2E8F0;
     --line: #E2E8F0;
     --line-strong: #64748B;
-    --ink: #1E293B;
+    --ink: #334155;
     --ink-muted: #475569;
     --ink-subtle: #5A687D;
     --signal: #047857;
@@ -36,19 +38,60 @@ html[data-style="cheerful"] {
     --on-danger: #FFFFFF;
     --toggle-on: #059669;
     --toggle-knob: #FFFFFF;
-    --overlay: rgba(15, 23, 42, 0.45);
-    --shadow-raise: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px -8px rgba(15, 23, 42, 0.10);
-    --shadow-overlay: 0 24px 48px -12px rgba(15, 23, 42, 0.25);
-    --shadow-panel: 0 20px 50px -20px rgba(15, 23, 42, 0.18);
+    --overlay: rgba(15, 23, 42, 0.4);
+    --shadow-raise: 0 1px 2px rgba(15, 23, 42, 0.05);
+    --shadow-overlay: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
     --font-display: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
     --font-sans: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
     --radius-sm: 12px;
-    --radius-md: 16px;
-    --radius-lg: 20px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    color-scheme: light;
+
+    /* Cheerful only */
+    --panel: rgba(255, 255, 255, 0.72);
+    --panel-line: rgba(226, 232, 240, 0.95);
+    --panel-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
+    --card: #FFFFFF;
+    --hover: rgba(226, 232, 240, 0.55);
+    --dropzone-line: #CBD5E1;
+    --wash:
+        radial-gradient(56rem 32rem at -10% -8%, rgba(16, 185, 129, 0.13), transparent 62%),
+        radial-gradient(48rem 30rem at 110% 0%, rgba(99, 102, 241, 0.10), transparent 62%),
+        radial-gradient(56rem 36rem at 50% 108%, rgba(245, 158, 11, 0.10), transparent 62%);
+    --leaf-tile: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(20, 184, 166, 0.10));
+    --primary-fill: linear-gradient(135deg, #047857, #0F766E);
+    --primary-fill-hover: linear-gradient(135deg, #065F46, #115E59);
+    --primary-shadow: 0 6px 16px -6px rgba(4, 120, 87, 0.55);
     --pro: #4F46E5;
-    --notice-success-line: #A7F3D0;
-    --notice-warning-line: #FDE68A;
-    --notice-danger-line: #FECACA;
+    --plan: #4338CA;
+    --plan-hover: #3730A3;
+    --plan-ink: #4338CA;
+    --plan-soft: #EEF2FF;
+    --plan-hover-soft: #F5F3FF;
+    --plan-line: #6366F1;
+    --coin-ink: #92400E;
+    --coin-soft: rgba(245, 158, 11, 0.14);
+    --notice-success-bg: linear-gradient(135deg, #F0FDF4, #ECFDF5 60%, #F0FDFA);
+    --notice-success-line: #86EFAC;
+    --notice-success-ink: #14532D;
+    --notice-success-title: #166534;
+    --notice-warning-line: #FCD34D;
+    --notice-warning-ink: #78350F;
+    --notice-warning-title: #92400E;
+    --notice-danger-line: #FCA5A5;
+    --notice-danger-ink: #7F1D1D;
+    --notice-danger-title: #991B1B;
+    --notice-info-bg: #EFF6FF;
+    --notice-info-line: #93C5FD;
+    --notice-info-ink: #1E3A8A;
+    --privacy-bg: #ECFDF5;
+    --privacy-line: #A7F3D0;
+    --privacy-ink: #065F46;
+    --tint-morning: rgba(249, 115, 22, 0.12);
+    --tint-evening: rgba(99, 102, 241, 0.12);
+    --tint-journal: rgba(16, 185, 129, 0.12);
+    --tint-voice: rgba(239, 68, 68, 0.11);
 }
 
 /* === TOKENS (dark) === */
@@ -58,7 +101,7 @@ html[data-style="cheerful"].dark-mode {
     --raised: #273449;
     --line: #334155;
     --line-strong: #6B7C93;
-    --ink: #F1F5F9;
+    --ink: #E2E8F0;
     --ink-muted: #94A3B8;
     --ink-subtle: #9AA9BD;
     --signal: #047857;
@@ -77,58 +120,244 @@ html[data-style="cheerful"].dark-mode {
     --toggle-on: #10B981;
     --toggle-knob: #FFFFFF;
     --overlay: rgba(2, 6, 23, 0.65);
-    --shadow-raise: 0 0 0 1px #334155;
-    --shadow-overlay: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
-    --shadow-panel: 0 20px 50px -20px rgba(0, 0, 0, 0.7);
-    --notice-success-line: #065F46;
-    --notice-warning-line: #78350F;
-    --notice-danger-line: #7F1D1D;
+    --shadow-raise: none;
+    --shadow-overlay: 0 30px 80px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+
+    --panel: rgba(30, 41, 59, 0.55);
+    --panel-line: rgba(51, 65, 85, 0.95);
+    --panel-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.35);
+    --card: rgba(15, 23, 42, 0.6);
+    --hover: rgba(51, 65, 85, 0.45);
+    --dropzone-line: #475569;
+    --wash:
+        radial-gradient(56rem 32rem at -10% -8%, rgba(16, 185, 129, 0.14), transparent 62%),
+        radial-gradient(48rem 30rem at 110% 0%, rgba(99, 102, 241, 0.14), transparent 62%),
+        radial-gradient(56rem 36rem at 50% 108%, rgba(245, 158, 11, 0.06), transparent 62%);
+    --leaf-tile: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(20, 184, 166, 0.12));
+    --primary-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.6);
+    --plan-ink: #A5B4FC;
+    --plan-soft: #312E81;
+    --plan-hover-soft: rgba(49, 46, 129, 0.5);
+    --plan-line: #A5B4FC;
+    --coin-ink: #FCD34D;
+    --notice-success-bg: rgba(20, 83, 45, 0.32);
+    --notice-success-line: rgba(21, 128, 61, 0.6);
+    --notice-success-ink: #DCFCE7;
+    --notice-success-title: #86EFAC;
+    --notice-warning-line: rgba(180, 83, 9, 0.6);
+    --notice-warning-ink: #FEF3C7;
+    --notice-warning-title: #FCD34D;
+    --notice-danger-line: rgba(185, 28, 28, 0.6);
+    --notice-danger-ink: #FEE2E2;
+    --notice-danger-title: #FCA5A5;
+    --notice-info-bg: rgba(30, 58, 138, 0.3);
+    --notice-info-line: rgba(29, 78, 216, 0.6);
+    --notice-info-ink: #DBEAFE;
+    --privacy-bg: rgba(6, 78, 59, 0.22);
+    --privacy-line: rgba(6, 95, 70, 0.55);
+    --privacy-ink: #6EE7B7;
+    --tint-morning: rgba(249, 115, 22, 0.16);
+    --tint-evening: rgba(99, 102, 241, 0.2);
+    --tint-journal: rgba(16, 185, 129, 0.16);
+    --tint-voice: rgba(239, 68, 68, 0.16);
 }
 
-/* === LAYOUT: the content sits on one rounded panel, as it did before the redesign === */
-html[data-style="cheerful"] #app-main {
-    width: calc(100% - 1.5rem);
-    margin-top: 1rem;
-    margin-bottom: 1rem;
-    background: var(--bg);
-    border: 1px solid var(--line);
-    border-radius: 28px;
-    box-shadow: var(--shadow-panel);
+/* === PAGE: a soft colour wash behind the panel === */
+html[data-style="cheerful"] body {
+    background-color: var(--bg);
+    background-image: var(--wash);
+    letter-spacing: 0;
 }
-html[data-style="cheerful"] .app-bar { border-bottom-color: transparent; }
+
+/* The 🌿 leaf mark (decorative: the "AI Planner" text next to it is the name) */
+html[data-style="cheerful"] img.brand-tile { display: none; }
+html[data-style="cheerful"] :has(> img.brand-tile)::before,
+html[data-style="cheerful"] #view-login > h1::before {
+    content: "🌿";
+    content: "🌿" / "";
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 32px; height: 32px; border-radius: 10px; font-size: 18px; line-height: 1;
+    background: var(--leaf-tile); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+
+/* === LAYOUT (app): the app bar and the content form one rounded panel === */
+html[data-style="cheerful"] body[data-signed-in] .app-bar,
+html[data-style="cheerful"] #app-main {
+    width: calc(100% - 1.5rem); max-width: 32rem; margin-left: auto; margin-right: auto;
+    background: var(--panel); border: 1px solid var(--panel-line);
+}
+html[data-style="cheerful"] body[data-signed-in] .app-bar {
+    position: relative; top: auto;
+    margin-top: calc(0.75rem + env(safe-area-inset-top, 0px)); padding: 0 1rem;
+    border-bottom: 0; border-radius: 16px 16px 0 0;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+html[data-style="cheerful"] #app-main {
+    margin-top: 0; margin-bottom: 1rem; padding: 1.25rem 1rem 1.5rem;
+    border-top: 0; border-radius: 0 0 16px 16px; box-shadow: var(--panel-shadow);
+}
+@media (min-width: 640px) {
+    html[data-style="cheerful"] body[data-signed-in] .app-bar { margin-top: 2rem; padding: 0 2rem; }
+    html[data-style="cheerful"] #app-main { padding: 1.75rem 2rem 2rem; margin-bottom: 1.5rem; }
+}
+html[data-style="cheerful"] body[data-signed-in] .app-bar > div { max-width: none; padding: 0; }
+
+/* Signed out: one whole panel, with the theme button floating in its top corner */
+html[data-style="cheerful"] body[data-signed-in="false"] .app-bar {
+    position: absolute; top: 0; left: 0; right: 0; background: transparent; border-color: transparent;
+}
+html[data-style="cheerful"] body[data-signed-in="false"] .app-bar > div { height: 3.25rem; }
+html[data-style="cheerful"] body[data-signed-in="false"] #app-main {
+    margin-top: calc(0.75rem + env(safe-area-inset-top, 0px)); padding-top: 1rem;
+    border-top: 1px solid var(--panel-line); border-radius: 16px;
+}
+@media (min-width: 640px) {
+    html[data-style="cheerful"] body[data-signed-in="false"] #app-main { margin-top: 2rem; padding-top: 1.5rem; }
+}
+
+/* Signed in: the leaf header on top, then menu · plan · credits, then a divider */
+html[data-style="cheerful"] body[data-signed-in="true"] .app-bar > div {
+    display: grid; grid-template-columns: 1fr auto; grid-template-areas: "brand brand" "menu plan";
+    row-gap: 1.25rem; height: auto; padding: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--line);
+}
+html[data-style="cheerful"] body[data-signed-in="true"] .app-bar > div > .flex-1 { display: none; }
+html[data-style="cheerful"] body[data-signed-in="true"] #hamburger-btn { grid-area: menu; justify-self: start; }
+html[data-style="cheerful"] body[data-signed-in="true"] #current-plan-badge { grid-area: plan; justify-self: end; }
+html[data-style="cheerful"] body[data-signed-in="true"] .app-bar > div > .relative { position: absolute; top: 0.75rem; right: 0.75rem; }
+html[data-style="cheerful"] body[data-signed-in] .app-bar a[href="/"] {
+    grid-area: brand; justify-self: center; flex-direction: column; gap: 0.875rem;
+    padding: 0; min-height: 0; border-radius: 16px;
+}
+html[data-style="cheerful"] body[data-signed-in] .app-bar a[href="/"]::before {
+    width: 3.5rem; height: 3.5rem; border-radius: 16px; font-size: 1.875rem;
+}
+html[data-style="cheerful"] body[data-signed-in] .app-bar a[href="/"] > span {
+    display: block; font-size: 2.25rem; line-height: 2.5rem; font-weight: 700; letter-spacing: -0.025em; color: var(--ink);
+}
+
+/* Plan and credits, as the FREE PLAN pill and the coin chip */
+html[data-style="cheerful"] #current-plan-badge {
+    background: transparent; border: 0; padding: 0; gap: 0.5rem; font-weight: 700;
+}
+html[data-style="cheerful"] #current-plan-badge > [aria-hidden="true"] { display: none; }
+html[data-style="cheerful"] #plan-label {
+    display: inline-flex; align-items: center; min-height: 36px; padding: 0 0.875rem;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--card);
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink);
+}
+html[data-style="cheerful"] #current-plan-badge:hover #plan-label { border-color: var(--line-strong); }
+html[data-style="cheerful"] #credits-badge {
+    display: inline-flex; align-items: center; min-height: 32px; padding: 0 0.625rem; border-radius: 8px;
+    background: var(--coin-soft); color: var(--coin-ink); font-size: 13px;
+}
+html[data-style="cheerful"] #credits-badge::before {
+    content: "🪙"; content: "🪙" / ""; margin-right: 0.3em;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+
+/* === SIGN-IN: leaf header, friendly cards, the green privacy note, emoji links === */
+html[data-style="cheerful"] #view-login > h1 { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+html[data-style="cheerful"] #view-login > h1::before { width: 3.5rem; height: 3.5rem; border-radius: 16px; font-size: 1.875rem; }
+html[data-style="cheerful"] #view-login > h1 img { display: none; }
+html[data-style="cheerful"] #view-login > h1 .sr-only {
+    position: static; width: auto; height: auto; margin: 0; padding: 0; overflow: visible; clip: auto; white-space: normal;
+    font-size: 2.25rem; line-height: 2.5rem; font-weight: 700; letter-spacing: -0.025em; color: var(--ink);
+}
+html[data-style="cheerful"] #view-login > h1 + p { margin-top: 0.75rem; font-size: 17px; font-weight: 500; color: var(--ink-muted); }
+html[data-style="cheerful"] #login-btn { border-radius: 16px; }
+html[data-style="cheerful"] #view-login .card .mode-icon { background: transparent; }
+html[data-style="cheerful"] #view-login .card .mode-icon .icon-twin { font-size: 1.5rem; width: 1.75rem; height: 1.75rem; }
+html[data-style="cheerful"] #view-login > p.flex {
+    padding: 0.875rem; border: 1px solid var(--privacy-line); border-radius: 12px;
+    background: var(--privacy-bg); color: var(--privacy-ink);
+}
+html[data-style="cheerful"] nav[aria-label="Policies and resources"] a { gap: 0.5rem; }
+html[data-style="cheerful"] nav[aria-label="Policies and resources"] a::before {
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+html[data-style="cheerful"] nav[aria-label="Policies and resources"] a[href="planner.html"]::before { content: "📄"; content: "📄" / ""; }
+html[data-style="cheerful"] nav[aria-label="Policies and resources"] a[href="privacy.html"]::before { content: "🛡️"; content: "🛡️" / ""; }
+html[data-style="cheerful"] nav[aria-label="Policies and resources"] a[href="pricing-policy.html"]::before { content: "💳"; content: "💳" / ""; }
+html[data-style="cheerful"] nav[aria-label="Policies and resources"] a[href="refund-policy.html"]::before { content: "💸"; content: "💸" / ""; }
+
+/* === CONTENT PAGES (privacy, pricing, refunds, template) sit on the same panel === */
+html[data-style="cheerful"] main.doc {
+    width: calc(100% - 1.5rem); margin-top: 0.5rem; margin-bottom: 1.5rem; padding: 1.75rem 1.25rem;
+    background: var(--panel); border: 1px solid var(--panel-line); border-radius: 16px; box-shadow: var(--panel-shadow);
+}
+@media (min-width: 640px) { html[data-style="cheerful"] main.doc { padding: 2.5rem 2.25rem; } }
+html[data-style="cheerful"] body:not([data-signed-in]) .app-bar {
+    background: transparent; border-bottom-color: transparent; backdrop-filter: none; -webkit-backdrop-filter: none;
+}
 
 /* === TYPE === */
-html[data-style="cheerful"] body { letter-spacing: 0; }
-html[data-style="cheerful"] .eyebrow { font-weight: 700; letter-spacing: 0.06em; }
+html[data-style="cheerful"] .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; }
 
-/* === BUTTONS AND CHIPS === */
+/* === BUTTONS === */
 html[data-style="cheerful"] .btn { font-weight: 600; letter-spacing: 0; }
-html[data-style="cheerful"] .btn-primary,
-html[data-style="cheerful"] .upgrade-primary { box-shadow: 0 6px 16px -6px rgba(4, 120, 87, 0.55); }
-html[data-style="cheerful"] .btn-primary:disabled,
-html[data-style="cheerful"] .upgrade-primary:disabled { box-shadow: none; }
-html[data-style="cheerful"] .btn-secondary { background: var(--surface); border-color: var(--line); }
-html[data-style="cheerful"] .btn-secondary:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface); }
-html[data-style="cheerful"] .chip { font-weight: 600; background: var(--surface); }
-html[data-style="cheerful"] #credits-badge::before { content: "🪙"; margin-right: 0.3em; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
-html[data-style="cheerful"] #voice-pro-lock { background: var(--pro); color: #FFFFFF; }
+html[data-style="cheerful"] .btn-primary { background: var(--primary-fill); box-shadow: var(--primary-shadow); }
+html[data-style="cheerful"] .btn-primary:hover:not(:disabled) { background: var(--primary-fill-hover); }
+html[data-style="cheerful"] .btn-primary:disabled { background: var(--raised); box-shadow: none; }
+html[data-style="cheerful"] .btn-secondary { background: var(--card); border-color: var(--line); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05); }
+html[data-style="cheerful"] .btn-secondary:hover:not(:disabled) { background: var(--card); border-color: var(--line-strong); box-shadow: 0 4px 10px -2px rgba(15, 23, 42, 0.1); }
+html[data-style="cheerful"] .btn-ghost:hover:not(:disabled),
+html[data-style="cheerful"] .menu-item:hover,
+html[data-style="cheerful"] .theme-item:hover { background: var(--hover); }
 
 /* === SURFACES === */
-html[data-style="cheerful"] .card { box-shadow: var(--shadow-raise); }
-html[data-style="cheerful"] .notice-success { border-color: var(--notice-success-line); }
-html[data-style="cheerful"] .notice-warning { border-color: var(--notice-warning-line); }
-html[data-style="cheerful"] .notice-danger { border-color: var(--notice-danger-line); }
-html[data-style="cheerful"] .theme-menu { border-radius: 16px; }
+html[data-style="cheerful"] .card { background: var(--card); box-shadow: var(--shadow-raise); }
+html[data-style="cheerful"] .sheet { border-radius: 16px; }
+html[data-style="cheerful"] #voice-pro-lock { background: var(--pro); color: #FFFFFF; }
+
+/* Notices and result cards, in the original green / amber / red / blue */
+html[data-style="cheerful"] .notice-success { background: var(--notice-success-bg); border-color: var(--notice-success-line); color: var(--notice-success-ink); }
+html[data-style="cheerful"] .notice-title-success { color: var(--notice-success-title); }
+html[data-style="cheerful"] .notice-warning { border-color: var(--notice-warning-line); color: var(--notice-warning-ink); }
+html[data-style="cheerful"] .notice-title-warning { color: var(--notice-warning-title); }
+html[data-style="cheerful"] .notice-danger { border-color: var(--notice-danger-line); color: var(--notice-danger-ink); }
+html[data-style="cheerful"] .notice-title-danger { color: var(--notice-danger-title); }
+html[data-style="cheerful"] .notice-info { background: var(--notice-info-bg); border-color: var(--notice-info-line); color: var(--notice-info-ink); }
+
+/* Theme menu */
+html[data-style="cheerful"] .theme-menu {
+    border-radius: 16px; border-color: var(--panel-line);
+    box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.18);
+}
+
+/* === DASHBOARD === */
+html[data-style="cheerful"] #drop-zone { border-color: var(--dropzone-line); border-radius: 16px; background: var(--card); }
+html[data-style="cheerful"] .upload-label { background: transparent; border-color: transparent; }
+html[data-style="cheerful"] .upload-label:hover { background: var(--signal-soft); border-color: transparent; }
+html[data-style="cheerful"] .upload-label .icon-twin.icon-lg { font-size: 2rem; width: 2.25rem; height: 2.25rem; }
+
+/* Sync modes: a tinted tile and hover colour for each one */
+html[data-style="cheerful"] .mode-card { background: var(--card); box-shadow: var(--shadow-raise); }
+html[data-style="cheerful"] .mode-card:disabled { opacity: 0.6; }
+html[data-style="cheerful"] .mode-card .mode-icon { width: 40px; height: 40px; border-radius: 12px; }
+html[data-style="cheerful"] .mode-card .mode-icon .icon-twin { font-size: 1.35em; width: 1.5em; height: 1.5em; }
+html[data-style="cheerful"] #btn-morning .mode-icon { background: var(--tint-morning); }
+html[data-style="cheerful"] #btn-night .mode-icon { background: var(--tint-evening); }
+html[data-style="cheerful"] #btn-journal .mode-icon { background: var(--tint-journal); }
+html[data-style="cheerful"] #btn-voice-note .mode-icon { background: var(--tint-voice); }
+html[data-style="cheerful"] #btn-morning:hover:not(:disabled) { background: var(--tint-morning); border-color: rgba(249, 115, 22, 0.45); }
+html[data-style="cheerful"] #btn-night:hover:not(:disabled) { background: var(--tint-evening); border-color: rgba(99, 102, 241, 0.45); }
+html[data-style="cheerful"] #btn-journal:hover:not(:disabled) { background: var(--tint-journal); border-color: rgba(16, 185, 129, 0.45); }
+html[data-style="cheerful"] #btn-voice-note:hover:not(:disabled) { background: var(--tint-voice); border-color: rgba(239, 68, 68, 0.45); }
+
+/* === PLANS AND CREDITS: indigo, as before === */
 html[data-style="cheerful"] .upgrade-shell { border-radius: 24px; }
-
-/* === MODE BUTTONS: bare emoji and a colour tint for each mode === */
-html[data-style="cheerful"] .mode-card { background: var(--surface); }
-html[data-style="cheerful"] .mode-card .mode-icon { background: transparent; }
-html[data-style="cheerful"] .mode-card .mode-icon .icon-twin { font-size: 1.45em; width: 1.5em; height: 1.5em; }
-html[data-style="cheerful"] #btn-morning:hover:not(:disabled) { background: rgba(249, 115, 22, 0.10); border-color: rgba(249, 115, 22, 0.5); }
-html[data-style="cheerful"] #btn-night:hover:not(:disabled) { background: rgba(99, 102, 241, 0.10); border-color: rgba(99, 102, 241, 0.5); }
-html[data-style="cheerful"] #btn-journal:hover:not(:disabled) { background: rgba(16, 185, 129, 0.10); border-color: rgba(16, 185, 129, 0.5); }
-html[data-style="cheerful"] #btn-voice-note:hover:not(:disabled) { background: rgba(239, 68, 68, 0.10); border-color: rgba(239, 68, 68, 0.5); }
-
-/* Upload choices (Camera / Gallery / Files) show bigger emoji */
-html[data-style="cheerful"] .upload-label .icon-twin.icon-lg { font-size: 1.6em; width: 1.6em; height: 1.6em; }
+html[data-style="cheerful"] .upgrade-eyebrow { color: var(--plan-ink); }
+html[data-style="cheerful"] .upgrade-choice,
+html[data-style="cheerful"] .upgrade-plan-choice,
+html[data-style="cheerful"] #other-billing-options,
+html[data-style="cheerful"] .upgrade-summary-card { background: var(--card); }
+html[data-style="cheerful"] .upgrade-choice:hover,
+html[data-style="cheerful"] .upgrade-plan-choice:hover { border-color: var(--plan-line); background: var(--plan-hover-soft); }
+html[data-style="cheerful"] .upgrade-choice-selected { border-color: var(--plan-line) !important; background: var(--plan-soft) !important; box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.16); }
+html[data-style="cheerful"] .upgrade-primary { background: var(--plan); color: #FFFFFF; box-shadow: 0 8px 20px rgba(67, 56, 202, 0.22); }
+html[data-style="cheerful"] .upgrade-primary:hover:not(:disabled) { background: var(--plan-hover); }
+html[data-style="cheerful"] .upgrade-primary:disabled { background: #475569; color: #FFFFFF; box-shadow: none; }
+html[data-style="cheerful"] .upgrade-progress-active { background-color: var(--plan) !important; color: #FFFFFF !important; border-color: var(--plan) !important; }
+html[data-style="cheerful"] .upgrade-step-dot { background: var(--plan-soft); color: var(--plan-ink); }
