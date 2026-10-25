@@ -8,7 +8,7 @@
  * Keep this file free of DOM/SW APIs — constants only.
  */
 (function (exports) {
-    exports.CACHE_NAME = 'ai-planner-v51';
+    exports.CACHE_NAME = 'ai-planner-v52';
 
     exports.ASSETS_TO_CACHE = [
         '/',
@@ -38,10 +38,6 @@
         '/fonts/IBMPlexSans-400.woff2',
         '/fonts/IBMPlexSans-500.woff2',
         '/fonts/IBMPlexSans-600.woff2',
-        '/fonts/Outfit-400.woff2',
-        '/fonts/Outfit-500.woff2',
-        '/fonts/Outfit-600.woff2',
-        '/fonts/Outfit-700.woff2',
         '/favicon-48.png',
         '/icon-192.png',
         '/icon-512.png',

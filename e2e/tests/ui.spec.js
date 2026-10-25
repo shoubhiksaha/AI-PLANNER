@@ -37,11 +37,11 @@ test.describe('Dashboard UI Smoke Checks', () => {
         await expect(page.locator('#btn-morning svg.icon')).toBeHidden();
         await expect(page.locator('#hamburger-btn svg.icon')).toBeVisible();
         await expect(page.locator('#btn-morning')).toHaveAccessibleName(/^Morning plan/);
-        expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"?Outfit/);
-        // Cheerful shows ADT's black-on-aqua logo in place of the app icon.
-        expect(await page.evaluate(() => getComputedStyle(document.querySelector('.app-bar a[href="/"]'), '::before').backgroundImage))
-            .toContain('brand/adt-profile-stacked-aqua.svg');
-        await expect(page.locator('.app-bar img.brand-tile')).toBeHidden();
+        // Same type as Minimalist modern; only colours and icons change.
+        expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"IBM Plex Sans"/);
+        // Cheerful paints ADT's black-on-aqua logo into the app icon's own box.
+        await expect(page.locator('.app-bar img.brand-tile')).toBeVisible();
+        await expect(page.locator('.app-bar img.brand-tile')).toHaveCSS('background-image', /brand\/adt-profile-stacked-aqua\.svg/);
 
         // The light/dark mode is separate from the style.
         await page.click('#theme-btn');
@@ -52,12 +52,11 @@ test.describe('Dashboard UI Smoke Checks', () => {
         const barColours = () => page.locator('meta[name="theme-color"]').evaluateAll(ms => ms.map(m => m.content));
         expect(await barColours()).toEqual(['#0F172A', '#0F172A']);
 
-        // Remembered across reloads, applied before app.js runs, and the self-hosted font loads.
+        // Remembered across reloads and applied before app.js runs.
         await page.reload();
         await expect(html).toHaveAttribute('data-style', 'cheerful');
         await expect(html).toHaveClass(/dark-mode/);
         expect(await barColours()).toEqual(['#0F172A', '#0F172A']);
-        expect(await page.evaluate(async () => (await document.fonts.load('16px Outfit')).map(f => f.status))).toContain('loaded');
 
         await page.click('#theme-btn');
         await expect(page.locator('[data-style-choice="cheerful"]')).toHaveAttribute('aria-pressed', 'true');
@@ -103,6 +102,82 @@ test.describe('Dashboard UI Smoke Checks', () => {
         await expect(html).toHaveAttribute('data-style', 'cheerful');
         await expect(radio('Light')).toBeChecked();
         await expect(radio(/^Cheerful/)).toBeChecked();
+    });
+
+    // Styles change colours, icons and decoration only: every box and every line of text keeps
+    // its position, size and type in every pack (docs/THEMES.md, "Same sizes in every pack").
+    test('Cheerful keeps every box and every line of text the same as Minimalist modern', async ({ page, baseURL }) => {
+        test.setTimeout(90000);
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        const setStyle = async (id) => {
+            await page.evaluate((s) => window.ThemePacks.setStyle(s, document), id);
+            // Let fonts and the icon swap settle, then jump any fade-in, slide-in or colour
+            // transition to its end (Firefox never ticks the ones that are offscreen).
+            await page.evaluate(async () => {
+                await document.fonts.ready;
+                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+                document.getAnimations()
+                    .filter(a => a.effect?.getComputedTiming().endTime !== Infinity)
+                    .forEach(a => a.finish());
+            });
+        };
+        // One row per visible element: its box, and its type unless it is an icon. An emoji
+        // twin stands in for its line icon, so the icon's row measures whichever is showing.
+        const measure = () => page.evaluate(() => {
+            const els = [...document.querySelectorAll('body *')]
+                .filter(el => !el.matches('.icon-twin, .icon-sprite, .icon-sprite *, svg.icon *'));
+            return els.flatMap((el, i) => {
+                const twin = el.nextElementSibling;
+                const shown = el.matches('svg.icon') && twin?.matches('.icon-twin') && getComputedStyle(el).display === 'none' ? twin : el;
+                const r = shown.getBoundingClientRect();
+                if (!r.width && !r.height) return [];
+                const cs = getComputedStyle(el);
+                const box = [r.x, r.y, r.width, r.height].map(v => Math.round(v)).join(',');
+                const type = el.matches('svg.icon') ? '' : ` ${cs.fontFamily} ${cs.fontSize}/${cs.lineHeight} ${cs.fontWeight} ${cs.letterSpacing}`;
+                return [`${i} ${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''} ${box}${type}`];
+            });
+        });
+        const sameInBothStyles = async (where) => {
+            await setStyle('minimal');
+            const minimal = await measure();
+            await setStyle('cheerful');
+            const cheerful = await measure();
+            await setStyle('minimal');
+            expect(cheerful, `${where}: Cheerful moved or resized something`).toEqual(minimal);
+        };
+        const show = (view, signedIn) => page.evaluate(([v, s]) => {
+            document.body.dataset.signedIn = s;
+            window.AppHelpers.switchView(v);
+        }, [view, signedIn]);
+
+        for (const [width, height] of [[390, 844], [1280, 800]]) {
+            await page.setViewportSize({ width, height });
+            for (const dark of [false, true]) {
+                await page.evaluate((d) => document.documentElement.classList.toggle('dark-mode', d), dark);
+                const where = `${width}px ${dark ? 'dark' : 'light'}`;
+                await show('view-login', 'false');
+                await sameInBothStyles(`${where} sign-in`);
+                await show('view-dashboard', 'true');
+                await sameInBothStyles(`${where} dashboard`);
+                await show('view-setup', 'true');
+                await sameInBothStyles(`${where} settings`);
+                await show('view-dashboard', 'true');
+                await page.click('#hamburger-btn');
+                await sameInBothStyles(`${where} drawer`);
+                await page.keyboard.press('Escape');
+                await page.click('#current-plan-badge');
+                await sameInBothStyles(`${where} plans`);
+                await page.keyboard.press('Escape');
+            }
+        }
+        // The policy, template and gear pages too.
+        for (const doc of ['privacy.html', 'pricing-policy.html', 'refund-policy.html', 'planner.html', 'gear.html']) {
+            await page.goto(`${baseURL || 'http://localhost:3000'}/${doc}`);
+            for (const [width, height] of [[390, 844], [1280, 800]]) {
+                await page.setViewportSize({ width, height });
+                await sameInBothStyles(`${width}px ${doc}`);
+            }
+        }
     });
 
     test('Theme menu closes with Escape (from the button or the menu) and when Tab leaves it', async ({ page }) => {
