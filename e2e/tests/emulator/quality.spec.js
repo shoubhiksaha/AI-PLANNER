@@ -94,6 +94,40 @@ test.describe('Browser quality', () => {
         expect(problems).toEqual([]);
     });
 
+    test('Cheerful style: accessible in light and dark on every signed-in view, font allowed by the CSP', async ({ page, request }) => {
+        const problems = h.watchConsole(page);
+        const user = await h.createUser(request, { email: h.uniqueEmail('cheerful') });
+        await page.addInitScript(() => { try { localStorage.setItem('style', 'cheerful'); } catch (_) { /* blocked */ } });
+        await h.signIn(page, user);
+        await expect(page.locator('html')).toHaveAttribute('data-style', 'cheerful');
+        expect(await page.evaluate(async () => (await document.fonts.load('16px Outfit')).map(f => f.status))).toContain('loaded');
+
+        await h.addPhoto(page, 'planner-page.png');
+        await page.click('#btn-morning');
+        await expect(page.locator('#status-area .status-card')).toHaveAttribute('data-tone', 'success');
+
+        for (const mode of ['light', 'dark']) {
+            await page.click('#theme-btn');
+            await page.click(`#theme-dropdown [data-theme="${mode}"]`);
+            expect(await seriousViolations(page), `axe on dashboard (${mode})`).toEqual([]);
+            expect(await noHorizontalOverflow(page), `overflow on dashboard (${mode})`).toBe(true);
+            for (const action of ['history', 'reports', 'settings']) {
+                await h.openDrawerItem(page, action);
+                expect(await seriousViolations(page), `axe on ${action} (${mode})`).toEqual([]);
+                expect(await noHorizontalOverflow(page), `overflow on ${action} (${mode})`).toBe(true);
+            }
+            await h.openDrawerItem(page, 'upgrade');
+            await expect(page.locator('#pricing-modal')).toBeVisible();
+            expect(await seriousViolations(page), `axe on pricing (${mode})`).toEqual([]);
+            await page.keyboard.press('Escape');
+            await expect(page.locator('#pricing-modal')).toBeHidden();
+            const back = page.locator('#back-to-dash-from-setup');
+            if (await back.isVisible()) await back.click();
+            await expect(page.locator('#view-dashboard')).toBeVisible();
+        }
+        expect(problems).toEqual([]);
+    });
+
     test('dark theme keeps result cards readable', async ({ page, request }) => {
         const user = await h.createUser(request, { email: h.uniqueEmail('dark') });
         await page.emulateMedia({ colorScheme: 'dark' });

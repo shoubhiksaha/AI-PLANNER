@@ -296,7 +296,7 @@ describe('applyTheme', () => {
         expect(html.classList.contains('dark-mode')).toBe(false);
         expect(html.classList.contains('oled-mode')).toBe(false);
         expect(iconOf()).toBe('#i-sun');
-        expect(btn.getAttribute('aria-label')).toBe('Theme: Light. Change theme');
+        expect(btn.getAttribute('aria-label')).toBe('Theme: Light. Change theme or style');
     });
 
     test('applies dark mode', () => {
@@ -309,12 +309,15 @@ describe('applyTheme', () => {
         applyTheme('oled', html, btn, items);
         expect(html.classList.contains('dark-mode')).toBe(true);
         expect(html.classList.contains('oled-mode')).toBe(false);
+        expect(html.dataset.themeMode).toBe('dark');
         expect([...items].find(el => el.classList.contains('selected')).dataset.theme).toBe('dark');
     });
 
     test('auto mode resolves to dark when system prefers dark', () => {
         applyTheme('auto', html, btn, items, true);
         expect(html.classList.contains('dark-mode')).toBe(true);
+        // The chosen mode, not the resolved one: theme packs use it for the browser bar colour.
+        expect(html.dataset.themeMode).toBe('auto');
         expect(iconOf()).toBe('#i-monitor');
     });
 

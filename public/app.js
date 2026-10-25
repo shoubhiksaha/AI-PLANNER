@@ -2793,10 +2793,20 @@ const setThemeMenu = (open) => {
     themeMenu?.classList.toggle('active', open);
     themeBtn?.setAttribute('aria-expanded', open ? 'true' : 'false');
 };
+// After a pick, focus goes back to the theme button instead of a hidden menu item.
+const closeThemeMenuAfterPick = () => { setThemeMenu(false); themeBtn?.focus(); };
 
 themeBtn?.addEventListener('click', () => setThemeMenu(!themeMenu.classList.contains('active')));
-themeMenu?.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { setThemeMenu(false); themeBtn?.focus(); }
+// Escape closes the menu from inside it or from the theme button (focus stays there after a click).
+const closeThemeMenuOnEscape = (e) => {
+    if (e.key === 'Escape' && themeMenu?.classList.contains('active')) { setThemeMenu(false); themeBtn?.focus(); }
+};
+themeMenu?.addEventListener('keydown', closeThemeMenuOnEscape);
+themeBtn?.addEventListener('keydown', closeThemeMenuOnEscape);
+// Tabbing out of the menu closes it.
+themeMenu?.addEventListener('focusout', (e) => {
+    const next = e.relatedTarget;
+    if (next && next !== themeBtn && !themeMenu.contains(next)) setThemeMenu(false);
 });
 
 document.querySelectorAll('.theme-item[data-theme]').forEach(item => {
@@ -2804,7 +2814,7 @@ document.querySelectorAll('.theme-item[data-theme]').forEach(item => {
         const mode = item.dataset.theme;
         try { localStorage.setItem('theme', mode); } catch (_) { /* storage blocked */ }
         applyTheme(mode);
-        setThemeMenu(false);
+        closeThemeMenuAfterPick();
     });
 });
 
@@ -2816,9 +2826,10 @@ document.addEventListener('click', (e) => {
 
 function applyTheme(mode) {
     const html = document.documentElement;
-    const items = document.querySelectorAll('.theme-item');
+    const items = document.querySelectorAll('.theme-item[data-theme]');
     const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     applyThemeHelper(mode, html, themeBtn, items, systemDark);
+    window.ThemePacks?.syncThemeColor(document);
 }
 
 const savedTheme = () => {
@@ -2829,7 +2840,46 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
     if (savedTheme() === 'auto') applyTheme('auto');
 });
 
-// Initial dashboard render (empty state) and periodic primary-mode refresh.
+// Style (theme packs, docs/THEMES.md): themes/packs.js has already applied the saved one.
+const themePacks = window.ThemePacks;
+const markSelectedStyle = () => {
+    const current = document.documentElement.dataset.style;
+    document.querySelectorAll('.theme-item[data-style-choice]').forEach((el) => {
+        const selected = el.dataset.styleChoice === current;
+        el.classList.toggle('selected', selected);
+        el.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    });
+};
+if (themePacks) {
+    const styleItems = $('style-items');
+    themePacks.PACKS.forEach((pack) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'theme-item';
+        item.dataset.styleChoice = pack.id;
+        item.title = pack.description;
+        const swatch = document.createElement('span');
+        swatch.className = 'style-swatch';
+        swatch.setAttribute('aria-hidden', 'true');
+        pack.swatch.forEach((colour) => {
+            const dot = document.createElement('span');
+            dot.style.background = colour;
+            swatch.append(dot);
+        });
+        const label = document.createElement('span');
+        label.textContent = pack.label;
+        item.append(swatch, label);
+        item.addEventListener('click', () => {
+            themePacks.setStyle(pack.id, document);
+            markSelectedStyle();
+            closeThemeMenuAfterPick();
+        });
+        styleItems?.append(item);
+    });
+    markSelectedStyle();
+    window.addEventListener('storage', (e) => { if (themePacks.isStyleChange(e)) markSelectedStyle(); });
+}
+
+// Initial dashboard render (empty state).
 renderThumbnails();
 setBusy();
-setInterval(() => { if (!isSyncing) updateDashButtons(); }, 5 * 60 * 1000);

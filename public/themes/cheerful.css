@@ -1,0 +1,134 @@
+/* AI Planner — "Cheerful" theme pack (docs/THEMES.md; registered in themes/packs.js).
+   The pre-redesign look on the current app: Outfit, slate greys, emerald accents, emoji
+   icons (from packs.js), rounder shapes, soft shadows and one rounded panel around the
+   content. Every text colour pair meets WCAG AA in light and dark.
+   Inlined into tailwind.css by `npm run build:css`, so url()s are relative to public/. */
+
+/* === FONT (self-hosted, Latin subset; SIL OFL 1.1, see third-party-licenses.txt) ===
+   Downloaded only when this pack is in use. */
+@font-face { font-family: "Outfit"; src: url("fonts/Outfit-400.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Outfit"; src: url("fonts/Outfit-500.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "Outfit"; src: url("fonts/Outfit-600.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Outfit"; src: url("fonts/Outfit-700.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+
+/* === TOKENS (light) === */
+html[data-style="cheerful"] {
+    --bg: #F8FAFC;
+    --surface: #FFFFFF;
+    --raised: #F1F5F9;
+    --line: #E2E8F0;
+    --line-strong: #64748B;
+    --ink: #1E293B;
+    --ink-muted: #475569;
+    --ink-subtle: #5A687D;
+    --signal: #047857;
+    --signal-hover: #065F46;
+    --on-signal: #FFFFFF;
+    --signal-ink: #047857;
+    --signal-soft: #ECFDF5;
+    --focus: #047857;
+    --success: #047857;
+    --success-soft: #ECFDF5;
+    --warning: #B45309;
+    --warning-soft: #FFFBEB;
+    --danger: #B91C1C;
+    --danger-soft: #FEF2F2;
+    --on-danger: #FFFFFF;
+    --toggle-on: #059669;
+    --toggle-knob: #FFFFFF;
+    --overlay: rgba(15, 23, 42, 0.45);
+    --shadow-raise: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px -8px rgba(15, 23, 42, 0.10);
+    --shadow-overlay: 0 24px 48px -12px rgba(15, 23, 42, 0.25);
+    --shadow-panel: 0 20px 50px -20px rgba(15, 23, 42, 0.18);
+    --font-display: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-sans: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --radius-sm: 12px;
+    --radius-md: 16px;
+    --radius-lg: 20px;
+    --pro: #4F46E5;
+    --notice-success-line: #A7F3D0;
+    --notice-warning-line: #FDE68A;
+    --notice-danger-line: #FECACA;
+}
+
+/* === TOKENS (dark) === */
+html[data-style="cheerful"].dark-mode {
+    --bg: #0F172A;
+    --surface: #1E293B;
+    --raised: #273449;
+    --line: #334155;
+    --line-strong: #6B7C93;
+    --ink: #F1F5F9;
+    --ink-muted: #94A3B8;
+    --ink-subtle: #9AA9BD;
+    --signal: #047857;
+    --signal-hover: #036B4E;
+    --on-signal: #FFFFFF;
+    --signal-ink: #34D399;
+    --signal-soft: #0B3A30;
+    --focus: #34D399;
+    --success: #34D399;
+    --success-soft: #0B3A30;
+    --warning: #FBBF24;
+    --warning-soft: #3B2A0A;
+    --danger: #F87171;
+    --danger-soft: #3B1518;
+    --on-danger: #0F172A;
+    --toggle-on: #10B981;
+    --toggle-knob: #FFFFFF;
+    --overlay: rgba(2, 6, 23, 0.65);
+    --shadow-raise: 0 0 0 1px #334155;
+    --shadow-overlay: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+    --shadow-panel: 0 20px 50px -20px rgba(0, 0, 0, 0.7);
+    --notice-success-line: #065F46;
+    --notice-warning-line: #78350F;
+    --notice-danger-line: #7F1D1D;
+}
+
+/* === LAYOUT: the content sits on one rounded panel, as it did before the redesign === */
+html[data-style="cheerful"] #app-main {
+    width: calc(100% - 1.5rem);
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 28px;
+    box-shadow: var(--shadow-panel);
+}
+html[data-style="cheerful"] .app-bar { border-bottom-color: transparent; }
+
+/* === TYPE === */
+html[data-style="cheerful"] body { letter-spacing: 0; }
+html[data-style="cheerful"] .eyebrow { font-weight: 700; letter-spacing: 0.06em; }
+
+/* === BUTTONS AND CHIPS === */
+html[data-style="cheerful"] .btn { font-weight: 600; letter-spacing: 0; }
+html[data-style="cheerful"] .btn-primary,
+html[data-style="cheerful"] .upgrade-primary { box-shadow: 0 6px 16px -6px rgba(4, 120, 87, 0.55); }
+html[data-style="cheerful"] .btn-primary:disabled,
+html[data-style="cheerful"] .upgrade-primary:disabled { box-shadow: none; }
+html[data-style="cheerful"] .btn-secondary { background: var(--surface); border-color: var(--line); }
+html[data-style="cheerful"] .btn-secondary:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface); }
+html[data-style="cheerful"] .chip { font-weight: 600; background: var(--surface); }
+html[data-style="cheerful"] #credits-badge::before { content: "🪙"; margin-right: 0.3em; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+html[data-style="cheerful"] #voice-pro-lock { background: var(--pro); color: #FFFFFF; }
+
+/* === SURFACES === */
+html[data-style="cheerful"] .card { box-shadow: var(--shadow-raise); }
+html[data-style="cheerful"] .notice-success { border-color: var(--notice-success-line); }
+html[data-style="cheerful"] .notice-warning { border-color: var(--notice-warning-line); }
+html[data-style="cheerful"] .notice-danger { border-color: var(--notice-danger-line); }
+html[data-style="cheerful"] .theme-menu { border-radius: 16px; }
+html[data-style="cheerful"] .upgrade-shell { border-radius: 24px; }
+
+/* === MODE BUTTONS: bare emoji and a colour tint for each mode === */
+html[data-style="cheerful"] .mode-card { background: var(--surface); }
+html[data-style="cheerful"] .mode-card .mode-icon { background: transparent; }
+html[data-style="cheerful"] .mode-card .mode-icon .icon-twin { font-size: 1.45em; width: 1.5em; height: 1.5em; }
+html[data-style="cheerful"] #btn-morning:hover:not(:disabled) { background: rgba(249, 115, 22, 0.10); border-color: rgba(249, 115, 22, 0.5); }
+html[data-style="cheerful"] #btn-night:hover:not(:disabled) { background: rgba(99, 102, 241, 0.10); border-color: rgba(99, 102, 241, 0.5); }
+html[data-style="cheerful"] #btn-journal:hover:not(:disabled) { background: rgba(16, 185, 129, 0.10); border-color: rgba(16, 185, 129, 0.5); }
+html[data-style="cheerful"] #btn-voice-note:hover:not(:disabled) { background: rgba(239, 68, 68, 0.10); border-color: rgba(239, 68, 68, 0.5); }
+
+/* Upload choices (Camera / Gallery / Files) show bigger emoji */
+html[data-style="cheerful"] .upload-label .icon-twin.icon-lg { font-size: 1.6em; width: 1.6em; height: 1.6em; }

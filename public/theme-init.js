@@ -12,5 +12,7 @@
         var html = document.documentElement;
         html.classList.remove('dark-mode', 'oled-mode');
         if (effect === 'dark') html.classList.add('dark-mode');
+        html.dataset.themeMode = mode;
+        if (window.ThemePacks) window.ThemePacks.syncThemeColor(document);
     } catch (_) { /* never block page load */ }
 })();

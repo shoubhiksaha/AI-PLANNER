@@ -12,11 +12,12 @@
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)">
-    <script src="theme-init.js?v=2"></script>
+    <script src="themes/packs.js?v=1"></script>
+    <script src="theme-init.js?v=3"></script>
     <link rel="preload" href="fonts/SpaceGrotesk-700.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="fonts/IBMPlexSans-400.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="tailwind.css?v=29">
-    <script src="sw-register.js?v=29" defer></script>
+    <link rel="stylesheet" href="tailwind.css?v=30">
+    <script src="sw-register.js?v=30" defer></script>
 </head>
 
 <body class="min-h-screen" data-signed-in="false">
@@ -93,17 +94,25 @@
                 <span id="credits-badge">…</span>
             </button>
             <div class="relative">
-                <button id="theme-btn" type="button" aria-label="Change theme" aria-haspopup="true" aria-expanded="false"
+                <button id="theme-btn" type="button" aria-label="Change theme or style" aria-haspopup="true" aria-expanded="false"
                     aria-controls="theme-dropdown" class="btn btn-ghost btn-icon">
                     <svg class="icon icon-lg" aria-hidden="true"><use href="#i-monitor"></use></svg>
                 </button>
-                <div id="theme-dropdown" class="theme-menu" role="group" aria-label="Theme">
-                    <button type="button" class="theme-item" data-theme="auto" data-label="Auto" aria-pressed="false">
-                        <svg class="icon" aria-hidden="true"><use href="#i-monitor"></use></svg> Match device</button>
-                    <button type="button" class="theme-item" data-theme="light" data-label="Light" aria-pressed="false">
-                        <svg class="icon" aria-hidden="true"><use href="#i-sun"></use></svg> Light</button>
-                    <button type="button" class="theme-item" data-theme="dark" data-label="Dark" aria-pressed="false">
-                        <svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg> Dark</button>
+                <div id="theme-dropdown" class="theme-menu">
+                    <div role="group" aria-labelledby="theme-mode-label" class="flex flex-col">
+                        <p id="theme-mode-label" class="theme-menu-label">Mode</p>
+                        <button type="button" class="theme-item" data-theme="auto" data-label="Auto" aria-pressed="false">
+                            <svg class="icon" aria-hidden="true"><use href="#i-monitor"></use></svg> Match device</button>
+                        <button type="button" class="theme-item" data-theme="light" data-label="Light" aria-pressed="false">
+                            <svg class="icon" aria-hidden="true"><use href="#i-sun"></use></svg> Light</button>
+                        <button type="button" class="theme-item" data-theme="dark" data-label="Dark" aria-pressed="false">
+                            <svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg> Dark</button>
+                    </div>
+                    <div class="divider my-1" role="presentation"></div>
+                    <!-- One button per theme pack (themes/packs.js), added by app.js -->
+                    <div id="style-items" role="group" aria-labelledby="theme-style-label" class="flex flex-col">
+                        <p id="theme-style-label" class="theme-menu-label">Style</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -858,8 +867,8 @@
     </div>
 
     <script src="env-config.js"></script>
-    <script src="app-helpers.js?v=29"></script>
-    <script type="module" src="app.js?v=29"></script>
+    <script src="app-helpers.js?v=30"></script>
+    <script type="module" src="app.js?v=30"></script>
 </body>
 
 </html>
