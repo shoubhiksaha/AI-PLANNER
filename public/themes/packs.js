@@ -34,7 +34,7 @@
         {
             id: 'cheerful',
             label: 'Cheerful',
-            description: 'Soft colours, rounder shapes and emoji.',
+            description: 'The original look: soft colours, emoji and rounded cards.',
             swatch: ['#047857', '#F59E0B'],
             themeColor: { light: '#F8FAFC', dark: '#0F172A' },
             emoji: {
