@@ -104,7 +104,7 @@ test.describe('Browser quality', () => {
             const logo = new Image();
             logo.onload = () => resolve('loaded');
             logo.onerror = () => resolve('blocked');
-            logo.src = '/brand/adt-profile-stacked-aqua.svg';
+            logo.src = '/brand/app-icon-aqua.svg';
         }))).toBe('loaded');
 
         await h.addPhoto(page, 'planner-page.png');
