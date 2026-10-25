@@ -5,12 +5,12 @@ AI Planner has two independent appearance settings, both in the theme menu (the 
 - **Mode:** Match device, Light or Dark (`theme-init.js`, saved as `localStorage.theme`).
 - **Style:** a *theme pack* (`public/themes/packs.js`, saved as `localStorage.style`).
 
-Every style has a light and a dark version. Styles change only how the app looks: the features, the layout, the logo and the "An offering by ADT" footer are the same in every style.
+Every style has a light and a dark version. Styles change only how the app looks: the features and the "An offering by ADT" footer are the same in every style.
 
 | Style | id | What it looks like |
 |---|---|---|
 | Minimalist modern (default) | `minimal` | ADT's system: Signal Aqua on Deep Black, Space Grotesk and IBM Plex Sans, line icons. Defined in `public/styles.css`. |
-| Cheerful | `cheerful` | The pre-redesign look: Outfit, slate greys, emerald accents, emoji icons, rounder shapes, soft shadows and one rounded panel around the content. `public/themes/cheerful.css`. |
+| Cheerful | `cheerful` | The original look, as on production before the redesign: Outfit, slate greys, emerald buttons, emoji icons and one rounded panel. The 🌿 leaf header sits on top of the panel, plans are indigo, credits are an amber coin chip, the mode cards have tinted icon tiles, and a soft colour wash fills the page. `public/themes/cheerful.css`. |
 
 ## How it works
 
@@ -42,4 +42,4 @@ The tests check that a pack is wired up completely:
 - **Readable:** every text colour pair meets WCAG AA (4.5:1, or 3:1 for large text and control boundaries) in light and in dark. Check the pairs before writing the tokens, and let the axe test confirm.
 - **Calm by default:** Minimalist modern stays the default, and louder packs are opt-in. AI Planner is for people who want fewer distractions.
 - **No motion that can't be turned off:** gloss, shimmer and similar effects stay static or respect `prefers-reduced-motion`. The base stylesheet already turns animations off for users who ask.
-- **Brand:** the ADT logo, the lockup on the sign-in screen and the endorsement footer don't change between packs.
+- **Brand:** the "An offering by ADT" footer appears in every pack. Minimalist modern uses the ADT logo and the sign-in lockup. Cheerful keeps production's 🌿 leaf mark, because it recreates that look. A new pack uses the ADT logo unless the owner decides otherwise.
