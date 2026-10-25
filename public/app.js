@@ -2809,14 +2809,19 @@ themeMenu?.addEventListener('focusout', (e) => {
     if (next && next !== themeBtn && !themeMenu.contains(next)) setThemeMenu(false);
 });
 
+// The theme menu and Settings › Appearance offer the same choices and stay in step.
+const modeRadios = document.querySelectorAll('input[name="theme-mode"]');
+const chooseMode = (mode) => {
+    try { localStorage.setItem('theme', mode); } catch (_) { /* storage blocked */ }
+    applyTheme(mode);
+};
 document.querySelectorAll('.theme-item[data-theme]').forEach(item => {
     item.addEventListener('click', () => {
-        const mode = item.dataset.theme;
-        try { localStorage.setItem('theme', mode); } catch (_) { /* storage blocked */ }
-        applyTheme(mode);
+        chooseMode(item.dataset.theme);
         closeThemeMenuAfterPick();
     });
 });
+modeRadios.forEach((radio) => radio.addEventListener('change', () => { if (radio.checked) chooseMode(radio.value); }));
 
 document.addEventListener('click', (e) => {
     if (themeBtn && themeMenu && !themeBtn.contains(e.target) && !themeMenu.contains(e.target)) {
@@ -2829,6 +2834,7 @@ function applyTheme(mode) {
     const items = document.querySelectorAll('.theme-item[data-theme]');
     const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     applyThemeHelper(mode, html, themeBtn, items, systemDark);
+    modeRadios.forEach((radio) => { radio.checked = radio.value === html.dataset.themeMode; });
     window.ThemePacks?.syncThemeColor(document);
 }
 
@@ -2849,32 +2855,57 @@ const markSelectedStyle = () => {
         el.classList.toggle('selected', selected);
         el.setAttribute('aria-pressed', selected ? 'true' : 'false');
     });
+    document.querySelectorAll('input[name="theme-style"]').forEach((radio) => { radio.checked = radio.value === current; });
+};
+const styleSwatch = (pack) => {
+    const swatch = document.createElement('span');
+    swatch.className = 'style-swatch';
+    swatch.setAttribute('aria-hidden', 'true');
+    pack.swatch.forEach((colour) => {
+        const dot = document.createElement('span');
+        dot.style.background = colour;
+        swatch.append(dot);
+    });
+    return swatch;
 };
 if (themePacks) {
     const styleItems = $('style-items');
+    const settingsStyles = $('settings-style-choices');
+    const chooseStyle = (id) => { themePacks.setStyle(id, document); markSelectedStyle(); };
     themePacks.PACKS.forEach((pack) => {
         const item = document.createElement('button');
         item.type = 'button';
         item.className = 'theme-item';
         item.dataset.styleChoice = pack.id;
         item.title = pack.description;
-        const swatch = document.createElement('span');
-        swatch.className = 'style-swatch';
-        swatch.setAttribute('aria-hidden', 'true');
-        pack.swatch.forEach((colour) => {
-            const dot = document.createElement('span');
-            dot.style.background = colour;
-            swatch.append(dot);
-        });
         const label = document.createElement('span');
         label.textContent = pack.label;
-        item.append(swatch, label);
+        item.append(styleSwatch(pack), label);
         item.addEventListener('click', () => {
-            themePacks.setStyle(pack.id, document);
-            markSelectedStyle();
+            chooseStyle(pack.id);
             closeThemeMenuAfterPick();
         });
         styleItems?.append(item);
+
+        // Settings › Appearance: the same pack as a radio choice, with its description.
+        const choice = document.createElement('label');
+        choice.className = 'choice items-center';
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'theme-style';
+        radio.value = pack.id;
+        radio.addEventListener('change', () => { if (radio.checked) chooseStyle(pack.id); });
+        const name = document.createElement('span');
+        name.className = 'flex items-center gap-2 font-semibold text-ink';
+        name.append(styleSwatch(pack), pack.label);
+        const description = document.createElement('span');
+        description.className = 'block text-sm text-muted mt-0.5';
+        description.textContent = pack.description;
+        const text = document.createElement('span');
+        text.className = 'flex-1';
+        text.append(name, description);
+        choice.append(radio, text);
+        settingsStyles?.append(choice);
     });
     markSelectedStyle();
     window.addEventListener('storage', (e) => { if (themePacks.isStyleChange(e)) markSelectedStyle(); });
