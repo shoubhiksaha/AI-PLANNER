@@ -225,12 +225,13 @@ describe('pages load the theme packs before first paint', () => {
         expect(doc.getElementById('theme-style-label').textContent).toBe('Style');
     });
 
-    test('the service worker precaches the registry and every pack font, so packs work offline', () => {
+    test('the service worker precaches the registry and every file a pack loads (fonts, images), so packs work offline', () => {
         const assets = require('../sw-constants').ASSETS_TO_CACHE;
         expect(assets).toContain('/themes/packs.js');
         packs.PACKS.filter(p => p.id !== packs.DEFAULT_STYLE).forEach((p) => {
-            const fonts = [...read(`themes/${p.id}.css`).matchAll(/url\("(fonts\/[^"]+)"\)/g)].map(m => `/${m[1]}`);
-            fonts.forEach((f) => {
+            const files = [...read(`themes/${p.id}.css`).matchAll(/url\("([^"]+)"\)/g)].map(m => `/${m[1]}`);
+            expect(files.length).toBeGreaterThan(0);
+            files.forEach((f) => {
                 expect(fs.existsSync(path.join(PUBLIC, f))).toBe(true);
                 expect(assets).toContain(f);
             });
