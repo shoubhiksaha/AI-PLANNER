@@ -182,6 +182,12 @@ function createGoogleApis() {
                     driveFilesFor(currentEmail()).set(id, { id, name: requestBody.name, mimeType, parent });
                     return { data: { id, webViewLink: `https://drive.google.com/file/d/${id}/view` } };
                 },
+                // Only used to move a failed save's uploads to the trash.
+                update: async ({ fileId, requestBody = {} } = {}) => {
+                    await recordCall('drive', 'files.update', `${fileId} trashed=${!!requestBody.trashed}`);
+                    if (requestBody.trashed) driveFilesFor(currentEmail()).delete(fileId);
+                    return { data: { id: fileId } };
+                },
             },
         }),
     };

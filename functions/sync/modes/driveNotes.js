@@ -5,7 +5,7 @@
  */
 const { logger } = require('firebase-functions/logger');
 const { getPlannerDataFromImages } = require('../../services/gemini');
-const { ensureNotesFolder, uploadFile, createDoc, fileExists, folderUrl } = require('../../services/googleDrive');
+const { ensureNotesFolder, uploadFile, createDoc, trashFile, fileExists, folderUrl } = require('../../services/googleDrive');
 const { normalizeBrainDumpText } = require('../../services/notion');
 const { extensionForMime, redactSensitive, toIsoDate } = require('../../utils');
 
@@ -15,6 +15,40 @@ function driveClient(ctx) {
 
 function cachedFolders(ctx) {
     return (ctx.userData && ctx.userData.driveFolders) || (ctx.preData && ctx.preData.driveFolders) || {};
+}
+
+/**
+ * When a save fails part-way, the files it already uploaded go to the Drive trash, so a retry
+ * doesn't leave duplicates behind. Best effort: a failed clean-up is logged, not thrown.
+ */
+async function trashUploads(ctx, drive, files) {
+    await Promise.all(files.map(file => trashFile(drive, file.id).catch(err => {
+        logger.warn('Could not move an upload to the trash after a failed save', {
+            requestId: ctx.requestId, uid: ctx.uid, syncMode: ctx.mode, error: redactSensitive(err?.message || err),
+        });
+    })));
+}
+
+/** Uploads every file or none: if one upload fails, the others go to the trash. */
+async function uploadAll(ctx, drive, uploads) {
+    const results = await Promise.allSettled(uploads.map(upload => uploadFile(drive, upload)));
+    const files = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+    const failed = results.find(r => r.status === 'rejected');
+    if (failed) {
+        await trashUploads(ctx, drive, files);
+        throw failed.reason;
+    }
+    return files;
+}
+
+/** Writes the Doc; if that fails, the files it would have linked to go to the trash first. */
+async function createDocOrTrashUploads(ctx, drive, doc, files) {
+    try {
+        return await createDoc(drive, doc);
+    } catch (err) {
+        await trashUploads(ctx, drive, files);
+        throw err;
+    }
 }
 
 /**
@@ -45,7 +79,7 @@ async function syncToDrive(ctx, { aiSyncType, kind, label, failureWarning }) {
 
     const date = toIsoDate(extraction.data && extraction.data.date, timeZone);
     const numbered = kind === 'journal' || parsedImages.length > 1;
-    const files = await Promise.all(parsedImages.map((img, i) => uploadFile(drive, {
+    const files = await uploadAll(ctx, drive, parsedImages.map((img, i) => ({
         name: `${date} ${label}${numbered ? ` ${i + 1}` : ''}.${extensionForMime(img.mimeType)}`,
         mimeType: img.mimeType,
         buffer: Buffer.from(img.base64Data, 'base64'),
@@ -56,11 +90,11 @@ async function syncToDrive(ctx, { aiSyncType, kind, label, failureWarning }) {
     const transcription = String((extraction.data && extraction.data.transcription) || '').trim();
     if (transcription) {
         const heading = kind === 'journal' ? 'Photos:' : 'Recording:';
-        await createDoc(drive, {
+        await createDocOrTrashUploads(ctx, drive, {
             name: `${date} ${label}`,
             text: `${transcription}\n\n${heading}\n${files.map(f => f.webViewLink).join('\n')}`,
             parentId: folderId,
-        });
+        }, files);
         notes.push('The transcription was saved as a Google Doc next to it.');
     }
 
@@ -109,11 +143,11 @@ async function saveBrainDumpToDrive(ctx, { plannerData, date }) {
             parentId: folderId,
         })
         : null;
-    await createDoc(drive, {
+    await createDocOrTrashUploads(ctx, drive, {
         name: docName,
         text: [text, photo ? `Photo: ${photo.webViewLink}` : ''].filter(Boolean).join('\n\n'),
         parentId: folderId,
-    });
+    }, photo ? [photo] : []);
     return { ok: true, status: 'created', folderId };
 }
 

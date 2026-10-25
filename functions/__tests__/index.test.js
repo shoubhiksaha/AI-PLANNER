@@ -151,6 +151,7 @@ const mockDriveCreate = jest.fn(async () => {
     const id = `drive-${++mockDriveIdCounter}`;
     return { data: { id, webViewLink: `https://drive.google.com/file/d/${id}/view` } };
 });
+const mockDriveUpdate = jest.fn().mockResolvedValue({ data: {} });
 
 jest.mock('googleapis', () => ({
     google: {
@@ -167,7 +168,7 @@ jest.mock('googleapis', () => ({
                 values: { update: mockSheetsUpdate, append: mockSheetsAppend, get: mockSheetsGet }
             }
         })),
-        drive: jest.fn(() => ({ files: { list: mockDriveList, get: mockDriveGet, create: mockDriveCreate } }))
+        drive: jest.fn(() => ({ files: { list: mockDriveList, get: mockDriveGet, create: mockDriveCreate, update: mockDriveUpdate } }))
     },
     // Export mocks to modify in tests
     _mockGetUserInfo: mockGetUserInfo,
@@ -1994,8 +1995,26 @@ describe('index.js Integration Tests', () => {
             beforeEach(() => {
                 mockDriveList.mockReset().mockResolvedValue({ data: { files: [] } });
                 mockDriveGet.mockReset().mockResolvedValue({ data: { id: 'cached', trashed: false } });
+                mockDriveUpdate.mockClear();
                 mockNotionPagesCreate.mockClear();
             });
+
+            // Drive accepts the uploads but fails to write the Google Doc.
+            const failDocWrites = () => {
+                const upload = mockDriveCreate.getMockImplementation();
+                mockDriveCreate.mockImplementation(async (arg) => {
+                    if (arg.requestBody.mimeType === DOC) throw Object.assign(new Error('Drive backend error'), { code: 500 });
+                    return upload(arg);
+                });
+                return () => mockDriveCreate.mockImplementation(upload);
+            };
+            const uploadedPhotoIds = async () => {
+                const ids = [];
+                for (const [i, [arg]] of mockDriveCreate.mock.calls.entries()) {
+                    if (arg.media?.mimeType === 'image/jpeg') ids.push((await mockDriveCreate.mock.results[i].value).data.id);
+                }
+                return ids;
+            };
 
             test('journal goes to Google Drive by default when Notion is not connected (no Notion needed)', async () => {
                 req.body.syncType = 'journal';
@@ -2062,6 +2081,26 @@ describe('index.js Integration Tests', () => {
                 const body = res.send.mock.calls[0][0];
                 expect(body.counts).toEqual({ journalPages: 2 });
                 expect(body.notes).toEqual(['The transcription was saved as a Google Doc next to it.']);
+                expect(mockDriveUpdate).not.toHaveBeenCalled();
+            });
+
+            test('when the journal Doc cannot be written, its photos go to the Drive trash so a retry does not duplicate them', async () => {
+                req.body.syncType = 'journal';
+                req.body.images = [validImageData, validImageData];
+                useUser(freeUser({ tier: 'pro' }));
+                useGemini({ date: '2025-03-04', transcription: 'Dear diary.' });
+                const restore = failDocWrites();
+                try {
+                    await myFunctions.syncPlanner(req, res);
+                } finally {
+                    restore();
+                }
+
+                expect(res.status).not.toHaveBeenCalledWith(200);
+                const photoIds = await uploadedPhotoIds();
+                expect(photoIds).toHaveLength(2);
+                expect(mockDriveUpdate.mock.calls.map(([arg]) => arg)).toEqual(
+                    photoIds.map(fileId => ({ fileId, requestBody: { trashed: true } })));
             });
 
             test('a journal the AI could not read is still saved to Drive with a warning', async () => {
@@ -2195,6 +2234,24 @@ describe('index.js Integration Tests', () => {
                 expect(body.savedTo).toBeUndefined();
             });
 
+            test('when the brain-dump Doc cannot be written, its photo goes to the Drive trash', async () => {
+                req.body.syncType = 'evening';
+                useUser(freeUser());
+                useGemini({ date: '2025-01-01', todos: [], expenses: [{ item: 'Food', amount: 10 }], health: {}, brainDump: 'Ideas.' });
+                const restore = failDocWrites();
+                try {
+                    await myFunctions.syncPlanner(req, res);
+                } finally {
+                    restore();
+                }
+
+                expect(res.status).toHaveBeenCalledWith(200);
+                expect(res.send.mock.calls[0][0].warnings).toEqual(expect.arrayContaining(['Could not sync: Google Drive. Everything else was saved.']));
+                const [photoId] = await uploadedPhotoIds();
+                expect(mockDriveUpdate).toHaveBeenCalledWith({ fileId: photoId, requestBody: { trashed: true } });
+                expect(mockDriveUpdate).toHaveBeenCalledTimes(1);
+            });
+
             test('evening with a connected Notion keeps the brain dump in Notion', async () => {
                 req.body.syncType = 'evening';
                 useUser(freeUser({ notionKey: validEncryptedKey, notionDbId: 'db-1' }));
@@ -2246,14 +2303,26 @@ describe('index.js Integration Tests', () => {
                 expect(body.notes).toEqual(['Skipped 1 task already in your calendar or task list.']);
             });
 
-            test('a retried request replays savedTo, links, notes and items from history', async () => {
+            test('morning keeps event and task titles out of the stored history (privacy policy: Zero Storage)', async () => {
+                req.body.clientRequestId = '7a2d4c6e-8f10-4b32-9c54-a6b8c0d2e4f6';
+                useUser(freeUser());
+                useGemini(morningPage({ todos: [{ task: 'Buy milk', done: false }] }));
+
+                await myFunctions.syncPlanner(req, res);
+
+                expect(res.send.mock.calls[0][0].items.tasks).toEqual(['Buy milk']);
+                const writes = mockHistorySet.mock.calls.map(c => c[0]);
+                expect(writes.some(w => w.status === 'success')).toBe(true);
+                writes.forEach(w => expect(w).not.toHaveProperty('items'));
+            });
+
+            test('a retried request replays savedTo, links and notes from history', async () => {
                 req.body.clientRequestId = '3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b';
                 mockHistoryGet.mockResolvedValue({
                     exists: true,
                     data: () => ({
                         status: 'success', message: 'Journal saved to Google Drive.', counts: { journalPages: 1 }, warnings: [],
                         notes: ['n'], savedTo: 'drive', links: { drive: 'https://drive.google.com/drive/folders/f1' },
-                        items: { events: [], tasks: ['t'] },
                     })
                 });
 
@@ -2266,7 +2335,6 @@ describe('index.js Integration Tests', () => {
                     notes: ['n'],
                     savedTo: 'drive',
                     links: { drive: 'https://drive.google.com/drive/folders/f1' },
-                    items: { events: [], tasks: ['t'] },
                     creditsCharged: 0,
                     duplicate: true,
                 });

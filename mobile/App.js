@@ -440,7 +440,7 @@ export default function App() {
             accessibilityState={{ disabled: isNativeLoginInProgress, busy: isNativeLoginInProgress }}
           >
             {isNativeLoginInProgress ? (
-              <ActivityIndicator color="#ffffff" />
+              <ActivityIndicator color="#0A0A0A" accessibilityLabel="Signing in" />
             ) : (
               <Text style={styles.loginBtnText}>Sign in with Google</Text>
             )}
