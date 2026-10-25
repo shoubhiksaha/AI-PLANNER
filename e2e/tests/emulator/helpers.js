@@ -93,7 +93,7 @@ const userDoc = (request, email) => getDoc(request, `users/${encodeURIComponent(
 async function openDrawerItem(page, action) {
     // The hamburger lives on the dashboard; return there from sub-views first.
     if (!(await page.locator('#hamburger-btn').isVisible())) {
-        for (const back of ['#back-to-dash-btn', '#back-to-dash-btn-reports', '#back-to-dash-from-adv', '#back-to-dash-from-setup']) {
+        for (const back of ['#back-to-dash-btn', '#back-to-dash-btn-reports', '#back-to-dash-from-setup']) {
             const btn = page.locator(back);
             if (await btn.isVisible()) { await btn.click(); break; }
         }

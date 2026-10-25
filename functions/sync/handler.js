@@ -16,6 +16,7 @@ const { payloadSizeCheck, syncModeOf, parseSyncRequest } = require('./request');
 const { getGoogleApis, verifyGoogleIdentity } = require('./google');
 const { resolveByok } = require('./byok');
 const { resolveNotionKey } = require('./prerequisites');
+const { resolveNotesDestination } = require('./notesDestination');
 const { convertHeicImages } = require('./images');
 const { AI_BUDGET_MS, createCreditLedger, reserveSyncCredits } = require('./credits');
 const { logSyncHistory, incrementUsageCounters } = require('./history');
@@ -24,6 +25,15 @@ const { runMorningSync } = require('./modes/morning');
 const { runEveningSync } = require('./modes/evening');
 const { runJournalSync } = require('./modes/journal');
 const { runVoiceNoteSync } = require('./modes/voiceNote');
+
+/** Optional result fields, copied only when present (Firestore rejects undefined). */
+function resultExtras(source) {
+    const extras = {};
+    if (source.savedTo === 'drive' || source.savedTo === 'notion') extras.savedTo = source.savedTo;
+    if (source.links && typeof source.links === 'object' && Object.keys(source.links).length) extras.links = source.links;
+    if (source.items && typeof source.items === 'object') extras.items = source.items;
+    return extras;
+}
 
 const MODE_RUNNERS = {
     morning: runMorningSync,
@@ -74,23 +84,26 @@ async function syncPlannerHandler(req, res) {
     try {
         logger.info("Processing sync payload", { requestId, uid, syncMode: mode });
 
-        const request = parseSyncRequest(body, mode);
+        // Pre-read: where notes go decides whether Google is needed; BYOK and Notion
+        // prerequisites are checked BEFORE any credit is deducted.
+        const preSnap = await userRef.get();
+        const preData = preSnap.exists ? (preSnap.data() || {}) : {};
+        const notesDestination = resolveNotesDestination(preData);
+
+        const request = parseSyncRequest(body, mode, { notesDestination });
         parsedImages = request.parsedImages;
         const { needsGoogle, googleToken, clientRequestId } = request;
 
         const google = getGoogleApis();
         const auth = needsGoogle ? await verifyGoogleIdentity(google, googleToken, email) : null;
 
-        // Pre-read: BYOK and Notion prerequisites are checked BEFORE any credit is deducted.
-        const preSnap = await userRef.get();
-        const preData = preSnap.exists ? (preSnap.data() || {}) : {};
         let timeZone = resolveTimeZone(body.timeZone, preData.timeZone);
 
         const planError = checkPlanLimits(preData.tier, parsedImages.length, mode);
         if (planError) throw new SyncError(403, E.PLAN_LIMIT, planError);
 
         const byokConfig = await resolveByok(req, preData, { requestId, uid, warnings, email, userRef });
-        const decryptedNotionKey = await resolveNotionKey(mode, userRef, preData, { requestId, uid, email });
+        const decryptedNotionKey = await resolveNotionKey(mode, userRef, preData, { requestId, uid, email }, notesDestination);
 
         // HEIC/HEIF → JPEG in memory, before any credit is deducted (C8).
         parsedImages = await convertHeicImages(parsedImages, { requestId, uid });
@@ -112,6 +125,8 @@ async function syncPlannerHandler(req, res) {
                 text: previous.message || '',
                 counts: previous.counts || {},
                 warnings: Array.isArray(previous.warnings) ? previous.warnings : [],
+                notes: Array.isArray(previous.notes) ? previous.notes : [],
+                ...resultExtras(previous),
                 creditsCharged: 0,
                 duplicate: true
             });
@@ -128,9 +143,11 @@ async function syncPlannerHandler(req, res) {
             mode, requestId, uid, parsedImages, byokConfig,
             aiOptions: { deadline: startTimeMs + AI_BUDGET_MS, timeZone, requestId },
             userData, preData, userRef, timeZone, warnings,
-            google, auth, decryptedNotionKey,
+            google, auth, decryptedNotionKey, notesDestination,
         });
         const { counts, dataSynced, extractionOk, partial } = outcome;
+        const notes = Array.isArray(outcome.notes) ? outcome.notes : [];
+        const extras = resultExtras(outcome);
         let msg = outcome.msg;
 
         // --- Settle the credit: never charge a sync that synced no data ---
@@ -150,14 +167,18 @@ async function syncPlannerHandler(req, res) {
             requestId, uid, syncMode: mode, imageCount: parsedImages.length
         }));
 
+        // Event and task titles come from the user's page: they go back in this response but are
+        // never stored (privacy policy, "Zero Storage"), so a replayed duplicate shows counts only.
+        const storedExtras = { ...extras };
+        delete storedExtras.items;
         await logSyncHistory(userRef, mode, parsedImages.length, 'success', msg, {
-            counts, warnings, creditsCharged, partial, refunded: credit.refunded
+            counts, warnings, notes, ...storedExtras, creditsCharged, partial, refunded: credit.refunded
         }, historyRef);
         if (dataSynced) await incrementUsageCounters(userRef, parsedImages.length);
 
         const durationMs = Date.now() - startTimeMs;
         logger.info("Sync transaction complete", { requestId, uid, syncMode: mode, durationMs, status: 200, creditsCharged, type: 'latency' });
-        return res.status(200).send({ text: msg, counts, creditsCharged, warnings });
+        return res.status(200).send({ text: msg, counts, creditsCharged, warnings, notes, ...extras });
     } catch (error) {
         if (error instanceof SyncError) {
             return await respondError(error.status, error.errorCode, error.message);

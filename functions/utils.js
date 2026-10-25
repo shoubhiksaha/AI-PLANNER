@@ -640,6 +640,29 @@ function todayInTimeZone(timeZone) {
     return new Date().toLocaleDateString('en-CA', { timeZone: isValidTimeZone(timeZone) ? timeZone : 'Asia/Kolkata' });
 }
 
+/**
+ * A page date as YYYY-MM-DD: an ISO date as is, a readable date the AI returned
+ * ("15-January-2025", "January 15, 2025") converted, otherwise today in the user's zone.
+ */
+function toIsoDate(value, timeZone) {
+    const text = String(value || '').trim();
+    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) {
+        const [y, m, d] = iso.slice(1).map(Number);
+        const check = new Date(Date.UTC(y, m - 1, d));
+        if (check.getUTCFullYear() === y && check.getUTCMonth() === m - 1 && check.getUTCDate() === d) return text;
+        return todayInTimeZone(timeZone);
+    }
+    if (text) {
+        const parsed = new Date(text.replace(/[-/.]+/g, ' '));
+        const year = parsed.getFullYear();
+        if (!isNaN(parsed.getTime()) && year >= 2000 && year <= 2100) {
+            return `${year}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+        }
+    }
+    return todayInTimeZone(timeZone);
+}
+
 const MIME_EXTENSIONS = [
     ['png', 'png'], ['webp', 'webp'], ['mp4', 'mp4'], ['m4a', 'm4a'], ['webm', 'webm'],
     ['mpeg', 'mp3'], ['mp3', 'mp3'], ['wav', 'wav'], ['ogg', 'ogg'], ['aac', 'aac']
@@ -739,6 +762,7 @@ module.exports = {
     computeDisplayStreak,
     isValidTimeZone,
     todayInTimeZone,
+    toIsoDate,
     extensionForMime,
     isValidClientRequestId,
     redactSensitive,

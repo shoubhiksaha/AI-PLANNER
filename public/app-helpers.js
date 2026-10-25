@@ -209,7 +209,7 @@
         EMAIL_NOT_VERIFIED: 'Your Google email address isn’t verified yet. Verify it with Google, then try again.',
         PLAN_LIMIT: 'That isn’t included in your current plan.',
         INSUFFICIENT_CREDITS: 'You’re out of credits for this sync.',
-        NOTION_NOT_CONFIGURED: 'Journal pages and voice notes are saved to Notion. Connect Notion first.',
+        NOTION_NOT_CONFIGURED: 'You chose Notion for journal pages. Connect Notion first, or switch to Google Drive in Settings.',
         INVALID_IMAGE: 'We couldn’t read that photo. Try a clearer, well-lit JPG or PNG.',
         BYOK_INVALID: 'Your AI provider key or model was rejected. Check it in Advanced Settings.',
         BAD_REQUEST: 'Something about that request wasn’t right. Please try again.',
@@ -317,8 +317,12 @@
     };
 
     /** C4 counts → "3 events · 4 tasks added · 2 tasks completed". */
-    exports.summarizeCounts = (counts) => {
+    const DESTINATION_LABELS = { drive: 'Google Drive', notion: 'Notion' };
+    exports.DESTINATION_LABELS = DESTINATION_LABELS;
+
+    exports.summarizeCounts = (counts, { savedTo } = {}) => {
         const c = counts || {};
+        const where = DESTINATION_LABELS[savedTo] || 'Notion';
         const num = (v) => (Number.isFinite(v) && v > 0 ? v : 0);
         const parts = [];
         const added = [];
@@ -328,7 +332,9 @@
         if (num(c.completedTasks)) parts.push(`${plural(num(c.completedTasks), 'task')} completed`);
         if (num(c.expenses)) parts.push(`${plural(num(c.expenses), 'expense')} logged`);
         if (num(c.health)) parts.push(`${plural(num(c.health), 'health entry', 'health entries')} logged`);
-        if (num(c.journalPages)) parts.push(`${plural(num(c.journalPages), 'journal page')} saved to Notion`);
+        if (num(c.journalPages)) parts.push(`${plural(num(c.journalPages), 'journal page')} saved to ${where}`);
+        if (num(c.voiceNotes)) parts.push(`voice note saved to ${where}`);
+        if (num(c.brainDump)) parts.push(`brain dump saved to ${where}`);
         return parts.join(' · ');
     };
 
@@ -336,10 +342,10 @@
     // Sync modes, plan limits
     // ------------------------------------------------------------------
     exports.SYNC_MODES = {
-        morning: { label: 'Morning plan', icon: '☀️', description: 'Adds today’s events and to-dos to Google Calendar & Tasks.' },
-        evening: { label: 'Evening review', icon: '🌙', description: 'Ticks off finished tasks and logs expenses & health to Sheets.' },
-        journal: { label: 'Journal', icon: '📖', description: 'Saves handwritten journal pages to Notion.' },
-        voice_note: { label: 'Voice note', icon: '🎤', description: 'Record a thought; it’s transcribed into Notion. Pro.' },
+        morning: { label: 'Morning plan', icon: 'sun', description: 'Adds today’s events and to-dos to Google Calendar and Tasks.' },
+        evening: { label: 'Evening review', icon: 'moon', description: 'Ticks off finished tasks and logs spending and health to Sheets.' },
+        journal: { label: 'Journal', icon: 'book-open', description: 'Saves handwritten journal pages to Google Drive or Notion.' },
+        voice_note: { label: 'Voice note', icon: 'mic', description: 'Record a thought; it’s typed up and saved. Pro.' },
     };
 
     exports.normalizeSyncMode = (mode) => (mode === 'night' ? 'evening' : mode);
@@ -355,14 +361,41 @@
         return 1;
     };
 
-    exports.needsGoogleToken = (mode) => {
-        const m = exports.normalizeSyncMode(mode);
-        return m !== 'journal' && m !== 'voice_note';
+    /**
+     * Where journal pages, brain dumps and voice notes go. Mirrors the server's
+     * resolveNotesDestination: an explicit choice wins; otherwise existing Notion
+     * users keep Notion and everyone else uses Google Drive.
+     */
+    exports.resolveNotesDestination = (profile) => {
+        const p = profile || {};
+        if (p.notesDestination === 'drive' || p.notesDestination === 'notion') return p.notesDestination;
+        return p.notionKey && p.notionDbId ? 'notion' : 'drive';
     };
 
-    exports.needsNotion = (mode) => {
+    const isNotesMode = (m) => m === 'journal' || m === 'voice_note';
+
+    /** Morning and evening always use Google; notes modes only when they're saved to Drive. */
+    exports.needsGoogleToken = (mode, notesDestination = 'drive') => {
         const m = exports.normalizeSyncMode(mode);
-        return m === 'journal' || m === 'voice_note';
+        return !isNotesMode(m) || notesDestination === 'drive';
+    };
+
+    exports.needsNotion = (mode, notesDestination = 'notion') => {
+        const m = exports.normalizeSyncMode(mode);
+        return isNotesMode(m) && notesDestination === 'notion';
+    };
+
+    /** "today", "yesterday" or "on 12 Oct" for a YYYY-MM-DD sync date, relative to `todayStr`. */
+    exports.friendlySyncDate = (dateStr, todayStr) => {
+        const re = /^(\d{4})-(\d{2})-(\d{2})$/;
+        if (!re.test(String(dateStr || '')) || !re.test(String(todayStr || ''))) return '';
+        const toUtc = (d) => { const [y, m, day] = d.split('-').map(Number); return Date.UTC(y, m - 1, day); };
+        const diff = Math.round((toUtc(todayStr) - toUtc(dateStr)) / 86400000);
+        if (diff === 0) return 'today';
+        if (diff === 1) return 'yesterday';
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
+        return y === Number(todayStr.slice(0, 4)) ? `on ${d} ${month}` : `on ${d} ${month} ${y}`;
     };
 
     // ------------------------------------------------------------------
@@ -587,7 +620,9 @@
     // Theme
     // ------------------------------------------------------------------
     exports.applyTheme = (modeInput, htmlElement, themeBtn, themeItems, matchMediaDark) => {
-        const mode = ['light', 'dark', 'oled', 'auto'].includes(modeInput) ? modeInput : 'auto';
+        // 'oled' was a separate theme; the dark theme is now near-black, so it maps to dark.
+        const normalized = modeInput === 'oled' ? 'dark' : modeInput;
+        const mode = ['light', 'dark', 'auto'].includes(normalized) ? normalized : 'auto';
         let effect = mode;
         const resolvedDarkPref = typeof matchMediaDark === 'boolean'
             ? matchMediaDark
@@ -601,7 +636,7 @@
 
         htmlElement.classList.remove('dark-mode', 'oled-mode');
         if (effect === 'dark') htmlElement.classList.add('dark-mode');
-        if (effect === 'oled') htmlElement.classList.add('oled-mode');
+        if (htmlElement.dataset) htmlElement.dataset.themeMode = mode;
 
         (themeItems || []).forEach(el => {
             const selected = (el.dataset && el.dataset.theme) === mode;
@@ -611,10 +646,12 @@
 
         if (!themeBtn) return;
 
-        const icons = { auto: '⚙️', light: '☀️', dark: '🌙', oled: '🖤' };
-        const labels = { auto: 'Auto', light: 'Light', dark: 'Dark', oled: 'OLED' };
-        themeBtn.textContent = icons[mode];
-        if (themeBtn.setAttribute) themeBtn.setAttribute('aria-label', `Theme: ${labels[mode]}. Change theme`);
+        const icons = { auto: 'monitor', light: 'sun', dark: 'moon' };
+        const labels = { auto: 'Match device', light: 'Light', dark: 'Dark' };
+        themeBtn.dataset.themeIcon = icons[mode];
+        const use = themeBtn.querySelector && themeBtn.querySelector('use');
+        if (use) use.setAttribute('href', `#i-${icons[mode]}`);
+        if (themeBtn.setAttribute) themeBtn.setAttribute('aria-label', `Theme: ${labels[mode]}. Change theme or style`);
     };
 
     // ------------------------------------------------------------------

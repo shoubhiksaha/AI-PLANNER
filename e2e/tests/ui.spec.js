@@ -10,8 +10,120 @@ test.describe('Dashboard UI Smoke Checks', () => {
         // Wait until app.js has applied the initial (signed-out) auth state, otherwise it
         // can switch back to the login view after we open the dashboard shell.
         await page.waitForFunction(() => document.documentElement.dataset.authReady === 'true');
-        await page.evaluate(() => window.AppHelpers.switchView('view-dashboard'));
+        await page.evaluate(() => {
+            // The menu button and plan chip only show for a signed-in user.
+            document.body.dataset.signedIn = 'true';
+            window.AppHelpers.switchView('view-dashboard');
+        });
         await expect(page.locator('#view-dashboard')).toBeVisible();
+    });
+
+    test('Style menu switches between Minimalist modern and Cheerful and remembers it', async ({ page }) => {
+        const html = page.locator('html');
+        await expect(html).toHaveAttribute('data-style', 'minimal');
+        await expect(html).toHaveAttribute('data-icons', 'line');
+
+        await page.click('#theme-btn');
+        await expect(page.locator('#style-items .theme-item')).toHaveText(['Minimalist modern', 'Cheerful']);
+        await expect(page.locator('[data-style-choice="minimal"]')).toHaveAttribute('aria-pressed', 'true');
+        await page.click('[data-style-choice="cheerful"]');
+        await expect(html).toHaveAttribute('data-style', 'cheerful');
+        await expect(page.locator('#theme-dropdown')).not.toHaveClass(/active/);
+        await expect(page.locator('#theme-btn')).toBeFocused();
+
+        // Emoji stand in for content icons; controls keep their line icons.
+        await expect(page.locator('#btn-morning .icon-twin')).toHaveText('☀️');
+        await expect(page.locator('#btn-morning .icon-twin')).toBeVisible();
+        await expect(page.locator('#btn-morning svg.icon')).toBeHidden();
+        await expect(page.locator('#hamburger-btn svg.icon')).toBeVisible();
+        await expect(page.locator('#btn-morning')).toHaveAccessibleName(/^Morning plan/);
+        expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"?Outfit/);
+        // Cheerful shows ADT's black-on-aqua logo in place of the app icon.
+        expect(await page.evaluate(() => getComputedStyle(document.querySelector('.app-bar a[href="/"]'), '::before').backgroundImage))
+            .toContain('brand/adt-profile-stacked-aqua.svg');
+        await expect(page.locator('.app-bar img.brand-tile')).toBeHidden();
+
+        // The light/dark mode is separate from the style.
+        await page.click('#theme-btn');
+        await page.click('#theme-dropdown [data-theme="dark"]');
+        await expect(html).toHaveClass(/dark-mode/);
+        await expect(html).toHaveAttribute('data-style', 'cheerful');
+        // A chosen Dark mode gives the browser bar the pack's dark colour whatever the device says.
+        const barColours = () => page.locator('meta[name="theme-color"]').evaluateAll(ms => ms.map(m => m.content));
+        expect(await barColours()).toEqual(['#0F172A', '#0F172A']);
+
+        // Remembered across reloads, applied before app.js runs, and the self-hosted font loads.
+        await page.reload();
+        await expect(html).toHaveAttribute('data-style', 'cheerful');
+        await expect(html).toHaveClass(/dark-mode/);
+        expect(await barColours()).toEqual(['#0F172A', '#0F172A']);
+        expect(await page.evaluate(async () => (await document.fonts.load('16px Outfit')).map(f => f.status))).toContain('loaded');
+
+        await page.click('#theme-btn');
+        await expect(page.locator('[data-style-choice="cheerful"]')).toHaveAttribute('aria-pressed', 'true');
+        await page.click('[data-style-choice="minimal"]');
+        await expect(html).toHaveAttribute('data-style', 'minimal');
+        await expect(page.locator('.icon-twin')).toHaveCount(0);
+        expect(await barColours()).toEqual(['#0A0A0A', '#0A0A0A']);
+    });
+
+    test('Settings › Appearance offers the theme menu\'s choices and stays in step with it', async ({ page }) => {
+        const html = page.locator('html');
+        const openSettings = () => page.evaluate(() => window.AppHelpers.switchView('view-setup'));
+        const appearance = page.locator('section[aria-labelledby="settings-appearance-title"]');
+        const radio = (name) => appearance.getByRole('radio', { name });
+        await openSettings();
+        await expect(radio('Match device')).toBeChecked();
+        await expect(radio(/^Minimalist modern/)).toBeChecked();
+        await expect(appearance.getByRole('radio')).toHaveCount(5);
+
+        await radio('Dark').check();
+        await expect(html).toHaveClass(/dark-mode/);
+        await radio(/^Cheerful/).check();
+        await expect(html).toHaveAttribute('data-style', 'cheerful');
+        await expect(radio(/^Cheerful/)).toHaveAccessibleName(/The original look/);
+
+        // The theme menu shows the same choices...
+        await page.click('#theme-btn');
+        await expect(page.locator('#theme-dropdown [data-theme="dark"]')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('[data-style-choice="cheerful"]')).toHaveAttribute('aria-pressed', 'true');
+        // ...and a pick there updates Settings.
+        await page.click('#theme-dropdown [data-theme="light"]');
+        await page.click('#theme-btn');
+        await page.click('[data-style-choice="minimal"]');
+        await expect(html).not.toHaveClass(/dark-mode/);
+        await expect(radio('Light')).toBeChecked();
+        await expect(radio(/^Minimalist modern/)).toBeChecked();
+
+        // Remembered after a reload.
+        await radio(/^Cheerful/).check();
+        await page.reload();
+        await page.waitForFunction(() => document.documentElement.dataset.authReady === 'true');
+        await openSettings();
+        await expect(html).toHaveAttribute('data-style', 'cheerful');
+        await expect(radio('Light')).toBeChecked();
+        await expect(radio(/^Cheerful/)).toBeChecked();
+    });
+
+    test('Theme menu closes with Escape (from the button or the menu) and when Tab leaves it', async ({ page }) => {
+        const menu = page.locator('#theme-dropdown');
+        await page.click('#theme-btn');
+        await expect(menu).toHaveClass(/active/);
+        await page.keyboard.press('Escape');
+        await expect(menu).not.toHaveClass(/active/);
+        await expect(page.locator('#theme-btn')).toBeFocused();
+
+        await page.click('#theme-btn');
+        await page.locator('[data-style-choice="minimal"]').focus();
+        await page.keyboard.press('Escape');
+        await expect(menu).not.toHaveClass(/active/);
+        await expect(page.locator('#theme-btn')).toBeFocused();
+
+        await page.click('#theme-btn');
+        await page.locator('[data-style-choice="cheerful"]').focus();
+        await page.keyboard.press('Tab');
+        await expect(menu).not.toHaveClass(/active/);
+        await expect(page.locator('#theme-btn')).toHaveAttribute('aria-expanded', 'false');
     });
 
     test('Hamburger Menu opens and closes the navigation drawer', async ({ page }) => {

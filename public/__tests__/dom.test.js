@@ -67,6 +67,16 @@ describe('Critical DOM Elements', () => {
         });
     });
 
+    test('ADT endorsement links to ADT, with light and dark versions of both lockups', () => {
+        const link = document.querySelector('#adt-footer a');
+        expect(link.getAttribute('href')).toBe('https://analogdigital.tech');
+        expect(link.getAttribute('rel')).toContain('noopener');
+        expect(link.getAttribute('aria-label')).toMatch(/An offering by ADT/);
+        ['stacked-light', 'stacked-dark', 'inline-light', 'inline-dark'].forEach(v => {
+            expect(document.querySelector(`#adt-footer img[src="brand/offering-by-adt-${v}.svg"]`)).not.toBeNull();
+        });
+    });
+
     test('Upgrade flow limits the primary comparison to two plans and defaults to annual', () => {
         const planChoices = document.querySelectorAll('[data-upgrade-plan]');
         const annualBilling = document.querySelector('input[name="upgrade-billing"][value="annual"]');
@@ -125,13 +135,13 @@ describe('Critical DOM Elements', () => {
     test('U-03 / U-06 / U-08: menu button is labelled; form fields have labels', () => {
         const hamburger = document.getElementById('hamburger-btn');
         expect(hamburger.getAttribute('aria-label')).toBe('Menu');
-        expect(hamburger.className).toMatch(/w-11/);
-        expect(hamburger.className).toMatch(/h-11/);
+        expect(hamburger.className).toMatch(/btn-icon/); // 44×44 px target (styles.css .btn-icon)
         ['notion-key-input', 'notion-db-input', 'byok-api-key', 'byok-provider', 'user-display-name-input', 'user-phone']
             .forEach(id => expect(document.querySelector(`label[for="${id}"]`)).not.toBeNull());
         document.querySelectorAll('.theme-item').forEach(item => {
             expect(item.tagName).toBe('BUTTON');
-            expect(item.getAttribute('aria-label')).toBeTruthy();
+            // Accessible name: visible text (preferred) or an aria-label.
+            expect((item.getAttribute('aria-label') || item.textContent).trim()).toBeTruthy();
         });
     });
 

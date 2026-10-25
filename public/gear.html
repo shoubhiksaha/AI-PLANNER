@@ -1,39 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Best Gear - AI Planner</title>
-    <link rel="stylesheet" href="tailwind.css?v=26">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Pens and paper that work well — AI Planner</title>
+    <link rel="icon" type="image/svg+xml" href="brand/favicon.svg">
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)">
+    <script src="themes/packs.js?v=1"></script>
+    <script src="theme-init.js?v=3"></script>
+    <link rel="stylesheet" href="tailwind.css?v=32">
 </head>
-
-<body class="bg-slate-50 text-slate-700 p-6 sm:p-8 max-w-2xl mx-auto">
-    <h1 class="text-3xl font-bold mb-4 text-emerald-700">Curated Gear List 🛍️</h1>
-    <p class="mb-8">Tools that work well with AI Planner.</p>
-
-    <div class="space-y-6">
-        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h2 class="font-bold text-lg mb-1">1. A minimalist journal</h2>
-            <p class="text-sm text-slate-600">High-contrast, unruled or dotted paper makes handwriting easiest for the AI to read.</p>
+<body class="min-h-screen">
+    <header class="app-bar">
+        <div class="max-w-3xl mx-auto px-4 h-16 flex items-center">
+            <a href="/" class="flex items-center gap-2 min-h-[44px] rounded-lg pr-2">
+                <img src="brand/app-icon.svg" alt="" width="28" height="28" class="brand-tile">
+                <span class="font-display font-bold text-[17px] text-ink">AI Planner</span>
+            </a>
         </div>
-
-        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h2 class="font-bold text-lg mb-1">2. A fine-tip black pen (0.5 mm)</h2>
-            <p class="text-sm text-slate-600">Crisp, dark lines give the most accurate text extraction.</p>
-        </div>
-
-        <p class="text-sm text-slate-600 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-            Specific product recommendations are coming soon. Until then, the
-            <a href="planner.html" class="text-emerald-700 underline font-semibold">free printable planner template</a>
-            gives the best results.
-        </p>
-    </div>
-
-    <div class="mt-12 text-center">
-        <a href="index.html" class="inline-flex items-center min-h-[44px] text-blue-700 hover:underline">← Back to App</a>
-    </div>
+    </header>
+    <main class="doc max-w-3xl mx-auto px-4 py-10">
+        <h1>Pens and paper that work well</h1>
+        <p>Nothing special is needed, but these make handwriting easiest to read.</p>
+        <h2>1. A plain or dotted notebook</h2>
+        <p>High-contrast paper with light or no ruling.</p>
+        <h2>2. A fine-tip black pen (0.5 mm)</h2>
+        <p>Crisp, dark lines give the most accurate results.</p>
+        <p class="mt-6">Until we add specific recommendations, the <a href="planner.html">free printable planner template</a> gives the best results.</p>
+    </main>
+    <footer class="max-w-3xl mx-auto px-4 pb-10 pt-6 border-t border-line flex flex-wrap items-center justify-between gap-4 text-sm text-muted">
+        <a href="/" class="link">Back to AI Planner</a>
+        <a href="https://analogdigital.tech" target="_blank" rel="noopener" class="inline-flex rounded" aria-label="An offering by ADT, Analog Digital Technologies">
+            <img src="brand/offering-by-adt-inline-light.svg" alt="" width="196" height="16" class="on-light h-4 w-auto">
+            <img src="brand/offering-by-adt-inline-dark.svg" alt="" width="196" height="16" class="on-dark h-4 w-auto">
+        </a>
+    </footer>
 </body>
-
 </html>

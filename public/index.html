@@ -4,647 +4,365 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>AI Planner Sync</title>
+    <title>AI Planner — your paper planner, synced</title>
+    <meta name="description" content="Photograph a page of your paper planner or journal. Events go to Google Calendar, to-dos to Google Tasks, and journal pages to Google Drive or Notion.">
     <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="icon" type="image/svg+xml" href="brand/favicon.svg">
+    <link rel="icon" type="image/png" sizes="48x48" href="favicon-48.png">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
-    <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
-    <script src="theme-init.js?v=1"></script>
-    <link rel="stylesheet" href="tailwind.css?v=28">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="sw-register.js?v=28" defer></script>
-    <style>
-        /* Respect users who ask for less motion (UX 13) */
-        @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after {
-                animation-duration: 0.01ms !important;
-                animation-iteration-count: 1 !important;
-                transition-duration: 0.01ms !important;
-                scroll-behavior: auto !important;
-            }
-        }
-
-        /* Visually hidden but available to screen readers / keyboard focus */
-        .sr-only-input {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border: 0;
-        }
-        .upload-label:focus-within {
-            outline: 3px solid #10b981;
-            outline-offset: 2px;
-        }
-
-        /* Hamburger Drawer */
-        .drawer-overlay {
-            transition: opacity 0.3s ease;
-        }
-
-        .drawer-panel {
-            transition: transform 0.3s ease;
-            transform: translateX(-100%);
-        }
-
-        .drawer-open .drawer-panel {
-            transform: translateX(0);
-        }
-
-        .drawer-open .drawer-overlay {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        /* Payment-only contrast styles; all non-payment UI remains build v23 */
-        .upgrade-shell {
-            position: relative;
-            width: 100%;
-            max-width: 32rem;
-            max-height: 92vh;
-            max-height: calc(92dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-            overflow-y: auto;
-            border-radius: 24px;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(20px);
-            color: #0f172a;
-            border: 1px solid rgba(203, 213, 225, 0.5);
-            box-shadow: 0 30px 80px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
-        }
-
-        .upgrade-shell .text-theme-text { color: #0f172a; }
-        .upgrade-shell .text-theme-muted { color: #475569; }
-        .upgrade-shell .border-theme-border { border-color: #cbd5e1; }
-        .upgrade-eyebrow { color: #4338ca; }
-
-        .upgrade-shell .bg-theme-bg,
-        .upgrade-choice,
-        .upgrade-plan-choice,
-        #other-billing-options,
-        .upgrade-summary-card {
-            background: #f8fafc;
-        }
-
-        .upgrade-choice,
-        .upgrade-plan-choice {
-            border: 1px solid #cbd5e1;
-        }
-
-        .upgrade-choice:hover,
-        .upgrade-plan-choice:hover {
-            border-color: #818cf8;
-            background: #f5f3ff;
-        }
-
-        .upgrade-choice-selected {
-            border-color: #4f46e5 !important;
-            background: #eef2ff !important;
-            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.16);
-        }
-
-        .upgrade-primary {
-            display: block;
-            width: 100%;
-            color: #ffffff;
-            background: #4338ca;
-            border-radius: 12px;
-            box-shadow: 0 8px 20px rgba(67, 56, 202, 0.22);
-        }
-
-        .upgrade-primary:hover:not(:disabled) { background: #3730a3; }
-        .upgrade-primary:disabled {
-            cursor: not-allowed;
-            color: #ffffff;
-            background: #475569;
-            box-shadow: none;
-            opacity: 1;
-        }
-
-        .upgrade-shell > #close-pricing {
-            top: 16px;
-            right: 16px;
-        }
-
-        [data-upgrade-progress] {
-            width: 28px;
-            height: 28px;
-            flex: 0 0 28px;
-        }
-
-        .upgrade-progress-active {
-            background-color: #4338ca !important;
-            color: #fff !important;
-            border-color: #4338ca !important;
-        }
-
-        .dark-mode .upgrade-shell,
-        .oled-mode .upgrade-shell {
-            background: rgba(17, 24, 39, 0.95);
-            color: #f8fafc;
-            border-color: rgba(71, 85, 105, 0.5);
-            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-        }
-
-        .oled-mode .upgrade-shell { background: #050505; }
-
-        .dark-mode .upgrade-shell .text-theme-text,
-        .oled-mode .upgrade-shell .text-theme-text { color: #f8fafc; }
-
-        .dark-mode .upgrade-shell .text-theme-muted,
-        .oled-mode .upgrade-shell .text-theme-muted { color: #cbd5e1; }
-
-        .dark-mode .upgrade-eyebrow,
-        .oled-mode .upgrade-eyebrow { color: #a5b4fc; }
-
-        .dark-mode .upgrade-shell .border-theme-border,
-        .oled-mode .upgrade-shell .border-theme-border,
-        .dark-mode .upgrade-choice,
-        .oled-mode .upgrade-choice,
-        .dark-mode .upgrade-plan-choice,
-        .oled-mode .upgrade-plan-choice { border-color: #475569; }
-
-        .dark-mode .upgrade-shell .bg-theme-bg,
-        .oled-mode .upgrade-shell .bg-theme-bg,
-        .dark-mode .upgrade-choice,
-        .oled-mode .upgrade-choice,
-        .dark-mode .upgrade-plan-choice,
-        .oled-mode .upgrade-plan-choice,
-        .dark-mode #other-billing-options,
-        .oled-mode #other-billing-options,
-        .dark-mode .upgrade-summary-card,
-        .oled-mode .upgrade-summary-card { background: #1e293b; }
-
-        .dark-mode .upgrade-choice-selected,
-        .oled-mode .upgrade-choice-selected {
-            background: #312e81 !important;
-            border-color: #a5b4fc !important;
-        }
-
-        .payment-details-shell {
-            background: #ffffff;
-            color: #0f172a;
-            border: 1px solid #cbd5e1;
-        }
-
-        .payment-details-shell input {
-            background: #f8fafc !important;
-            color: #0f172a !important;
-            border-color: #94a3b8 !important;
-        }
-
-        .payment-details-shell input::placeholder { color: #64748b; }
-
-        .dark-mode .payment-details-shell,
-        .oled-mode .payment-details-shell {
-            background: #111827;
-            color: #f8fafc;
-            border-color: #475569;
-        }
-
-        .oled-mode .payment-details-shell { background: #050505; }
-
-        .dark-mode .payment-details-shell input,
-        .oled-mode .payment-details-shell input {
-            background: #1e293b !important;
-            color: #f8fafc !important;
-            border-color: #64748b !important;
-        }
-
-        .dark-mode .payment-details-shell input::placeholder,
-        .oled-mode .payment-details-shell input::placeholder { color: #94a3b8; }
-
-        /* Tooltip */
-        [data-tooltip]:hover::after,
-        [data-tooltip]:focus-visible::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 120%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(15, 23, 42, 0.9);
-            color: #fff;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 11px;
-            white-space: nowrap;
-            pointer-events: none;
-            z-index: 100;
-        }
-
-        [data-tooltip] {
-            position: relative;
-        }
-
-        /* Pricing Toggle */
-        .pricing-toggle-active {
-            background: #fff;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-        }
-
-        /* Custom sub-category radios */
-        .custom-sub-radio:checked+label {
-            border-color: #6366f1;
-            background: #eef2ff;
-        }
-
-        /* Toggle Switch */
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 44px;
-            height: 24px;
-            flex-shrink: 0;
-        }
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: #cbd5e1;
-            transition: 0.3s;
-            border-radius: 24px;
-        }
-        .toggle-slider::before {
-            content: "";
-            position: absolute;
-            height: 18px;
-            width: 18px;
-            left: 3px;
-            bottom: 3px;
-            background: #fff;
-            transition: 0.3s;
-            border-radius: 50%;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-        }
-        .toggle-switch input:checked + .toggle-slider {
-            background: #10b981;
-        }
-        .toggle-switch input:checked + .toggle-slider::before {
-            transform: translateX(20px);
-        }
-        .toggle-switch input:focus + .toggle-slider {
-            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
-        }
-    </style>
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)">
+    <script src="themes/packs.js?v=1"></script>
+    <script src="theme-init.js?v=3"></script>
+    <link rel="preload" href="fonts/SpaceGrotesk-700.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="fonts/IBMPlexSans-400.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="tailwind.css?v=32">
+    <script src="sw-register.js?v=32" defer></script>
 </head>
 
-<body class="min-h-screen flex items-center justify-center p-4">
+<body class="min-h-screen" data-signed-in="false">
+<!-- Icons: Lucide (https://lucide.dev), ISC License, Copyright (c) Lucide Icons and Contributors; portions derived from Feather (MIT, Copyright (c) 2013-2023 Cole Bemis). Full notices: third-party-licenses.txt -->
+<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" class="icon-sprite">
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16" /> <path d="M4 12h16" /> <path d="M4 19h16" /></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z" /> <circle cx="12" cy="13" r="3" /></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /> <path d="M12 2v2" /> <path d="M12 20v2" /> <path d="m4.93 4.93 1.41 1.41" /> <path d="m17.66 17.66 1.41 1.41" /> <path d="M2 12h2" /> <path d="M20 12h2" /> <path d="m6.34 17.66-1.41 1.41" /> <path d="m19.07 4.93-1.41 1.41" /></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" /></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2" /> <line x1="8" x2="16" y1="21" y2="21" /> <line x1="12" x2="12" y1="17" y2="21" /></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" /></symbol>
+  <symbol id="i-list-checks" viewBox="0 0 24 24"><path d="M13 5h8" /> <path d="M13 12h8" /> <path d="M13 19h8" /> <path d="m3 17 2 2 4-4" /> <path d="m3 7 2 2 4-4" /></symbol>
+  <symbol id="i-book-open" viewBox="0 0 24 24"><path d="M12 5v16" /> <path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z" /></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 19v3" /> <path d="M19 10v2a7 7 0 0 1-14 0v-2" /> <rect x="9" y="2" width="6" height="13" rx="3" /></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 10 0v4" /></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /></symbol>
+  <symbol id="i-chart-column" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" /></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /> <circle cx="12" cy="12" r="3" /></symbol>
+  <symbol id="i-gem" viewBox="0 0 24 24"><path d="M10.5 3 8 9l4 13 4-13-2.5-6" /> <path d="M17 3a2 2 0 0 1 1.6.8l3 4a2 2 0 0 1 .013 2.382l-7.99 10.986a2 2 0 0 1-3.247 0l-7.99-10.986A2 2 0 0 1 2.4 7.8l2.998-3.997A2 2 0 0 1 7 3z" /> <path d="M2 9h20" /></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /> <path d="M14 2v5a1 1 0 0 0 1 1h5" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" /></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M12 17V7" /> <path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8" /> <path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z" /></symbol>
+  <symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <path d="m7 10 5 5 5-5" /></symbol>
+  <symbol id="i-trash-2" viewBox="0 0 24 24"><path d="M10 11v6" /> <path d="M14 11v6" /> <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /> <path d="M3 6h18" /> <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></symbol>
+  <symbol id="i-log-out" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5" /> <path d="M21 12H9" /> <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4" /></symbol>
+  <symbol id="i-coins" viewBox="0 0 24 24"><path d="M13.744 17.736a6 6 0 1 1-7.48-7.48" /> <path d="M15 6h1v4" /> <path d="m6.134 14.768.866-.5 2 3.464" /> <circle cx="16" cy="8" r="6" /></symbol>
+  <symbol id="i-snowflake" viewBox="0 0 24 24"><path d="m10 20-1.25-2.5L6 18" /> <path d="M10 4 8.75 6.5 6 6" /> <path d="m14 20 1.25-2.5L18 18" /> <path d="m14 4 1.25 2.5L18 6" /> <path d="m17 21-3-6h-4" /> <path d="m17 3-3 6 1.5 3" /> <path d="M2 12h6.5L10 9" /> <path d="m20 10-1.5 2 1.5 2" /> <path d="M22 12h-6.5L14 15" /> <path d="m4 10 1.5 2L4 14" /> <path d="m7 21 3-6-1.5-3" /> <path d="m7 3 3 6h4" /></symbol>
+  <symbol id="i-external-link" viewBox="0 0 24 24"><path d="M15 3h6v6" /> <path d="M10 14 21 3" /> <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></symbol>
+  <symbol id="i-hard-drive" viewBox="0 0 24 24"><path d="M10 16h.01" /> <path d="M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /> <path d="M21.946 12.013H2.054" /> <path d="M6 16h.01" /></symbol>
+  <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3" /> <path d="M3 5V19A9 3 0 0 0 21 19V5" /> <path d="M3 12A9 3 0 0 0 21 12" /></symbol>
+  <symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="M12 16v-4" /> <path d="M12 8h.01" /></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /> <circle cx="12" cy="7" r="4" /></symbol>
+  <symbol id="i-key-round" viewBox="0 0 24 24"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z" /> <circle cx="16.5" cy="7.5" r=".5" fill="currentColor" /></symbol>
+  <symbol id="i-pen-line" viewBox="0 0 24 24"><path d="M13 21h8" /> <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /></symbol>
+  <symbol id="i-circle-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="m16 9-5.5 5.5L8 12" /></symbol>
+  <symbol id="i-circle-x" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="m15 9-6 6" /> <path d="m9 9 6 6" /></symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M5 22h14" /> <path d="M5 2h14" /> <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" /> <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" /></symbol>
+  <symbol id="i-smartphone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2" ry="2" /> <path d="M12 18h.01" /></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" /> <path d="M12 5v14" /></symbol>
+  <symbol id="i-refresh-cw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /></symbol>
+  <symbol id="i-notebook-pen" viewBox="0 0 24 24"><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4" /> <path d="M2 6h4" /> <path d="M2 10h4" /> <path d="M2 14h4" /> <path d="M2 18h4" /> <path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z" /></symbol>
+  <symbol id="i-scan-line" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2" /> <path d="M17 3h2a2 2 0 0 1 2 2v2" /> <path d="M21 17v2a2 2 0 0 1-2 2h-2" /> <path d="M7 21H5a2 2 0 0 1-2-2v-2" /> <path d="M7 12h10" /></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14" /> <path d="m12 5 7 7-7 7" /></symbol>
+  <symbol id="i-sheet" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <line x1="3" x2="21" y1="9" y2="9" /> <line x1="3" x2="21" y1="15" y2="15" /> <line x1="9" x2="9" y1="9" y2="21" /> <line x1="15" x2="15" y1="9" y2="21" /></symbol>
+</svg>
 
-    <!-- MAIN CONTAINER -->
-    <main class="w-full max-w-lg mx-auto glass rounded-2xl shadow-xl p-5 sm:p-8 relative">
 
-        <!-- HEADER -->
-        <div class="text-center mb-10 relative">
-            <!-- Theme Toggle (top-right) -->
-            <div class="absolute -top-2 -right-2 sm:-top-4 sm:-right-4 z-40">
-                <button id="theme-btn" type="button" aria-label="Change theme" aria-haspopup="true" aria-expanded="false"
-                    aria-controls="theme-dropdown"
-                    class="w-11 h-11 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-xl">
-                    <span aria-hidden="true">⚙️</span>
-                </button>
-                <div id="theme-dropdown" class="theme-menu" role="group" aria-label="Theme">
-                    <button type="button" class="theme-item" data-theme="light" data-label="Light" aria-label="Light theme" aria-pressed="false">☀️</button>
-                    <button type="button" class="theme-item" data-theme="dark" data-label="Dark" aria-label="Dark theme" aria-pressed="false">🌙</button>
-                    <button type="button" class="theme-item" data-theme="oled" data-label="OLED" aria-label="OLED black theme" aria-pressed="false">🖤</button>
-                    <button type="button" class="theme-item" data-theme="auto" data-label="Auto" aria-label="Match device theme" aria-pressed="false">⚙️</button>
-                </div>
-            </div>
+    <a href="#app-main" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[80] btn btn-secondary bg-bg">Skip to content</a>
 
-            <div class="inline-block p-3 rounded-2xl bg-emerald-500/10 mb-4 shadow-sm text-3xl">🌿</div>
-            <h1 class="text-4xl font-bold tracking-tight text-theme-text">AI Planner</h1>
-            <p id="header-subtitle" class="text-theme-muted mt-2 font-medium">Calm your digital chaos.</p>
-        </div>
-
-        <!-- VIEW 1: LOGIN -->
-        <div id="view-login" class="flex flex-col items-center">
-
-            <!-- TRUST BADGE -->
-            <div
-                class="mb-8 flex items-center space-x-2 bg-theme-glass px-4 py-1.5 rounded-full border border-theme-border">
-                <span class="text-xs font-semibold text-emerald-700 dark:text-emerald-400 tracking-wide uppercase">🔒 Private &amp; Secure</span>
-            </div>
-
-            <button id="login-btn" type="button"
-                class="w-full max-w-sm py-3.5 px-6 bg-theme-card hover:bg-theme-bg border border-theme-border rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-center group mb-4">
-                <svg class="w-6 h-6 mr-3 group-hover:scale-110 transition-transform" viewBox="0 0 24 24"
-                    aria-hidden="true" focusable="false">
-                    <path fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
-                    <path fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
-                </svg>
-                <span class="text-theme-text font-medium">Continue with Google</span>
+    <!-- APP BAR -->
+    <header class="app-bar">
+        <div class="max-w-2xl mx-auto px-4 h-16 flex items-center gap-2">
+            <button id="hamburger-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="drawer-panel"
+                class="signed-in-only btn btn-ghost btn-icon -ml-2">
+                <svg class="icon icon-lg" aria-hidden="true"><use href="#i-menu"></use></svg>
             </button>
-
-            <!-- SCOPE EXPLANATION -->
-            <div class="w-full text-left mb-8 space-y-4">
-                
-                <!-- Hero Pitch -->
-                <div class="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-blue-500/10 border border-emerald-500/20 dark:border-emerald-500/10 rounded-2xl p-5 shadow-sm relative overflow-hidden">
-                    <div class="absolute -top-4 -right-4 text-6xl opacity-10 blur-[2px] pointer-events-none">✨</div>
-                    <h3 class="font-bold text-theme-text text-[17px] tracking-tight mb-2">Love your paper planner? <span class="text-emerald-600 dark:text-emerald-400">Upgrade it with AI.</span></h3>
-                    <p class="text-[13px] text-theme-muted leading-relaxed">
-                        AI Planner is the ultimate bridge between your handwritten journal and your digital life. Just snap a photo of your notebook, and our AI instantly organizes your day into your Google Workspace.
-                    </p>
-                </div>
-
-                <!-- Feature Cards -->
-                <div class="grid grid-cols-1 gap-3">
-                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default">
-                        <div class="text-2xl pt-0.5 group-hover:scale-110 transition-transform">📅</div>
-                        <div>
-                            <h4 class="font-bold text-theme-text text-[13px]">Schedule It</h4>
-                            <p class="text-[12px] text-theme-muted mt-1 leading-relaxed">We read your handwritten plans and automatically create Google Calendar events. No more double-entry.</p>
-                        </div>
+            <a href="/" class="signed-in-only flex items-center gap-2 min-h-[44px] rounded-lg pr-2" aria-label="AI Planner, home">
+                <img src="brand/app-icon.svg" alt="" width="28" height="28" class="brand-tile">
+                <span class="hidden sm:inline font-display font-bold text-[17px] text-ink">AI Planner</span>
+            </a>
+            <div class="flex-1"></div>
+            <button id="current-plan-badge" type="button" class="signed-in-only chip whitespace-nowrap" aria-label="Your plan and credits. View plans and pricing">
+                <span id="plan-label" class="hidden sm:inline">Free</span>
+                <span aria-hidden="true" class="hidden sm:inline text-subtle">·</span>
+                <span id="credits-badge">…</span>
+            </button>
+            <div class="relative">
+                <button id="theme-btn" type="button" aria-label="Change theme or style" aria-haspopup="true" aria-expanded="false"
+                    aria-controls="theme-dropdown" class="btn btn-ghost btn-icon">
+                    <svg class="icon icon-lg" aria-hidden="true"><use href="#i-monitor"></use></svg>
+                </button>
+                <div id="theme-dropdown" class="theme-menu">
+                    <div role="group" aria-labelledby="theme-mode-label" class="flex flex-col">
+                        <p id="theme-mode-label" class="theme-menu-label">Mode</p>
+                        <button type="button" class="theme-item" data-theme="auto" data-label="Auto" aria-pressed="false">
+                            <svg class="icon" aria-hidden="true"><use href="#i-monitor"></use></svg> Match device</button>
+                        <button type="button" class="theme-item" data-theme="light" data-label="Light" aria-pressed="false">
+                            <svg class="icon" aria-hidden="true"><use href="#i-sun"></use></svg> Light</button>
+                        <button type="button" class="theme-item" data-theme="dark" data-label="Dark" aria-pressed="false">
+                            <svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg> Dark</button>
                     </div>
-
-                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default">
-                        <div class="text-2xl pt-0.5 group-hover:scale-110 transition-transform">✅</div>
-                        <div>
-                            <h4 class="font-bold text-theme-text text-[13px]">Crush Your To-Dos</h4>
-                            <p class="text-[12px] text-theme-muted mt-1 leading-relaxed">We digitize your tasks. Do an "Evening review" to scan what you crossed out on paper, and we'll auto-complete them in Google Tasks.</p>
-                        </div>
-                    </div>
-
-                    <div class="flex items-start gap-3.5 bg-theme-bg/40 dark:bg-black/10 border border-theme-border rounded-xl p-4 hover:bg-theme-bg hover:shadow-md transition-all group cursor-default">
-                        <div class="text-2xl pt-0.5 group-hover:scale-110 transition-transform">📊</div>
-                        <div>
-                            <h4 class="font-bold text-theme-text text-[13px]">Track Your Habits</h4>
-                            <p class="text-[12px] text-theme-muted mt-1 leading-relaxed">Log expenses or health metrics on paper; we'll perfectly format them into a private Google Drive spreadsheet.</p>
-                        </div>
+                    <div class="divider my-1" role="presentation"></div>
+                    <!-- One button per theme pack (themes/packs.js), added by app.js -->
+                    <div id="style-items" role="group" aria-labelledby="theme-style-label" class="flex flex-col">
+                        <p id="theme-style-label" class="theme-menu-label">Style</p>
                     </div>
                 </div>
-
-                <!-- Privacy Badge -->
-                <div class="flex items-center gap-3 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800/30 rounded-xl p-3.5 mt-2">
-                    <div class="text-xl">🔒</div>
-                    <p class="text-[11px] text-emerald-800 dark:text-emerald-300/90 leading-relaxed">
-                        <strong class="font-bold">Zero Snooping:</strong> We only request the exact permissions needed to sync your data. Your private files stay 100% secure and untouched.
-                    </p>
-                </div>
-
             </div>
+        </div>
+    </header>
+
+    <main id="app-main" class="w-full max-w-2xl mx-auto px-4 pt-6 pb-10" tabindex="-1">
+
+        <!-- VIEW: SIGN IN -->
+        <section id="view-login" class="max-w-md mx-auto flex flex-col items-center text-center">
+            <!-- ADT family lockup: the AI Planner wave + ADT + product line (brand/logo/LOGO.md) -->
+            <h1 class="mt-2">
+                <span class="sr-only">AI Planner</span>
+                <img src="brand/logo-primary.svg" alt="" width="280" height="87" class="on-light w-[280px] h-auto">
+                <img src="brand/logo-primary-reversed.svg" alt="" width="280" height="87" class="on-dark w-[280px] h-auto">
+            </h1>
+            <p class="mt-6 text-[18px] leading-7 text-muted">Write your day on paper. Take a photo. It’s in your calendar.</p>
+
+            <button id="login-btn" type="button" class="btn btn-secondary btn-block mt-8 min-h-[52px] bg-bg text-[16px]">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
+                </svg>
+                <span>Continue with Google</span>
+            </button>
 
             <!-- Login errors (U-11): plain text, never raw Firebase codes -->
-            <div id="login-error" class="hidden w-full max-w-sm -mt-2 mb-6 p-3 rounded-xl border border-red-200 bg-red-50 text-red-700 dark:bg-red-900/20 dark:border-red-800/40 dark:text-red-300 text-sm" role="alert">
+            <div id="login-error" class="hidden w-full mt-4 notice notice-danger text-left" role="alert">
                 <p id="login-error-text"></p>
-                <button id="login-retry-btn" type="button" class="mt-2 min-h-[44px] px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm">Try again</button>
+                <button id="login-retry-btn" type="button" class="btn btn-danger mt-3">Try again</button>
             </div>
 
-            <!-- FOOTER LINKS -->
-            <div
-                class="w-full grid grid-cols-2 gap-y-2 gap-x-4 text-xs text-theme-muted border-t border-theme-border pt-6">
-                <a href="privacy.html" target="_blank" rel="noopener"
-                    class="min-h-[44px] hover:text-emerald-700 transition-colors flex items-center justify-center gap-2 group">
-                    <span aria-hidden="true" class="group-hover:scale-110 transition-transform">🛡️</span> Privacy Policy
-                </a>
-                <a href="pricing-policy.html" target="_blank" rel="noopener"
-                    class="min-h-[44px] hover:text-emerald-700 transition-colors flex items-center justify-center gap-2 group">
-                    <span aria-hidden="true" class="group-hover:scale-110 transition-transform">💳</span> Pricing Policy
-                </a>
-                <a href="refund-policy.html" target="_blank" rel="noopener"
-                    class="min-h-[44px] hover:text-emerald-700 transition-colors flex items-center justify-center gap-2 group">
-                    <span aria-hidden="true" class="group-hover:scale-110 transition-transform">💸</span> Refund Policy
-                </a>
-                <a href="planner.html" target="_blank" rel="noopener"
-                    class="min-h-[44px] hover:text-emerald-700 transition-colors flex items-center justify-center gap-2 group">
-                    <span aria-hidden="true" class="group-hover:scale-110 transition-transform">📄</span> Free Planner Template
-                </a>
-                <div class="col-span-2 min-h-[44px] flex items-center justify-center gap-1 text-theme-muted">
-                    <span>⌚ Health Sync</span>
-                    <span
-                        class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Soon</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- VIEW 1.5: EDIT NAME (opened from the menu; new users use their Google name automatically) -->
-        <div id="view-name-prompt" class="view-hidden fade-in flex flex-col items-center space-y-6">
-            <div class="text-center">
-                <div class="text-4xl mb-3" aria-hidden="true">👋</div>
-                <h2 class="text-2xl font-bold text-theme-text">Your name</h2>
-                <p class="text-sm text-theme-muted mt-2">This is how AI Planner greets you.</p>
-            </div>
-            <div class="w-full max-w-xs">
-                <label for="user-display-name-input" class="block text-xs font-bold text-theme-muted uppercase mb-1">Your Name</label>
-                <input type="text" id="user-display-name-input" maxlength="100"
-                    class="w-full rounded-xl border border-theme-border bg-theme-bg p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-center text-lg font-medium text-theme-text"
-                    placeholder="e.g., Shoubhik" autocomplete="name" aria-describedby="name-error">
-                <p id="name-error" class="hidden text-xs text-red-600 dark:text-red-400 mt-1" role="alert"></p>
-            </div>
-            <button id="save-name-btn" type="button"
-                class="w-full max-w-xs min-h-[44px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md transition-all">
-                Save name
-            </button>
-            <button id="cancel-name-btn" type="button"
-                class="w-full max-w-xs min-h-[44px] text-theme-muted hover:text-theme-text text-sm transition-colors">
-                ← Back to Dashboard
-            </button>
-        </div>
-
-        <!-- VIEW 2: NOTION SETUP (asked for only when Journal or Voice is used) -->
-        <div id="view-notion-setup" class="view-hidden fade-in space-y-5">
-            <div class="notion-onboard-header text-center py-6 rounded-2xl relative overflow-hidden">
-                <div
-                    class="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 animate-gradient-shift">
-                </div>
-                <div class="relative z-10">
-                    <div class="text-5xl mb-3" aria-hidden="true">📝</div>
-                    <h2 class="text-2xl font-black text-theme-text tracking-tight">Connect Notion</h2>
-                    <p class="text-sm text-theme-muted mt-1 px-4">Journal pages and voice notes are saved to a Notion database you choose.</p>
-                </div>
-            </div>
-
-            <p id="notion-setup-context" class="hidden text-sm p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 text-blue-800 dark:text-blue-200"></p>
-
-            <!-- Guide first (UX 10) -->
-            <ol class="text-sm text-theme-muted space-y-1.5 list-decimal list-inside p-4 rounded-xl border border-theme-border bg-theme-bg">
-                <li>Create an integration at <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener" class="text-blue-600 dark:text-blue-400 underline">notion.so/my-integrations</a> and copy its token.</li>
-                <li>Open your journal database in Notion → <strong>•••</strong> → <strong>Connections</strong> → add your integration.</li>
-                <li>Copy the database link (<strong>Share → Copy link</strong>) and paste it below.</li>
+            <ol class="w-full mt-10 space-y-3 text-left" aria-label="How it works">
+                <li class="card p-4 flex gap-3">
+                    <span class="mode-icon bg-bg" aria-hidden="true"><svg class="icon"><use href="#i-notebook-pen"></use></svg></span>
+                    <span><span class="block font-display font-bold text-ink">Plan on paper, as usual</span>
+                        <span class="block text-sm text-muted mt-0.5">Any planner, journal or notebook. Our free printable page works best.</span></span>
+                </li>
+                <li class="card p-4 flex gap-3">
+                    <span class="mode-icon bg-bg" aria-hidden="true"><svg class="icon"><use href="#i-camera"></use></svg></span>
+                    <span><span class="block font-display font-bold text-ink">Take a photo of the page</span>
+                        <span class="block text-sm text-muted mt-0.5">In the morning for your plans, in the evening for what you got done.</span></span>
+                </li>
+                <li class="card p-4 flex gap-3">
+                    <span class="mode-icon bg-bg" aria-hidden="true"><svg class="icon"><use href="#i-circle-check"></use></svg></span>
+                    <span><span class="block font-display font-bold text-ink">It lands where it belongs</span>
+                        <span class="block text-sm text-muted mt-0.5">Times go to Google Calendar, to-dos to Google Tasks, spending to Sheets, journal pages to Google Drive or Notion.</span></span>
+                </li>
             </ol>
-            <button id="open-guide-onboard" type="button"
-                class="min-h-[44px] text-blue-600 dark:text-blue-400 text-sm hover:underline flex items-center gap-1 mx-auto">
-                <span aria-hidden="true">📚</span> Show the detailed step-by-step guide
+
+            <p class="w-full mt-6 text-left text-sm text-muted flex gap-2">
+                <svg class="icon text-signal-ink mt-0.5" aria-hidden="true"><use href="#i-lock"></use></svg>
+                <span>Your photos aren’t kept on our servers. AI Planner only gets access to your calendar events, your tasks and the files it creates in your Drive.</span>
+            </p>
+
+            <nav class="w-full mt-10 pt-6 divider grid grid-cols-2 gap-x-4 text-sm" aria-label="Policies and resources">
+                <a href="planner.html" target="_blank" rel="noopener" class="min-h-[44px] flex items-center justify-center text-muted hover:text-ink">Free planner template</a>
+                <a href="privacy.html" target="_blank" rel="noopener" class="min-h-[44px] flex items-center justify-center text-muted hover:text-ink">Privacy</a>
+                <a href="pricing-policy.html" target="_blank" rel="noopener" class="min-h-[44px] flex items-center justify-center text-muted hover:text-ink">Pricing</a>
+                <a href="refund-policy.html" target="_blank" rel="noopener" class="min-h-[44px] flex items-center justify-center text-muted hover:text-ink">Refunds</a>
+            </nav>
+
+        </section>
+
+        <!-- VIEW: NOTION SETUP (only when Notion is chosen for notes) -->
+        <section id="view-notion-setup" class="view-hidden fade-in max-w-md mx-auto space-y-5">
+            <div class="flex items-center gap-2">
+                <button id="skip-notion-btn" type="button" class="btn btn-ghost btn-icon -ml-2" aria-label="Back">
+                    <svg class="icon icon-lg" aria-hidden="true"><use href="#i-chevron-left"></use></svg>
+                </button>
+                <h2 class="font-display font-bold text-2xl text-ink">Connect Notion</h2>
+            </div>
+            <p class="text-muted">Journal pages, brain dumps and voice notes will be saved to a Notion database you choose.</p>
+
+            <p id="notion-setup-context" class="hidden notice notice-info"></p>
+
+            <ol class="card p-4 text-sm text-muted space-y-2 list-decimal list-inside">
+                <li>Create an integration at <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener" class="link">notion.so/my-integrations</a> and copy its token.</li>
+                <li>Open your journal database in Notion → <strong class="text-ink">•••</strong> → <strong class="text-ink">Connections</strong> → add your integration.</li>
+                <li>Copy the database link (<strong class="text-ink">Share → Copy link</strong>) and paste it below.</li>
+            </ol>
+            <button id="open-guide-onboard" type="button" class="btn btn-ghost -ml-2 px-2 text-signal-ink">
+                <svg class="icon" aria-hidden="true"><use href="#i-book-open"></use></svg> Show the step-by-step guide
             </button>
 
             <div class="space-y-4">
                 <div>
-                    <label for="notion-key-input" class="block text-xs font-bold text-theme-muted uppercase mb-1.5 tracking-wider">Integration token</label>
-                    <input type="password" id="notion-key-input" autocomplete="off" spellcheck="false"
-                        aria-describedby="notion-key-error"
-                        class="w-full rounded-xl border border-theme-border bg-theme-bg p-3.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-theme-text font-mono placeholder:font-sans"
-                        placeholder="ntn_… or secret_…">
-                    <p id="notion-key-error" class="hidden text-xs text-red-600 dark:text-red-400 mt-1" role="alert"></p>
+                    <label for="notion-key-input" class="field-label">Integration token</label>
+                    <input type="password" id="notion-key-input" autocomplete="off" spellcheck="false" aria-describedby="notion-key-error"
+                        class="field font-mono placeholder:font-sans" placeholder="ntn_… or secret_…">
+                    <p id="notion-key-error" class="hidden field-error" role="alert"></p>
                 </div>
                 <div>
-                    <label for="notion-db-input" class="block text-xs font-bold text-theme-muted uppercase mb-1.5 tracking-wider">Database link or ID</label>
-                    <input type="text" id="notion-db-input" autocomplete="off" spellcheck="false"
-                        aria-describedby="notion-db-help notion-db-error"
-                        class="w-full rounded-xl border border-theme-border bg-theme-bg p-3.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-theme-text font-mono placeholder:font-sans"
-                        placeholder="https://www.notion.so/…  or the 32-character ID">
-                    <p id="notion-db-help" class="text-[11px] text-theme-muted mt-1">Paste the whole link — we’ll pick out the ID.</p>
-                    <p id="notion-db-error" class="hidden text-xs text-red-600 dark:text-red-400 mt-1" role="alert"></p>
+                    <label for="notion-db-input" class="field-label">Database link or ID</label>
+                    <input type="text" id="notion-db-input" autocomplete="off" spellcheck="false" aria-describedby="notion-db-help notion-db-error"
+                        class="field font-mono placeholder:font-sans" placeholder="Paste the database link">
+                    <p id="notion-db-help" class="field-help">Paste the whole link — we’ll pick out the ID.</p>
+                    <p id="notion-db-error" class="hidden field-error" role="alert"></p>
                 </div>
             </div>
 
-            <!-- Notion Connected Badge (shown when revisiting) -->
-            <div id="notion-onboard-status"
-                class="hidden items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/30 rounded-xl p-3">
-                <span class="text-emerald-700 dark:text-emerald-300 font-bold text-sm">✅ Notion Connected</span>
-                <button id="change-notion-onboard-btn" type="button" class="min-h-[44px] px-2 text-xs text-blue-600 dark:text-blue-400 hover:underline ml-auto">Change keys</button>
+            <!-- Shown when Notion is already connected -->
+            <div id="notion-onboard-status" class="hidden items-center gap-2 notice notice-success">
+                <svg class="icon text-signal-ink" aria-hidden="true"><use href="#i-circle-check"></use></svg>
+                <span class="font-semibold">Notion is connected</span>
+                <button id="change-notion-onboard-btn" type="button" class="btn btn-ghost ml-auto">Change</button>
             </div>
 
-            <button id="save-notion-btn" type="button"
-                class="w-full min-h-[44px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all">
-                Connect Notion →
-            </button>
-            <button id="skip-notion-btn" type="button"
-                class="w-full min-h-[44px] text-theme-muted hover:text-theme-text text-sm py-2 transition-colors">
-                Not now — back to Dashboard
-            </button>
-        </div>
+            <button id="save-notion-btn" type="button" class="btn btn-primary btn-block min-h-[52px]">Connect Notion</button>
+        </section>
 
-        <!-- VIEW 3: ADVANCED SETTINGS -->
-        <div id="view-setup" class="view-hidden fade-in space-y-6">
-            <div class="flex items-center justify-between">
-                <h2 class="font-bold text-lg text-theme-text">⚙️ Advanced Settings</h2>
-                <button id="back-to-dash-from-setup" type="button"
-                    class="min-h-[44px] text-xs font-medium text-theme-text hover:bg-theme-border/50 px-4 rounded-full transition-colors border border-theme-border">
-                    ← Back
+        <!-- VIEW: SETTINGS -->
+        <section id="view-setup" class="view-hidden fade-in max-w-xl mx-auto space-y-8">
+            <div class="flex items-center gap-2">
+                <button id="back-to-dash-from-setup" type="button" class="btn btn-ghost btn-icon -ml-2" aria-label="Back to dashboard">
+                    <svg class="icon icon-lg" aria-hidden="true"><use href="#i-chevron-left"></use></svg>
                 </button>
+                <h2 class="font-display font-bold text-2xl text-ink">Settings</h2>
             </div>
 
-            <!-- Notion Connection Status Card -->
-            <div id="adv-notion-status"
-                class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl border border-theme-border bg-theme-bg">
-                <div class="flex items-center gap-2">
-                    <span class="text-lg" aria-hidden="true">📝</span>
-                    <div>
-                        <span id="adv-notion-label" class="text-sm font-semibold text-theme-text">Notion</span>
-                        <span id="adv-notion-badge" class="text-xs text-theme-muted ml-1">Not connected</span>
+            <!-- Name -->
+            <section aria-labelledby="settings-name-title" class="space-y-3">
+                <h3 id="settings-name-title" class="section-title">Your name</h3>
+                <div class="flex gap-2 items-start">
+                    <div class="flex-1">
+                        <label for="user-display-name-input" class="sr-only">Your name</label>
+                        <input type="text" id="user-display-name-input" maxlength="100" class="field" autocomplete="name" aria-describedby="name-error name-status" placeholder="How AI Planner greets you">
                     </div>
+                    <button id="save-name-btn" type="button" class="btn btn-secondary">Save</button>
                 </div>
-                <div class="flex items-center gap-1">
-                    <button id="adv-notion-configure" type="button"
-                        class="min-h-[44px] px-3 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">Configure</button>
-                    <button id="adv-notion-disconnect" type="button"
-                        class="hidden min-h-[44px] px-3 text-xs font-medium text-red-600 dark:text-red-400 hover:underline">Disconnect</button>
+                <p id="name-error" class="hidden field-error" role="alert"></p>
+                <p id="name-status" class="hidden field-help" role="status"></p>
+            </section>
+
+            <!-- Appearance: the same choices as the theme menu in the app bar (docs/THEMES.md) -->
+            <section aria-labelledby="settings-appearance-title" class="space-y-3">
+                <h3 id="settings-appearance-title" class="section-title">Appearance</h3>
+                <fieldset class="space-y-2">
+                    <legend class="field-label">Mode</legend>
+                    <div class="grid gap-2 sm:grid-cols-3">
+                        <label class="choice items-center">
+                            <input type="radio" name="theme-mode" value="auto">
+                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-monitor"></use></svg> Match device</span>
+                        </label>
+                        <label class="choice items-center">
+                            <input type="radio" name="theme-mode" value="light">
+                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-sun"></use></svg> Light</span>
+                        </label>
+                        <label class="choice items-center">
+                            <input type="radio" name="theme-mode" value="dark">
+                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg> Dark</span>
+                        </label>
+                    </div>
+                </fieldset>
+                <fieldset class="space-y-2">
+                    <legend class="field-label">Style</legend>
+                    <!-- One choice per theme pack (themes/packs.js), added by app.js -->
+                    <div id="settings-style-choices" class="space-y-2"></div>
+                </fieldset>
+            </section>
+
+            <!-- Where notes go -->
+            <section aria-labelledby="settings-notes-title" class="space-y-3">
+                <h3 id="settings-notes-title" class="section-title">Where journal pages go</h3>
+                <p class="text-sm text-muted">Journal pages, evening brain dumps and voice notes are saved here.</p>
+                <fieldset class="space-y-2">
+                    <legend class="sr-only">Save journal pages to</legend>
+                    <label class="choice">
+                        <input type="radio" name="notes-destination" value="drive">
+                        <span class="flex-1"><span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-hard-drive"></use></svg> Google Drive</span>
+                            <span class="block text-sm text-muted mt-0.5">An “AI Planner” folder in your own Drive: the photo and, on Pro, a typed copy. No setup needed.</span></span>
+                    </label>
+                    <label class="choice">
+                        <input type="radio" name="notes-destination" value="notion">
+                        <span class="flex-1"><span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-database"></use></svg> Notion</span>
+                            <span class="block text-sm text-muted mt-0.5">A page in a Notion database you choose.</span></span>
+                    </label>
+                </fieldset>
+                <div id="adv-notion-status" class="card px-4 py-2 flex flex-wrap items-center justify-between gap-2">
+                    <span class="text-sm"><span id="adv-notion-label" class="font-semibold text-ink">Notion</span>
+                        <span id="adv-notion-badge" class="text-muted ml-1">Not connected</span></span>
+                    <span class="flex items-center gap-1">
+                        <button id="adv-notion-configure" type="button" class="btn btn-ghost text-signal-ink">Set up</button>
+                        <button id="adv-notion-disconnect" type="button" class="hidden btn btn-ghost text-danger">Disconnect</button>
+                    </span>
                 </div>
-            </div>
+                <p id="notes-destination-error" class="hidden field-error" role="alert"></p>
+                <p id="notes-destination-status" class="hidden field-help" role="status"></p>
+            </section>
 
-            <!-- SECTION: Sync Preferences -->
-            <details class="group bg-theme-bg border border-theme-border rounded-xl overflow-hidden" open>
-                <summary
-                    class="flex items-center justify-between p-4 min-h-[44px] cursor-pointer font-bold text-theme-text select-none">
-                    <span class="flex items-center gap-2">🔄 Sync Preferences</span>
-                    <svg class="w-4 h-4 transition-transform group-open:rotate-180 text-theme-muted" fill="none"
-                        stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                </summary>
-                <div class="p-4 pt-0 space-y-4 border-t border-theme-border mt-2">
-                    <p class="text-xs text-theme-muted leading-relaxed pt-3">
-                        <strong class="text-theme-text">Duplicate prevention</strong> checks your existing Google Calendar
-                        events and Tasks before adding new ones, so re-syncing the same page doesn’t create copies.
-                    </p>
-
-                    <div class="flex items-center justify-between p-3 rounded-lg border border-theme-border">
-                        <div class="flex-1 pr-3">
-                            <span id="dedup-calendar-label" class="text-sm font-semibold text-theme-text flex items-center gap-1.5">
-                                📅 Calendar duplicate prevention
-                            </span>
-                            <span class="text-[11px] text-theme-muted mt-0.5 block">
-                                Skips events that already exist with the same title and time on that date.
-                            </span>
-                        </div>
+            <!-- Duplicate prevention -->
+            <section aria-labelledby="settings-dedup-title" class="space-y-3">
+                <h3 id="settings-dedup-title" class="section-title">Avoid duplicates</h3>
+                <p class="text-sm text-muted">Before adding anything, AI Planner checks what’s already there, so syncing the same page twice doesn’t create copies.</p>
+                <div class="card divide-y divide-line">
+                    <div class="flex items-center justify-between gap-3 p-4">
+                        <span><span id="dedup-calendar-label" class="block font-semibold text-ink">Calendar events</span>
+                            <span class="block text-sm text-muted">Skip events with the same title and time on that day.</span></span>
                         <label class="toggle-switch" for="dedup-calendar">
                             <input type="checkbox" id="dedup-calendar" name="dedupCalendar" aria-labelledby="dedup-calendar-label" checked>
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
-
-                    <div class="flex items-center justify-between p-3 rounded-lg border border-theme-border">
-                        <div class="flex-1 pr-3">
-                            <span id="dedup-tasks-label" class="text-sm font-semibold text-theme-text flex items-center gap-1.5">
-                                ✅ Tasks duplicate prevention
-                            </span>
-                            <span class="text-[11px] text-theme-muted mt-0.5 block">
-                                Skips tasks that already exist with the same name on that date.
-                            </span>
-                        </div>
+                    <div class="flex items-center justify-between gap-3 p-4">
+                        <span><span id="dedup-tasks-label" class="block font-semibold text-ink">Tasks</span>
+                            <span class="block text-sm text-muted">Skip tasks with the same name on that day.</span></span>
                         <label class="toggle-switch" for="dedup-tasks">
                             <input type="checkbox" id="dedup-tasks" name="dedupTasks" aria-labelledby="dedup-tasks-label" checked>
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
-                    <p id="dedup-error" class="hidden text-xs text-red-600 dark:text-red-400" role="alert"></p>
                 </div>
-            </details>
+                <p id="dedup-error" class="hidden field-error" role="alert"></p>
+            </section>
 
-            <!-- SECTION: AI Provider (BYOK) -->
-            <details id="byok-details" class="group bg-theme-bg border border-theme-border rounded-xl overflow-hidden">
-                <summary
-                    class="flex items-center justify-between p-4 min-h-[44px] cursor-pointer font-bold text-theme-text select-none">
-                    <span class="flex items-center gap-2">🔒 Your own AI key (BYOK) <span
-                            class="text-[10px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-200 uppercase">Power
-                            users</span></span>
-                    <svg class="w-4 h-4 transition-transform group-open:rotate-180 text-theme-muted" fill="none"
-                        stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
+            <!-- Your own AI key (BYOK) -->
+            <details id="byok-details" class="group card">
+                <summary class="flex items-center justify-between gap-2 p-4 min-h-[44px] cursor-pointer select-none">
+                    <span class="flex items-center gap-2 section-title"><svg class="icon" aria-hidden="true"><use href="#i-key-round"></use></svg> Your own AI key <span class="badge">Advanced</span></span>
+                    <svg class="icon text-muted transition-transform group-open:rotate-180" aria-hidden="true"><use href="#i-chevron-down"></use></svg>
                 </summary>
-                <div class="p-4 pt-0 space-y-4 border-t border-theme-border mt-2">
-                    <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg p-3 mt-3">
-                        <p class="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
-                            <strong>How your key is handled:</strong> your planner images are sent to the AI provider you choose.
-                            In <strong>This tab only</strong> mode the key stays in this browser tab’s <code>sessionStorage</code>
-                            and is sent with each sync over HTTPS; it is never stored on our servers and is erased when you
-                            close the tab or sign out. It is stored on our servers only if you choose
-                            <strong>Save encrypted</strong>, which envelope-encrypts it with Google Cloud KMS.
-                        </p>
+                <div class="px-4 pb-4 space-y-4">
+                    <div class="notice notice-warning text-sm">
+                        <strong class="notice-title-warning">How your key is handled:</strong> your planner photos are sent to the AI provider you choose.
+                        With <strong>This tab only</strong> the key stays in this browser tab’s <code>sessionStorage</code> and is sent with each sync over HTTPS;
+                        it is never stored on our servers and is erased when you close the tab or sign out. It is stored on our servers only if you choose
+                        <strong>Save encrypted</strong>, which envelope-encrypts it with Google Cloud KMS.
                     </div>
 
-                    <p id="byok-status" class="hidden text-xs p-3 rounded-lg border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200" role="status"></p>
+                    <p id="byok-status" class="hidden notice notice-success text-sm" role="status"></p>
 
-                    <fieldset class="space-y-3">
+                    <fieldset class="space-y-2">
                         <legend class="sr-only">Where to keep your key</legend>
-                        <label
-                            class="flex items-start gap-3 p-3 border border-theme-border rounded-lg cursor-pointer hover:bg-theme-border/20 transition-colors">
-                            <input type="radio" name="byok-mode" value="stateless" class="mt-0.5 accent-emerald-600 w-5 h-5" checked>
-                            <span class="flex flex-col">
-                                <span class="text-sm font-bold text-theme-text">This tab only (most private)</span>
-                                <span class="text-[11px] text-theme-muted mt-0.5">Kept in this tab’s sessionStorage and sent with each sync. Never stored on our servers. Closing the tab erases it.</span>
-                            </span>
+                        <label class="choice">
+                            <input type="radio" name="byok-mode" value="stateless" checked>
+                            <span class="flex flex-col"><span class="font-semibold text-ink">This tab only (most private)</span>
+                                <span class="text-sm text-muted mt-0.5">Kept in this tab’s sessionStorage and sent with each sync. Never stored on our servers. Closing the tab erases it.</span></span>
                         </label>
-                        <label
-                            class="flex items-start gap-3 p-3 border border-theme-border rounded-lg cursor-pointer hover:bg-theme-border/20 transition-colors">
-                            <input type="radio" name="byok-mode" value="kms" class="mt-0.5 accent-blue-600 w-5 h-5">
-                            <span class="flex flex-col">
-                                <span class="text-sm font-bold text-theme-text">Save encrypted (Cloud KMS)</span>
-                                <span class="text-[11px] text-theme-muted mt-0.5">Stored on our servers, envelope-encrypted with Google Cloud KMS, so it works on every device. Remove it any time below.</span>
-                            </span>
+                        <label class="choice">
+                            <input type="radio" name="byok-mode" value="kms">
+                            <span class="flex flex-col"><span class="font-semibold text-ink">Save encrypted (Cloud KMS)</span>
+                                <span class="text-sm text-muted mt-0.5">Stored on our servers, envelope-encrypted with Google Cloud KMS, so it works on every device. Remove it any time below.</span></span>
                         </label>
                     </fieldset>
 
                     <div class="space-y-3">
-                        <label for="byok-provider" class="block text-xs font-bold text-theme-muted uppercase mb-1">AI Provider &amp; Model</label>
-                        <select id="byok-provider"
-                            class="w-full min-h-[44px] rounded-lg border border-theme-border bg-theme-bg text-theme-text p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none">
-                            <optgroup label="🌐 Major Cloud Providers">
+                        <label for="byok-provider" class="field-label">AI provider and model</label>
+                        <select id="byok-provider" class="field">
+                            <optgroup label="Major Cloud Providers">
                                 <option value="openai:gpt-4.1">OpenAI — GPT-4.1</option>
                                 <option value="openai:gpt-4o">OpenAI — GPT-4o</option>
                                 <option value="openai:gpt-4o-mini">OpenAI — GPT-4o Mini</option>
@@ -664,7 +382,7 @@
                                 <option value="xai:grok-3-mini">xAI — Grok 3 Mini (Fast)</option>
                                 <option value="azure:gpt-4o">Azure OpenAI — GPT-4o</option>
                             </optgroup>
-                            <optgroup label="⚡ Fast & Affordable">
+                            <optgroup label="Fast & Affordable">
                                 <option value="groq:llama-3.3-70b-versatile">Groq — Llama 3.3 70B</option>
                                 <option value="groq:llama-3.1-70b-versatile">Groq — Llama 3.1 70B</option>
                                 <option value="groq:mixtral-8x7b-32768">Groq — Mixtral 8×7B</option>
@@ -675,459 +393,353 @@
                                 <option value="mistral:mistral-small-latest">Mistral — Mistral Small</option>
                                 <option value="mistral:codestral-latest">Mistral — Codestral</option>
                             </optgroup>
-                            <optgroup label="🔗 Aggregators & Platforms">
+                            <optgroup label="Aggregators & Platforms">
                                 <option value="together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo">Together.ai — Llama 3.1 70B</option>
                                 <option value="together:meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo">Together.ai — Llama 3.1 405B</option>
                                 <option value="openrouter:meta-llama/llama-3.1-70b-instruct">OpenRouter — Llama 3.1 70B</option>
                                 <option value="openrouter:google/gemini-2.0-flash-exp:free">OpenRouter — Gemini 2.0 Flash (Free)</option>
                                 <option value="perplexity:llama-3.1-sonar-large-128k-online">Perplexity — Sonar Large</option>
                             </optgroup>
-                            <optgroup label="🧪 Specialized">
+                            <optgroup label="Specialized">
                                 <option value="cohere:command-a-03-2025">Cohere — Command A</option>
                                 <option value="cohere:command-r-plus">Cohere — Command R+</option>
                                 <option value="cohere:command-r">Cohere — Command R</option>
                                 <option value="huggingface:meta-llama/Llama-3.1-70B-Instruct">HuggingFace — Llama 3.1 70B</option>
                             </optgroup>
-                            <optgroup label="🔧 Custom / Self-Hosted">
+                            <optgroup label="Custom / Self-Hosted">
                                 <option value="custom:openai-compat">Custom — OpenAI-Compatible API</option>
                                 <option value="custom:local">Custom — Local / Self-Hosted (Ollama)</option>
                                 <option value="custom:azure">Custom — Azure OpenAI Endpoint</option>
                             </optgroup>
                         </select>
-                        <p id="byok-key-hint" class="text-[11px] text-theme-muted leading-snug hidden"></p>
+                        <p id="byok-key-hint" class="field-help hidden"></p>
 
-                        <div id="byok-custom-fields"
-                            class="space-y-3 hidden mt-3 p-4 rounded-lg border border-theme-border border-dashed">
-                            <div id="custom-type-label" class="text-xs font-bold text-indigo-700 dark:text-indigo-300 mb-2"></div>
+                        <div id="byok-custom-fields" class="space-y-3 hidden p-4 rounded-lg border border-dashed border-line-strong">
+                            <div id="custom-type-label" class="text-sm font-semibold text-ink"></div>
                             <div id="custom-url-group">
-                                <label for="byok-custom-url" class="block text-xs font-bold text-theme-muted uppercase mb-1">API Base URL</label>
-                                <input type="url" id="byok-custom-url"
-                                    class="w-full rounded-lg border border-theme-border bg-theme-bg text-theme-text p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
-                                    placeholder="https://api.example.com/v1/chat/completions">
+                                <label for="byok-custom-url" class="field-label">API base URL</label>
+                                <input type="url" id="byok-custom-url" class="field font-mono" placeholder="https://api.example.com/v1/chat/completions">
                             </div>
                             <div>
-                                <label for="byok-custom-model" class="block text-xs font-bold text-theme-muted uppercase mb-1">Model Name</label>
-                                <input type="text" id="byok-custom-model"
-                                    class="w-full rounded-lg border border-theme-border bg-theme-bg text-theme-text p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
-                                    placeholder="my-model-name">
+                                <label for="byok-custom-model" class="field-label">Model name</label>
+                                <input type="text" id="byok-custom-model" class="field font-mono" placeholder="my-model-name">
                             </div>
                             <div id="custom-api-version-group" class="hidden">
-                                <label for="byok-custom-api-version" class="block text-xs font-bold text-theme-muted uppercase mb-1">API Version (Azure only)</label>
-                                <input type="text" id="byok-custom-api-version"
-                                    class="w-full rounded-lg border border-theme-border bg-theme-bg text-theme-text p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
-                                    placeholder="2023-05-15">
+                                <label for="byok-custom-api-version" class="field-label">API version (Azure only)</label>
+                                <input type="text" id="byok-custom-api-version" class="field font-mono" placeholder="2023-05-15">
                             </div>
                         </div>
                     </div>
 
                     <div>
-                        <label for="byok-api-key" class="block text-xs font-bold text-theme-muted uppercase mb-1">API Key</label>
-                        <input type="password" id="byok-api-key" autocomplete="off" spellcheck="false"
-                            aria-describedby="byok-error"
-                            class="w-full rounded-lg border border-theme-border bg-theme-bg text-theme-text p-2.5 text-sm focus:ring-2 focus:ring-slate-400 outline-none font-mono"
-                            placeholder="Paste your API key here…">
-                        <p id="byok-error" class="hidden text-xs text-red-600 dark:text-red-400 mt-1" role="alert"></p>
+                        <label for="byok-api-key" class="field-label">API key</label>
+                        <input type="password" id="byok-api-key" autocomplete="off" spellcheck="false" aria-describedby="byok-error" class="field font-mono" placeholder="Paste your API key here…">
+                        <p id="byok-error" class="hidden field-error" role="alert"></p>
                     </div>
 
                     <div class="flex flex-wrap gap-2">
-                        <button id="byok-clear-session" type="button"
-                            class="hidden min-h-[44px] px-3 text-xs font-semibold rounded-lg border border-theme-border text-theme-text hover:bg-theme-border/30">
-                            Forget key in this tab
-                        </button>
-                        <button id="byok-delete-stored" type="button"
-                            class="hidden min-h-[44px] px-3 text-xs font-semibold rounded-lg border border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20">
-                            Remove saved key from server
-                        </button>
+                        <button id="save-setup-btn" type="button" class="btn btn-primary">Save AI key settings</button>
+                        <button id="byok-clear-session" type="button" class="hidden btn btn-secondary">Forget key in this tab</button>
+                        <button id="byok-delete-stored" type="button" class="hidden btn btn-danger-quiet">Remove saved key from server</button>
                     </div>
                 </div>
             </details>
 
-            <button id="save-setup-btn" type="button"
-                class="w-full min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all">
-                Save AI key settings
-            </button>
-            <button id="back-to-dash-from-adv" type="button"
-                class="w-full min-h-[44px] text-theme-muted hover:text-theme-text text-sm py-2 transition-colors">
-                ← Back to Dashboard
-            </button>
-        </div>
-
-        <!-- VIEW 3: DASHBOARD -->
-        <div id="view-dashboard" class="view-hidden fade-in space-y-5">
-            <div class="flex items-center justify-between gap-2 text-xs text-theme-muted border-b border-theme-border pb-3">
-                <div class="flex items-center gap-2 min-w-0">
-                    <button id="hamburger-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="drawer-panel"
-                        class="w-11 h-11 shrink-0 flex items-center justify-center rounded-xl text-xl text-theme-text hover:bg-theme-border/40 transition-colors">
-                        <span aria-hidden="true">☰</span>
-                    </button>
-                    <div class="flex flex-col min-w-0">
-                        <span id="user-display-name" class="font-semibold text-sm text-theme-text truncate"></span>
-                        <div id="gamification-bars" class="flex flex-wrap gap-1.5 mt-1 hidden">
-                            <span id="streak-badge"
-                                class="font-bold text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded bg-orange-500/10"
-                                aria-label="Current streak in days">🔥 …</span>
-                            <span id="credits-badge"
-                                class="font-bold text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded bg-amber-500/10"
-                                aria-label="Sync credits remaining">🪙 …</span>
-                            <span id="freezes-badge"
-                                class="font-bold text-cyan-800 dark:text-cyan-300 px-1.5 py-0.5 rounded bg-cyan-500/10"
-                                aria-label="Streak freezes remaining">❄️ …</span>
-                        </div>
-                    </div>
+            <!-- Your data -->
+            <section aria-labelledby="settings-data-title" class="space-y-3">
+                <h3 id="settings-data-title" class="section-title">Your data</h3>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" data-drawer="export" class="btn btn-secondary">
+                        <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg> Export my data</button>
+                    <button type="button" data-drawer="delete" class="btn btn-danger-quiet">
+                        <svg class="icon" aria-hidden="true"><use href="#i-trash-2"></use></svg> Delete account</button>
                 </div>
-                <button id="current-plan-badge" type="button"
-                    class="shrink-0 min-h-[44px] text-[11px] font-bold uppercase tracking-wider px-3 rounded-full border border-theme-border text-theme-text hover:bg-theme-border/30 transition-colors"
-                    aria-label="Your plan. View plans and pricing">
-                    Free Plan
-                </button>
+            </section>
+        </section>
+
+        <!-- VIEW: DASHBOARD -->
+        <section id="view-dashboard" class="view-hidden fade-in max-w-xl mx-auto space-y-6">
+            <div>
+                <h2 id="user-display-name" class="font-display font-bold text-[26px] leading-8 text-ink"></h2>
+                <p id="hud-caption" class="hidden text-sm text-muted mt-1"></p>
             </div>
-            <p id="hud-caption" class="hidden text-[11px] text-theme-muted -mt-3"></p>
 
             <div id="drop-zone"
-                class="w-full min-h-[10rem] border-2 border-dashed border-theme-border rounded-xl flex items-center justify-center transition-all bg-theme-bg relative group">
+                class="w-full min-h-[11rem] border-2 border-dashed border-line-strong rounded-2xl flex items-center justify-center transition-colors bg-surface relative">
                 <!-- Upload UI and previews are rendered by app.js -->
             </div>
 
-            <!-- Why the sync buttons are disabled, and what a sync costs (UX 3) -->
-            <div class="space-y-2">
-                <p id="sync-hint" class="text-xs text-theme-muted text-center">Add a page photo first.</p>
-                <p id="credit-cost-line" class="text-xs text-theme-muted text-center"></p>
+            <!-- Why the sync buttons are disabled, the cost, then progress and the result (Peak-End) -->
+            <div class="space-y-3">
+                <p id="sync-hint" class="text-sm text-muted text-center">Add a page photo first.</p>
+                <p id="credit-cost-line" class="text-xs text-muted text-center"></p>
+
+                <div id="dash-loader" class="hidden flex-col items-center gap-2 py-3" role="status" aria-live="polite">
+                    <div class="spinner" aria-hidden="true"></div>
+                    <p id="dash-loader-text" class="text-sm font-semibold text-ink text-center">Syncing…</p>
+                    <p class="text-xs text-muted">This usually takes 10–30 s. Keep this tab open.</p>
+                </div>
+
+                <div id="status-area" class="hidden scroll-mt-20" role="status" aria-live="polite" tabindex="-1"></div>
             </div>
 
-            <!-- Sync modes -->
-            <div>
-                <p class="text-[11px] font-bold uppercase tracking-wider text-theme-muted mb-2">Choose what to sync</p>
+            <section aria-labelledby="modes-title">
+                <h3 id="modes-title" class="eyebrow mb-2">Choose what to sync</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button id="btn-morning" type="button" data-mode="morning"
-                        class="dash-btn mode-btn min-h-[44px] p-3 text-left rounded-xl border border-theme-border bg-theme-bg hover:bg-orange-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-start gap-2">
-                        <span class="text-lg" aria-hidden="true">☀️</span>
-                        <span><span class="block font-bold text-sm text-theme-text">Morning plan</span>
-                            <span class="block text-[11px] text-theme-muted leading-snug">Adds events &amp; to-dos to Calendar and Tasks.</span></span>
+                    <button id="btn-morning" type="button" data-mode="morning" class="dash-btn mode-btn mode-card">
+                        <span class="mode-icon" aria-hidden="true"><svg class="icon"><use href="#i-sun"></use></svg></span>
+                        <span><span class="mode-title">Morning plan</span>
+                            <span class="mode-desc">Events to Calendar, to-dos to Tasks.</span></span>
                     </button>
-                    <button id="btn-night" type="button" data-mode="evening"
-                        class="dash-btn mode-btn min-h-[44px] p-3 text-left rounded-xl border border-theme-border bg-theme-bg hover:bg-indigo-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-start gap-2">
-                        <span class="text-lg" aria-hidden="true">🌙</span>
-                        <span><span class="block font-bold text-sm text-theme-text">Evening review</span>
-                            <span class="block text-[11px] text-theme-muted leading-snug">Ticks off done tasks; logs expenses &amp; health to Sheets.</span></span>
+                    <button id="btn-night" type="button" data-mode="evening" class="dash-btn mode-btn mode-card">
+                        <span class="mode-icon" aria-hidden="true"><svg class="icon"><use href="#i-moon"></use></svg></span>
+                        <span><span class="mode-title">Evening review</span>
+                            <span id="evening-desc" class="mode-desc">Ticks off what you did; logs spending and health to Sheets.</span></span>
                     </button>
-                    <button id="btn-journal" type="button" data-mode="journal"
-                        class="dash-btn mode-btn min-h-[44px] p-3 text-left rounded-xl border border-theme-border bg-theme-bg hover:bg-emerald-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-start gap-2">
-                        <span class="text-lg" aria-hidden="true">📖</span>
-                        <span><span class="block font-bold text-sm text-theme-text">Journal</span>
-                            <span class="block text-[11px] text-theme-muted leading-snug">Saves handwritten journal pages to Notion.</span></span>
+                    <button id="btn-journal" type="button" data-mode="journal" class="dash-btn mode-btn mode-card">
+                        <span class="mode-icon" aria-hidden="true"><svg class="icon"><use href="#i-book-open"></use></svg></span>
+                        <span><span class="mode-title">Journal</span>
+                            <span id="journal-desc" class="mode-desc">Saves journal pages to Google Drive.</span></span>
                     </button>
-                    <button id="btn-voice-note" type="button" data-mode="voice_note"
-                        class="dash-btn mode-btn min-h-[44px] p-3 text-left rounded-xl border border-theme-border bg-theme-bg hover:bg-red-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-start gap-2 relative overflow-hidden">
-                        <span id="voice-note-icon" class="text-lg" aria-hidden="true">🎤</span>
-                        <span><span class="flex items-center gap-1.5 font-bold text-sm text-theme-text"><span id="voice-note-label">Voice note</span>
-                                <span id="voice-pro-lock" class="hidden text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-indigo-600 text-white">🔒 Pro</span></span>
-                            <span id="voice-note-desc" class="block text-[11px] text-theme-muted leading-snug">Record a thought; it’s transcribed into Notion.</span></span>
-                        <span id="voice-recording-pulse" class="hidden absolute inset-0 rounded-xl bg-red-500 opacity-20 animate-ping" aria-hidden="true"></span>
+                    <button id="btn-voice-note" type="button" data-mode="voice_note" class="dash-btn mode-btn mode-card relative overflow-hidden">
+                        <span id="voice-note-icon" class="mode-icon" aria-hidden="true"><svg class="icon"><use href="#i-mic"></use></svg></span>
+                        <span><span class="flex items-center gap-2"><span id="voice-note-label" class="mode-title">Voice note</span>
+                                <span id="voice-pro-lock" class="hidden badge"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-lock"></use></svg> Pro</span></span>
+                            <span id="voice-note-desc" class="mode-desc">Record a thought; it’s typed up for you.</span></span>
+                        <span id="voice-recording-pulse" class="hidden absolute inset-0 rounded-xl bg-danger opacity-15 animate-pulse" aria-hidden="true"></span>
                     </button>
                 </div>
-            </div>
+            </section>
+        </section>
 
-            <!-- Progress (UX 7) -->
-            <div id="dash-loader" class="hidden flex-col items-center gap-2 py-2" role="status" aria-live="polite">
-                <div class="spinner" aria-hidden="true"></div>
-                <p id="dash-loader-text" class="text-sm font-medium text-theme-text text-center">Syncing…</p>
-                <p class="text-xs text-theme-muted">This usually takes 10–30 s. Keep this tab open.</p>
-            </div>
-
-            <!-- Result cards (UX 5, 6) -->
-            <div id="status-area" class="hidden" role="status" aria-live="polite"></div>
-        </div>
-
-        <!-- VIEW 4: HISTORY -->
-        <div id="view-history" class="view-hidden fade-in space-y-4">
-            <div class="flex items-center justify-between border-b border-theme-border pb-3">
-                <h2 class="text-lg font-bold text-theme-text flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    Sync History
-                </h2>
-                <button id="back-to-dash-btn" type="button"
-                    class="min-h-[44px] text-xs font-medium text-theme-text hover:bg-theme-border/50 px-4 rounded-full transition-colors border border-theme-border">
-                    ← Back
+        <!-- VIEW: HISTORY -->
+        <section id="view-history" class="view-hidden fade-in max-w-xl mx-auto space-y-4">
+            <div class="flex items-center gap-2">
+                <button id="back-to-dash-btn" type="button" class="btn btn-ghost btn-icon -ml-2" aria-label="Back to dashboard">
+                    <svg class="icon icon-lg" aria-hidden="true"><use href="#i-chevron-left"></use></svg>
                 </button>
+                <h2 class="font-display font-bold text-2xl text-ink">Sync history</h2>
             </div>
-
-            <div id="history-list" class="max-h-[60vh] overflow-y-auto pr-1 space-y-2 custom-scrollbar" aria-live="polite">
+            <div id="history-list" class="space-y-2" aria-live="polite">
                 <!-- History injected via app.js -->
             </div>
-        </div>
+        </section>
 
-        <!-- VIEW 5: REPORTS -->
-        <div id="view-reports" class="view-hidden fade-in space-y-4">
-            <div class="flex items-center justify-between border-b border-theme-border pb-3">
-                <h2 class="text-lg font-bold text-theme-text flex items-center gap-2">
-                    📊 Reports
-                </h2>
-                <button id="back-to-dash-btn-reports" type="button"
-                    class="min-h-[44px] text-xs font-medium text-theme-text hover:bg-theme-border/50 px-4 rounded-full transition-colors border border-theme-border">
-                    ← Back
+        <!-- VIEW: REPORTS -->
+        <section id="view-reports" class="view-hidden fade-in max-w-xl mx-auto space-y-6">
+            <div class="flex items-center gap-2">
+                <button id="back-to-dash-btn-reports" type="button" class="btn btn-ghost btn-icon -ml-2" aria-label="Back to dashboard">
+                    <svg class="icon icon-lg" aria-hidden="true"><use href="#i-chevron-left"></use></svg>
                 </button>
+                <h2 class="font-display font-bold text-2xl text-ink">Your last 30 days</h2>
             </div>
 
-            <div class="bg-theme-card border border-theme-border rounded-xl p-4 space-y-4">
-                <div
-                    class="flex justify-between items-center bg-slate-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
-                    <span class="text-xs uppercase tracking-widest font-bold text-theme-muted">Current Streak</span>
-                    <span id="reports-current-streak" class="text-2xl font-black text-orange-700 dark:text-orange-300">🔥 0</span>
-                </div>
-                <div
-                    class="flex justify-between items-center bg-slate-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
-                    <span class="text-xs uppercase tracking-widest font-bold text-theme-muted">Highest Streak</span>
-                    <span id="reports-highest-streak" class="text-lg font-bold text-theme-text">0</span>
-                </div>
-                <div
-                    class="flex justify-between items-center bg-slate-50 dark:bg-black/20 p-3 rounded-lg border border-theme-border">
-                    <span class="text-xs uppercase tracking-widest font-bold text-theme-muted">Streak Freezes</span>
-                    <span id="reports-streak-freezes" class="text-lg font-bold text-cyan-800 dark:text-cyan-300">❄️ 0</span>
-                </div>
+            <dl id="reports-totals" class="grid grid-cols-2 sm:grid-cols-4 gap-2" aria-live="polite">
+                <div class="card p-4"><dt class="text-sm text-muted">Pages synced</dt><dd id="reports-pages" class="font-display font-bold text-3xl text-ink mt-1">…</dd></div>
+                <div class="card p-4"><dt class="text-sm text-muted">Events added</dt><dd id="reports-events" class="font-display font-bold text-3xl text-ink mt-1">…</dd></div>
+                <div class="card p-4"><dt class="text-sm text-muted">Tasks added</dt><dd id="reports-tasks" class="font-display font-bold text-3xl text-ink mt-1">…</dd></div>
+                <div class="card p-4"><dt class="text-sm text-muted">Tasks ticked off</dt><dd id="reports-done" class="font-display font-bold text-3xl text-ink mt-1">…</dd></div>
+            </dl>
 
-                <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg p-3 space-y-2">
-                    <h3 class="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wide">🏆 Streak Rewards</h3>
-                    <ul class="text-xs text-amber-900 dark:text-amber-200 space-y-1">
-                        <li>🔥 <strong>7-day streak</strong> → +5 bonus credits</li>
-                        <li>🔥 <strong>30-day streak</strong> → +20 bonus credits + ❄️ 1 freeze</li>
-                        <li>🔥 <strong>90-day streak</strong> → +50 bonus credits + ❄️ 3 freezes</li>
-                        <li>❄️ <strong>Streak Freeze</strong> → Protects your streak if you miss a day</li>
+            <section aria-labelledby="heatmap-title" class="card p-4">
+                <h3 id="heatmap-title" class="eyebrow mb-3">Days you synced</h3>
+                <div id="heatmap-grid" class="flex flex-wrap gap-1.5">
+                    <div class="w-full text-sm text-muted">Loading…</div>
+                </div>
+            </section>
+
+            <section aria-labelledby="streak-title" class="space-y-3">
+                <h3 id="streak-title" class="section-title">Streak</h3>
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="card p-3"><p class="text-sm text-muted">Current</p><p class="flex items-center gap-1 font-display font-bold text-2xl text-ink"><svg class="icon text-warning" aria-hidden="true"><use href="#i-flame"></use></svg><span id="reports-current-streak">0</span></p></div>
+                    <div class="card p-3"><p class="text-sm text-muted">Best</p><p id="reports-highest-streak" class="font-display font-bold text-2xl text-ink">0</p></div>
+                    <div class="card p-3"><p class="text-sm text-muted">Freezes</p><p class="flex items-center gap-1 font-display font-bold text-2xl text-ink"><svg class="icon text-success" aria-hidden="true"><use href="#i-snowflake"></use></svg><span id="reports-streak-freezes">0</span></p></div>
+                </div>
+                <details class="card">
+                    <summary class="p-4 min-h-[44px] cursor-pointer font-semibold text-ink">How streaks work</summary>
+                    <ul class="px-4 pb-4 text-sm text-muted space-y-1 list-disc list-inside">
+                        <li>Sync on 7 days in a row: +5 bonus credits.</li>
+                        <li>30 days in a row: +20 bonus credits and 1 streak freeze.</li>
+                        <li>90 days in a row: +50 bonus credits and 3 streak freezes.</li>
+                        <li>A streak freeze keeps your streak if you miss a day.</li>
+                        <li>Bonus credits stay valid while your plan is active.</li>
                     </ul>
-                    <p class="text-[11px] text-amber-800 dark:text-amber-300">Credits remain valid as long as your plan is active.</p>
-                </div>
+                </details>
+            </section>
 
-                <div class="pt-4 border-t border-theme-border">
-                    <h3 class="text-xs uppercase tracking-widest font-bold text-theme-muted mb-3 text-center">Sync Heatmap
-                        (Last 30 Days)</h3>
-                    <div id="heatmap-grid" class="flex flex-wrap gap-1.5 justify-center mt-2">
-                        <div class="w-full text-center text-xs text-theme-muted">Loading heatmap data...</div>
-                    </div>
-                </div>
-
-                <button id="buy-booster-btn" type="button"
-                    class="w-full min-h-[44px] py-3 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-xl shadow-lg transition-colors flex justify-center items-center gap-2 mt-4">
-                    <span>🪙 Buy 50 Booster Credits (₹19)</span>
-                </button>
-            </div>
-        </div>
+            <button id="buy-booster-btn" type="button" class="btn btn-ghost -ml-2 px-2 text-signal-ink">Need more credits? Buy 50 for ₹19</button>
+        </section>
 
     </main>
 
-    <!-- HAMBURGER DRAWER (slides in from left) -->
+    <!-- ADT endorsement (brand/logo, ADT LOGO.md §8): stacked on sign-in, inline inside the app.
+         Always smaller and quieter than the product's own logo; links to ADT's home page. -->
+    <footer id="adt-footer" class="w-full max-w-2xl mx-auto px-4 pt-2 flex justify-center adt-footer">
+        <a href="https://analogdigital.tech" target="_blank" rel="noopener" class="inline-flex items-center justify-center min-h-[44px] px-2 rounded-lg opacity-90 hover:opacity-100"
+            aria-label="An offering by ADT, Analog Digital Technologies. Opens analogdigital.tech">
+            <span class="signed-out-only inline-flex">
+                <img src="brand/offering-by-adt-stacked-light.svg" alt="" width="123" height="36" class="on-light h-9 w-auto">
+                <img src="brand/offering-by-adt-stacked-dark.svg" alt="" width="123" height="36" class="on-dark h-9 w-auto">
+            </span>
+            <span class="signed-in-only inline-flex">
+                <img src="brand/offering-by-adt-inline-light.svg" alt="" width="196" height="16" class="on-light h-4 w-auto">
+                <img src="brand/offering-by-adt-inline-dark.svg" alt="" width="196" height="16" class="on-dark h-4 w-auto">
+            </span>
+        </a>
+    </footer>
+
+    <!-- MENU (slides in from the left) -->
     <div id="drawer-container" class="fixed inset-0 z-50 hidden">
-        <div class="drawer-overlay fixed inset-0 bg-black/40 opacity-0 pointer-events-none" id="drawer-overlay"></div>
-        <div id="drawer-panel" style="background-color: var(--bg-main);" role="dialog" aria-modal="true" aria-labelledby="drawer-title"
-            class="drawer-panel fixed left-0 top-0 bottom-0 w-72 max-w-[85vw] shadow-2xl p-6 overflow-y-auto overscroll-contain">
-            <div class="flex items-center justify-between mb-4">
-                <h2 id="drawer-title" class="font-bold text-lg text-theme-text">Menu</h2>
-                <button id="close-drawer" type="button" aria-label="Close menu"
-                    class="w-11 h-11 flex items-center justify-center rounded-xl text-xl text-theme-text hover:bg-theme-border/40 transition-colors">✕</button>
+        <div class="drawer-overlay fixed inset-0 opacity-0 pointer-events-none" id="drawer-overlay"></div>
+        <div id="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title"
+            class="drawer-panel fixed left-0 top-0 bottom-0 w-80 max-w-[86vw] p-3 overflow-y-auto overscroll-contain flex flex-col">
+            <div class="flex items-center justify-between px-1 pb-2">
+                <span class="flex items-center gap-2">
+                    <img src="brand/app-icon.svg" alt="" width="28" height="28" class="brand-tile">
+                    <h2 id="drawer-title" class="font-display font-bold text-[17px] text-ink">AI Planner</h2>
+                </span>
+                <button id="close-drawer" type="button" aria-label="Close menu" class="btn btn-ghost btn-icon">
+                    <svg class="icon icon-lg" aria-hidden="true"><use href="#i-x"></use></svg>
+                </button>
             </div>
-            <nav class="space-y-1" aria-label="Main menu">
-                <button type="button" data-drawer="upgrade"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span aria-hidden="true">👑</span> Upgrade
-                </button>
-                <button type="button" data-drawer="reports"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span aria-hidden="true">📊</span> Reports
-                </button>
-                <button type="button" data-drawer="history"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span aria-hidden="true">🕐</span> History
-                </button>
-                <button type="button" data-drawer="notion"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span aria-hidden="true">📝</span> Notion Settings
-                </button>
-                <button type="button" data-drawer="name"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span aria-hidden="true">👋</span> Edit name
-                </button>
-                <button type="button" data-drawer="settings"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm font-medium text-theme-text">
-                    <span aria-hidden="true">⚙️</span> Advanced Settings
-                </button>
-                <hr class="border-theme-border my-2">
-                <a href="planner.html" target="_blank" rel="noopener"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-theme-muted">
-                    <span aria-hidden="true">📄</span> Free Planner Template
-                </a>
-                <a href="privacy.html" target="_blank" rel="noopener"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-theme-muted">
-                    <span aria-hidden="true">🛡️</span> Privacy Policy
-                </a>
-                <a href="pricing-policy.html" target="_blank" rel="noopener"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-theme-muted">
-                    <span aria-hidden="true">💳</span> Pricing Policy
-                </a>
-                <a href="refund-policy.html" target="_blank" rel="noopener"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-theme-muted">
-                    <span aria-hidden="true">💸</span> Refund Policy
-                </a>
-                <button type="button" data-drawer="export"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-theme-muted">
-                    <span aria-hidden="true">📦</span> Export Data
-                </button>
-                <hr class="border-theme-border my-2">
-                <button type="button" data-drawer="delete"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-sm text-red-700 dark:text-red-400">
-                    <span aria-hidden="true">🗑️</span> Delete Account
-                </button>
-                <hr class="border-theme-border my-2">
-                <button type="button" data-drawer="logout"
-                    class="drawer-item w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-theme-border/40 transition-colors text-left text-sm text-red-700 dark:text-red-400">
-                    <span aria-hidden="true">↪️</span> Sign Out
-                </button>
+            <nav class="space-y-0.5" aria-label="Main menu">
+                <button type="button" data-drawer="history" class="drawer-item menu-item">
+                    <svg class="icon" aria-hidden="true"><use href="#i-history"></use></svg> History</button>
+                <button type="button" data-drawer="reports" class="drawer-item menu-item">
+                    <svg class="icon" aria-hidden="true"><use href="#i-chart-column"></use></svg> Reports</button>
+                <button type="button" data-drawer="settings" class="drawer-item menu-item">
+                    <svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg> Settings</button>
+                <button type="button" data-drawer="upgrade" class="drawer-item menu-item">
+                    <svg class="icon" aria-hidden="true"><use href="#i-gem"></use></svg> Plans and credits</button>
             </nav>
-            <div class="mt-6 pt-4 border-t border-theme-border text-xs text-theme-muted space-y-1">
+            <div class="divider my-3"></div>
+            <nav class="space-y-0.5" aria-label="Resources">
+                <a href="planner.html" target="_blank" rel="noopener" class="drawer-item menu-item menu-item-quiet">
+                    <svg class="icon" aria-hidden="true"><use href="#i-file-text"></use></svg> Free planner template</a>
+                <a href="privacy.html" target="_blank" rel="noopener" class="drawer-item menu-item menu-item-quiet">
+                    <svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg> Privacy policy</a>
+                <a href="pricing-policy.html" target="_blank" rel="noopener" class="drawer-item menu-item menu-item-quiet">
+                    <svg class="icon" aria-hidden="true"><use href="#i-receipt"></use></svg> Pricing policy</a>
+                <a href="refund-policy.html" target="_blank" rel="noopener" class="drawer-item menu-item menu-item-quiet">
+                    <svg class="icon" aria-hidden="true"><use href="#i-rotate-ccw"></use></svg> Refund policy</a>
+            </nav>
+            <div class="divider my-3"></div>
+            <button type="button" data-drawer="logout" class="drawer-item menu-item">
+                <svg class="icon" aria-hidden="true"><use href="#i-log-out"></use></svg> Sign out</button>
+            <div class="mt-auto pt-6 px-3 space-y-3 text-xs text-muted">
                 <span id="drawer-user-email" class="truncate block"></span>
-                <span class="flex items-center gap-2">⌚ Health sync <span class="text-[10px] bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded font-bold uppercase">Soon</span></span>
-                <!-- Build marker for support/debugging (moved off the landing page, UX 15) -->
-                <span id="build-version" class="block text-[10px] uppercase tracking-wider">build v?</span>
+                <span id="build-version" class="block">build v?</span>
             </div>
         </div>
     </div>
 
     <!-- ACTIONABLE ERROR MODAL -->
-    <div id="actionable-error-modal"
-        class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-[60]"
+    <div id="actionable-error-modal" class="modal-backdrop fixed inset-0 hidden items-center justify-center p-4 z-[60]"
         role="alertdialog" aria-labelledby="actionable-error-title" aria-describedby="actionable-error-summary" aria-modal="true">
-        <div
-            class="bg-theme-bg border border-theme-border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl" style="background-color: var(--bg-main);">
-            <h2 id="actionable-error-title" class="font-bold text-lg text-theme-text">Something went wrong</h2>
-            <p id="actionable-error-summary" class="text-sm text-theme-muted"></p>
+        <div class="sheet max-w-md w-full p-6 space-y-4">
+            <h2 id="actionable-error-title" class="font-display font-bold text-xl text-ink">Something went wrong</h2>
+            <p id="actionable-error-summary" class="text-muted"></p>
             <div id="actionable-error-details" class="hidden">
-                <p class="text-xs font-bold text-theme-muted uppercase tracking-wider mb-1.5">Error details</p>
-                <pre id="actionable-error-details-text"
-                    class="text-xs font-mono bg-theme-bg border border-theme-border rounded-xl p-3 overflow-x-auto whitespace-pre-wrap break-words text-theme-text max-h-48 overflow-y-auto"></pre>
+                <p class="eyebrow mb-1.5">Error details</p>
+                <pre id="actionable-error-details-text" class="text-xs font-mono bg-surface border border-line rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-words text-ink max-h-48 overflow-y-auto"></pre>
             </div>
             <div class="flex gap-2">
-                <button type="button" id="actionable-error-know-more"
-                    class="flex-1 min-h-[44px] text-sm font-semibold text-blue-700 dark:text-blue-300 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800/40 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                    aria-expanded="false" aria-controls="actionable-error-details">Know more</button>
-                <button type="button" id="actionable-error-close"
-                    class="flex-1 min-h-[44px] text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 py-2.5 rounded-xl transition-colors">Close</button>
+                <button type="button" id="actionable-error-know-more" class="btn btn-secondary flex-1" aria-expanded="false" aria-controls="actionable-error-details">Know more</button>
+                <button type="button" id="actionable-error-close" class="btn btn-primary flex-1">Close</button>
             </div>
         </div>
     </div>
 
-    <!-- GUIDE MODAL -->
-    <div id="guide-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50"
+    <!-- NOTION GUIDE MODAL -->
+    <div id="guide-modal" class="modal-backdrop fixed inset-0 hidden items-center justify-center p-4 z-50"
         role="dialog" aria-modal="true" aria-labelledby="guide-title">
-        <div class="rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[80vh] max-h-[80dvh] border border-theme-border text-theme-text" style="background-color: var(--bg-main);">
-            <h2 id="guide-title" class="font-bold text-xl text-theme-text border-b border-theme-border pb-2">Notion Setup Guide</h2>
-
-            <div class="space-y-4 text-sm text-theme-muted">
+        <div class="sheet max-w-lg w-full p-6 space-y-4 overflow-y-auto max-h-[85vh] max-h-[85dvh]">
+            <h2 id="guide-title" class="font-display font-bold text-xl text-ink">Connect Notion, step by step</h2>
+            <div class="space-y-4 text-sm text-muted">
                 <section>
-                    <h3 class="font-bold text-theme-text">Step 1: Get Access Token</h3>
-                    <ol class="list-decimal list-inside space-y-1 ml-2">
-                        <li>Go to <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener"
-                                class="text-blue-600 dark:text-blue-400 underline">notion.so/my-integrations</a>.</li>
-                        <li>Click <strong>+ New integration</strong> (or open your existing <strong>AI Planner</strong> connection).</li>
-                        <li>Name it <strong>"AI Planner"</strong> and submit.</li>
-                        <li>Open <strong>Manage connection</strong> and copy the <strong>Access token</strong>
-                            (<code>ntn_...</code> on new connections, or legacy <code>secret_...</code>).</li>
+                    <h3 class="font-semibold text-ink">1. Get an access token</h3>
+                    <ol class="list-decimal list-inside space-y-1 ml-1">
+                        <li>Go to <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener" class="link">notion.so/my-integrations</a>.</li>
+                        <li>Click <strong class="text-ink">+ New integration</strong> (or open your existing <strong class="text-ink">AI Planner</strong> connection).</li>
+                        <li>Name it <strong class="text-ink">AI Planner</strong> and submit.</li>
+                        <li>Open <strong class="text-ink">Manage connection</strong> and copy the <strong class="text-ink">Access token</strong> (<code>ntn_…</code>, or <code>secret_…</code> on older ones).</li>
                     </ol>
                 </section>
-
                 <section>
-                    <h3 class="font-bold text-theme-text">Step 2: Create Your Journal Database</h3>
-                    <ol class="list-decimal list-inside space-y-1 ml-2">
-                        <li>Open Notion and create a new empty page.</li>
-                        <li>Type <code>/database</code> and select <strong>"Database - Full page"</strong>.</li>
-                        <li>Name it <strong>"Brain Dump Journal"</strong>.</li>
+                    <h3 class="font-semibold text-ink">2. Create your journal database</h3>
+                    <ol class="list-decimal list-inside space-y-1 ml-1">
+                        <li>In Notion, create a new empty page.</li>
+                        <li>Type <code>/database</code> and choose <strong class="text-ink">Database – Full page</strong>.</li>
+                        <li>Name it, for example, <strong class="text-ink">Journal</strong>.</li>
                     </ol>
                 </section>
-
                 <section>
-                    <h3 class="font-bold text-theme-text">Step 3: Connect AI Planner</h3>
-                    <ol class="list-decimal list-inside space-y-1 ml-2">
-                        <li>Stay on your new Database page.</li>
-                        <li>Click the <strong>... (three dots)</strong> at the very top-right of the Notion window.</li>
-                        <li>Scroll down to <strong>"Connections"</strong> > <strong>"Connect to"</strong>.</li>
-                        <li>Search for <strong>"AI Planner"</strong> and select it. Confirm access.</li>
+                    <h3 class="font-semibold text-ink">3. Give AI Planner access</h3>
+                    <ol class="list-decimal list-inside space-y-1 ml-1">
+                        <li>Stay on the database page.</li>
+                        <li>Click <strong class="text-ink">•••</strong> at the top right of the Notion window.</li>
+                        <li>Choose <strong class="text-ink">Connections</strong> → <strong class="text-ink">Connect to</strong>.</li>
+                        <li>Search for <strong class="text-ink">AI Planner</strong>, select it and confirm.</li>
                     </ol>
                 </section>
-
                 <section>
-                    <h3 class="font-bold text-theme-text">Step 4: Copy the Database Link</h3>
-                    <ul class="list-disc list-inside space-y-1 ml-2 text-xs p-2 rounded border border-theme-border">
-                        <li>Click <strong>Share → Copy link</strong> (or copy the address bar). It looks like:</li>
-                        <li class="font-mono text-xs break-all">https://www.notion.so/<span
-                                class="bg-yellow-200 text-black px-1 font-bold">395c...38ab</span>?v=...</li>
-                        <li>Paste the whole link — AI Planner picks out the 32-character database ID for you.</li>
-                    </ul>
+                    <h3 class="font-semibold text-ink">4. Copy the database link</h3>
+                    <p>Click <strong class="text-ink">Share → Copy link</strong> (or copy the address bar). It looks like:</p>
+                    <p class="font-mono text-xs break-all mt-1 p-2 rounded-lg bg-surface border border-line">https://www.notion.so/<mark class="bg-signal text-on-signal px-1 font-bold">395c…38ab</mark>?v=…</p>
+                    <p class="mt-1">Paste the whole link. AI Planner picks out the 32-character database ID.</p>
                 </section>
             </div>
-
-            <button id="close-guide" type="button"
-                class="w-full min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 font-bold py-3 rounded-xl transition-colors">
-                Got it, let's go!
-            </button>
+            <button id="close-guide" type="button" class="btn btn-primary btn-block">Got it</button>
         </div>
     </div>
 
-    <!-- OUTCOME-FIRST UPGRADE FLOW -->
-    <div id="pricing-modal"
-        class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm"
+    <!-- UPGRADE FLOW (outcome first) -->
+    <div id="pricing-modal" class="modal-backdrop fixed inset-0 hidden items-center justify-center p-4 z-50"
         role="dialog" aria-modal="true" aria-labelledby="upgrade-title">
-        <div
-            class="upgrade-shell">
-            <button id="close-pricing" type="button"
-                aria-label="Close upgrade options"
-                class="absolute top-2 right-2 w-11 h-11 flex items-center justify-center text-theme-muted hover:text-theme-text text-xl z-10 transition-colors">✕</button>
+        <div class="upgrade-shell">
+            <button id="close-pricing" type="button" aria-label="Close upgrade options"
+                class="absolute btn btn-ghost btn-icon z-10">
+                <svg class="icon icon-lg" aria-hidden="true"><use href="#i-x"></use></svg>
+            </button>
 
-            <div class="px-6 pt-6 pb-4 border-b border-theme-border">
-                <p class="upgrade-eyebrow text-[10px] font-bold uppercase tracking-widest">Upgrade AI Planner</p>
-                <h2 id="upgrade-title" class="text-2xl font-bold text-theme-text tracking-tight mt-1 pr-8">Turn more handwritten plans into action.</h2>
-                <p id="upgrade-context-message" class="text-sm text-theme-muted mt-2">Choose the result you want, then see the plan that fits.</p>
+            <div class="px-6 pt-6 pb-4 border-b border-line">
+                <p class="upgrade-eyebrow eyebrow">Plans and credits</p>
+                <h2 id="upgrade-title" class="font-display font-bold text-2xl text-ink mt-1 pr-10">Sync more of your planner.</h2>
+                <p id="upgrade-context-message" class="text-sm text-muted mt-2">Pick what you need, then see the plan that fits.</p>
                 <div class="flex items-center gap-2 mt-5" aria-label="Upgrade progress">
                     <button type="button" data-upgrade-progress="1" id="step-nav-1" aria-label="Step 1: goal"
-                        class="upgrade-progress-active w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center cursor-pointer transition-colors hover:border-indigo-500">1</button>
-                    <span class="flex-1 border-t border-theme-border"></span>
+                        class="upgrade-progress-active w-7 h-7 rounded-full bg-bg border border-line-strong text-muted text-xs font-bold flex items-center justify-center cursor-pointer">1</button>
+                    <span class="flex-1 border-t border-line"></span>
                     <button type="button" data-upgrade-progress="2" id="step-nav-2" aria-label="Step 2: plan"
-                        class="w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center cursor-pointer transition-colors hover:border-indigo-500">2</button>
-                    <span class="flex-1 border-t border-theme-border"></span>
+                        class="w-7 h-7 rounded-full bg-bg border border-line-strong text-muted text-xs font-bold flex items-center justify-center cursor-pointer">2</button>
+                    <span class="flex-1 border-t border-line"></span>
                     <button type="button" data-upgrade-progress="3" id="step-nav-3" aria-label="Step 3: checkout"
-                        class="w-7 h-7 rounded-full bg-theme-bg border border-theme-border text-theme-muted text-xs font-bold flex items-center justify-center cursor-pointer transition-colors hover:border-indigo-500">3</button>
+                        class="w-7 h-7 rounded-full bg-bg border border-line-strong text-muted text-xs font-bold flex items-center justify-center cursor-pointer">3</button>
                 </div>
             </div>
 
             <!-- Step 1: desired outcome -->
             <div id="upgrade-step-1" class="p-6">
-                <h3 class="font-bold text-theme-text">What would help most right now?</h3>
-                <p class="text-xs text-theme-muted mt-1 mb-4">We’ll use this only to recommend a plan.</p>
-                <div class="space-y-3">
-                    <button type="button" data-upgrade-outcome="batch"
-                        class="upgrade-choice w-full text-left bg-theme-bg border border-theme-border rounded-xl p-4 transition-all">
-                        <span class="font-bold text-theme-text text-sm">Sync several pages at once</span>
-                        <span class="block text-xs text-theme-muted mt-1">Move a journal or busy planning day into your tools faster.</span>
+                <h3 class="font-display font-bold text-ink">What would help most right now?</h3>
+                <p class="text-sm text-muted mt-1 mb-4">We use this only to suggest a plan.</p>
+                <div class="space-y-2">
+                    <button type="button" data-upgrade-outcome="batch" class="upgrade-choice w-full text-left rounded-xl p-4">
+                        <span class="font-semibold text-ink">Sync several pages at once</span>
+                        <span class="block text-sm text-muted mt-1">Catch up on a whole journal or a busy week faster.</span>
                     </button>
-                    <button type="button" data-upgrade-outcome="automation"
-                        class="upgrade-choice w-full text-left bg-theme-bg border border-theme-border rounded-xl p-4 transition-all">
-                        <span class="font-bold text-theme-text text-sm">Automate my daily planning</span>
-                        <span class="block text-xs text-theme-muted mt-1">Get more monthly syncs for Calendar, Tasks, Sheets, and Notion.</span>
+                    <button type="button" data-upgrade-outcome="automation" class="upgrade-choice w-full text-left rounded-xl p-4">
+                        <span class="font-semibold text-ink">Sync every day</span>
+                        <span class="block text-sm text-muted mt-1">More syncs each month for Calendar, Tasks, Sheets, Drive and Notion.</span>
                     </button>
-                    <button type="button" data-upgrade-outcome="advanced"
-                        class="upgrade-choice w-full text-left bg-theme-bg border border-theme-border rounded-xl p-4 transition-all">
-                        <span class="font-bold text-theme-text text-sm">Use advanced AI workflows</span>
-                        <span class="block text-xs text-theme-muted mt-1">Unlock custom prompts, voice notes, and five-page batches.</span>
+                    <button type="button" data-upgrade-outcome="advanced" class="upgrade-choice w-full text-left rounded-xl p-4">
+                        <span class="font-semibold text-ink">Typed journal pages and voice notes</span>
+                        <span class="block text-sm text-muted mt-1">Full transcription, voice notes and five-page batches.</span>
                     </button>
                 </div>
-                <button id="upgrade-next-outcome" type="button" disabled
-                    class="upgrade-primary mt-5 py-3 min-h-[44px] font-bold text-sm transition-colors opacity-50">
-                    Compare plans
-                </button>
-                <button id="buy-booster-btn-modal" type="button"
-                    class="w-full mt-4 min-h-[44px] p-4 border border-theme-border bg-theme-bg/50 hover:bg-theme-bg rounded-xl flex items-center justify-between transition-all group shadow-sm hover:shadow-md">
-                    <span class="text-left w-full">
-                        <span class="block text-sm font-bold text-theme-text group-hover:text-indigo-600 transition-colors">Only need more credits?</span>
-                        <span class="block text-xs text-theme-muted mt-0.5">Buy 50 credits once for ₹19</span>
-                    </span>
+                <button id="upgrade-next-outcome" type="button" disabled class="upgrade-primary mt-5 py-3 min-h-[44px] text-[15px]">Compare plans</button>
+                <button id="buy-booster-btn-modal" type="button" class="w-full mt-3 min-h-[44px] p-4 rounded-xl border border-line text-left hover:bg-surface">
+                    <span class="block font-semibold text-ink">Only need more credits?</span>
+                    <span class="block text-sm text-muted mt-0.5">Buy 50 credits once for ₹19.</span>
                 </button>
             </div>
 
@@ -1135,194 +747,155 @@
             <div id="upgrade-step-2" class="hidden p-6">
                 <div class="flex items-start justify-between gap-3 mb-4">
                     <div>
-                        <h3 class="font-bold text-theme-text">Choose your capacity</h3>
-                        <p id="upgrade-recommendation" class="text-xs text-theme-muted mt-1">Annual access is selected by default.</p>
+                        <h3 class="font-display font-bold text-ink">Choose your plan</h3>
+                        <p id="upgrade-recommendation" class="text-sm text-muted mt-1">Annual access is selected by default.</p>
                     </div>
-                    <button id="upgrade-back-outcome" type="button" class="min-h-[44px] px-2 text-xs font-bold text-theme-muted hover:text-theme-text">Back</button>
+                    <button id="upgrade-back-outcome" type="button" class="btn btn-ghost">Back</button>
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">
-                    <button id="upgrade-standard-pricing-btn" type="button" data-upgrade-plan="standard"
-                        class="upgrade-plan-choice bg-theme-bg border border-theme-border rounded-xl p-4 text-left transition-all">
-                        <span class="font-bold text-theme-text">Standard</span>
-                        <span class="block text-xl font-black text-theme-text mt-2">₹290<span class="text-[10px] font-medium text-theme-muted"> /year</span></span>
-                        <span class="block text-[10px] text-theme-muted mt-1">or ₹29 / 30 days</span>
-                        <span class="block text-xs text-theme-muted mt-3">100 credits every 30 days</span>
-                        <span class="block text-xs text-theme-muted mt-1">Up to 3 journal pages</span>
+                    <button id="upgrade-standard-pricing-btn" type="button" data-upgrade-plan="standard" class="upgrade-plan-choice rounded-xl p-4 text-left">
+                        <span class="font-display font-bold text-ink">Standard</span>
+                        <span class="block font-display font-bold text-2xl text-ink mt-2">₹290<span class="text-xs font-sans font-medium text-muted"> /year</span></span>
+                        <span class="block text-xs text-muted mt-1">or ₹29 / 30 days</span>
+                        <span class="block text-sm text-muted mt-3">100 credits every 30 days</span>
+                        <span class="block text-sm text-muted mt-1">Up to 3 journal pages</span>
                     </button>
-                    <button id="upgrade-pro-btn" type="button" data-upgrade-plan="pro"
-                        class="upgrade-plan-choice bg-theme-bg border border-theme-border rounded-xl p-4 text-left transition-all">
-                        <span class="font-bold text-theme-text">Pro</span>
-                        <span class="block text-xl font-black text-theme-text mt-2">₹490<span class="text-[10px] font-medium text-theme-muted"> /year</span></span>
-                        <span class="block text-[10px] text-theme-muted mt-1">or ₹49 / 30 days</span>
-                        <span class="block text-xs text-theme-muted mt-3">250 credits every 30 days</span>
-                        <span class="block text-xs text-theme-muted mt-1">5-page batches + voice notes</span>
+                    <button id="upgrade-pro-btn" type="button" data-upgrade-plan="pro" class="upgrade-plan-choice rounded-xl p-4 text-left">
+                        <span class="font-display font-bold text-ink">Pro</span>
+                        <span class="block font-display font-bold text-2xl text-ink mt-2">₹490<span class="text-xs font-sans font-medium text-muted"> /year</span></span>
+                        <span class="block text-xs text-muted mt-1">or ₹49 / 30 days</span>
+                        <span class="block text-sm text-muted mt-3">250 credits every 30 days</span>
+                        <span class="block text-sm text-muted mt-1">5-page batches, voice notes</span>
                     </button>
                 </div>
 
-                <div class="mt-4 border border-theme-border rounded-xl overflow-hidden text-xs">
-                    <div class="grid grid-cols-3 gap-2 p-3 bg-theme-bg font-bold text-theme-text">
-                        <span>What you get</span><span class="text-center">Standard</span><span class="text-center">Pro</span>
-                    </div>
-                    <div class="grid grid-cols-3 gap-2 p-3 border-t border-theme-border text-theme-muted">
-                        <span>Credits / 30 days</span><span class="text-center">100</span><span class="text-center">250</span>
-                    </div>
-                    <div class="grid grid-cols-3 gap-2 p-3 border-t border-theme-border text-theme-muted">
-                        <span>Batch size</span><span class="text-center">Up to 3*</span><span class="text-center">Up to 5</span>
-                    </div>
-                    <div class="grid grid-cols-3 gap-2 p-3 border-t border-theme-border text-theme-muted">
-                        <span>Custom prompts</span><span class="text-center">—</span><span class="text-center">✓</span>
-                    </div>
-                    <div class="grid grid-cols-3 gap-2 p-3 border-t border-theme-border text-theme-muted">
-                        <span>Voice notes</span><span class="text-center">—</span><span class="text-center">✓</span>
-                    </div>
-                </div>
+                <table class="mt-4 w-full text-sm border border-line rounded-xl overflow-hidden">
+                    <caption class="sr-only">Plan comparison</caption>
+                    <thead class="bg-surface text-ink">
+                        <tr><th scope="col" class="p-3 text-left font-semibold">What you get</th><th scope="col" class="p-3 font-semibold">Standard</th><th scope="col" class="p-3 font-semibold">Pro</th></tr>
+                    </thead>
+                    <tbody class="text-muted">
+                        <tr class="border-t border-line"><th scope="row" class="p-3 text-left font-normal">Credits / 30 days</th><td class="p-3 text-center">100</td><td class="p-3 text-center">250</td></tr>
+                        <tr class="border-t border-line"><th scope="row" class="p-3 text-left font-normal">Pages per sync</th><td class="p-3 text-center">Up to 3*</td><td class="p-3 text-center">Up to 5</td></tr>
+                        <tr class="border-t border-line"><th scope="row" class="p-3 text-left font-normal">Typed journal pages</th><td class="p-3 text-center">—</td><td class="p-3 text-center">✓</td></tr>
+                        <tr class="border-t border-line"><th scope="row" class="p-3 text-left font-normal">Custom prompts</th><td class="p-3 text-center">—</td><td class="p-3 text-center">✓</td></tr>
+                        <tr class="border-t border-line"><th scope="row" class="p-3 text-left font-normal">Voice notes</th><td class="p-3 text-center">—</td><td class="p-3 text-center">✓</td></tr>
+                    </tbody>
+                </table>
+                <p class="text-xs text-muted mt-2">*Standard allows up to 3 pages for journal syncs and 1 page for morning and evening syncs.</p>
 
-                <p class="text-[11px] text-theme-muted mt-2">*Standard allows up to 3 pages for journal syncs and 1 page for morning/evening syncs.</p>
-
-                <!-- All three durations visible (UX 13) -->
-                <fieldset id="other-billing-options" class="mt-4 border border-theme-border rounded-xl p-3">
-                    <legend class="px-1 text-xs font-bold text-theme-text">How long?</legend>
+                <fieldset id="other-billing-options" class="mt-4 rounded-xl p-3">
+                    <legend class="px-1 text-sm font-semibold text-ink">How long?</legend>
                     <div class="space-y-1">
-                        <label class="flex items-center justify-between min-h-[44px] cursor-pointer text-sm text-theme-text">
-                            <span class="flex items-center"><input type="radio" name="upgrade-billing" value="annual" checked class="mr-2 w-5 h-5 accent-indigo-600">12 months, paid once</span>
-                            <span id="annual-option-price" class="font-bold text-theme-text">₹290</span>
+                        <label class="flex items-center justify-between min-h-[44px] cursor-pointer text-ink">
+                            <span class="flex items-center gap-2"><input type="radio" name="upgrade-billing" value="annual" checked class="w-5 h-5 accent-[var(--signal-ink)]">12 months, paid once</span>
+                            <span id="annual-option-price" class="font-semibold">₹290</span>
                         </label>
-                        <label class="flex items-center justify-between min-h-[44px] cursor-pointer text-sm text-theme-text">
-                            <span class="flex items-center"><input type="radio" name="upgrade-billing" value="sprint" class="mr-2 w-5 h-5 accent-indigo-600">90 days, paid once</span>
-                            <span id="sprint-option-price" class="font-bold text-theme-text">₹79</span>
+                        <label class="flex items-center justify-between min-h-[44px] cursor-pointer text-ink">
+                            <span class="flex items-center gap-2"><input type="radio" name="upgrade-billing" value="sprint" class="w-5 h-5 accent-[var(--signal-ink)]">90 days, paid once</span>
+                            <span id="sprint-option-price" class="font-semibold">₹79</span>
                         </label>
-                        <label class="flex items-center justify-between min-h-[44px] cursor-pointer text-sm text-theme-text">
-                            <span class="flex items-center"><input type="radio" name="upgrade-billing" value="monthly" class="mr-2 w-5 h-5 accent-indigo-600">30 days, paid once</span>
-                            <span id="monthly-option-price" class="font-bold text-theme-text">₹29</span>
+                        <label class="flex items-center justify-between min-h-[44px] cursor-pointer text-ink">
+                            <span class="flex items-center gap-2"><input type="radio" name="upgrade-billing" value="monthly" class="w-5 h-5 accent-[var(--signal-ink)]">30 days, paid once</span>
+                            <span id="monthly-option-price" class="font-semibold">₹29</span>
                         </label>
                     </div>
                 </fieldset>
 
-                <button id="upgrade-next-plan" type="button" disabled
-                    class="upgrade-primary mt-5 py-3 min-h-[44px] font-bold text-sm transition-colors opacity-50">
-                    Review checkout
-                </button>
+                <button id="upgrade-next-plan" type="button" disabled class="upgrade-primary mt-5 py-3 min-h-[44px] text-[15px]">Review checkout</button>
             </div>
 
-            <!-- Step 3: risk-reducing checkout review -->
+            <!-- Step 3: checkout review -->
             <div id="upgrade-step-3" class="hidden p-6">
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <h3 class="font-bold text-theme-text">Know exactly what happens next</h3>
-                        <p class="text-xs text-theme-muted mt-1">No hidden trial or surprise charge.</p>
+                        <h3 class="font-display font-bold text-ink">What happens next</h3>
+                        <p class="text-sm text-muted mt-1">No trial, no auto-renewal, no surprise charge.</p>
                     </div>
-                    <button id="upgrade-back-plan" type="button" class="min-h-[44px] px-2 text-xs font-bold text-theme-muted hover:text-theme-text">Back</button>
+                    <button id="upgrade-back-plan" type="button" class="btn btn-ghost">Back</button>
                 </div>
 
-                <div class="upgrade-summary-card mt-5 border border-theme-border rounded-xl p-4 flex items-center justify-between">
+                <div class="upgrade-summary-card mt-5 rounded-xl p-4 flex items-center justify-between gap-3">
                     <div>
-                        <p id="checkout-plan-name" class="font-bold text-theme-text">Standard · Annual</p>
-                        <p id="checkout-plan-detail" class="text-xs text-theme-muted mt-1">100 credits refresh every 30 days for 12 months.</p>
+                        <p id="checkout-plan-name" class="font-semibold text-ink">Standard · Annual</p>
+                        <p id="checkout-plan-detail" class="text-sm text-muted mt-1">100 credits refresh every 30 days for 12 months.</p>
                     </div>
-                    <p id="checkout-plan-price" class="text-xl font-black text-theme-text">₹290</p>
+                    <p id="checkout-plan-price" class="font-display font-bold text-2xl text-ink">₹290</p>
                 </div>
 
                 <ol class="mt-5 space-y-4">
                     <li class="flex gap-3">
-                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
-                        <div><p class="text-sm font-bold text-theme-text">Today</p><p id="checkout-charge-copy" class="text-xs text-theme-muted">You pay once through Cashfree. This is not an auto-debit.</p></div>
+                        <span class="upgrade-step-dot w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
+                        <div><p class="font-semibold text-ink">Today</p><p id="checkout-charge-copy" class="text-sm text-muted">You pay once through Cashfree. This is not an auto-debit.</p></div>
                     </li>
                     <li class="flex gap-3">
-                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
-                        <div><p class="text-sm font-bold text-theme-text">Right after payment</p><p class="text-xs text-theme-muted">Your plan and full credit allowance unlock after payment confirmation.</p></div>
+                        <span class="upgrade-step-dot w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
+                        <div><p class="font-semibold text-ink">Right after payment</p><p class="text-sm text-muted">Your plan and its credits unlock as soon as the payment is confirmed.</p></div>
                     </li>
                     <li class="flex gap-3">
-                        <span class="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center flex-shrink-0">3</span>
-                        <div><p class="text-sm font-bold text-theme-text">Every 30 days while active</p><p id="checkout-renewal-copy" class="text-xs text-theme-muted">Your included credits refresh. Unused tier credits do not roll over.</p></div>
+                        <span class="upgrade-step-dot w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0">3</span>
+                        <div><p class="font-semibold text-ink">Every 30 days while active</p><p id="checkout-renewal-copy" class="text-sm text-muted">Your included credits refresh. Unused plan credits don’t roll over.</p></div>
                     </li>
                 </ol>
 
-                <button id="checkout-selected-plan-btn" type="button"
-                    class="upgrade-primary mt-6 py-3 min-h-[44px] font-bold text-sm transition-colors">
-                    Continue securely — ₹290
-                </button>
-                <p class="text-center text-[11px] text-theme-muted mt-3">
-                    Payments are processed by Cashfree. We never store card, UPI, or phone details.
-                </p>
-                <p class="text-center text-[11px] text-theme-muted mt-2">
-                    <a href="pricing-policy.html" target="_blank" rel="noopener" class="underline">Pricing terms</a>
+                <button id="checkout-selected-plan-btn" type="button" class="upgrade-primary mt-6 py-3 min-h-[44px] text-[15px]">Continue securely — ₹290</button>
+                <p class="text-center text-xs text-muted mt-3">Payments are processed by Cashfree. We never store card, UPI or phone details.</p>
+                <p class="text-center text-xs text-muted mt-2">
+                    <a href="pricing-policy.html" target="_blank" rel="noopener" class="link">Pricing terms</a>
                     <span aria-hidden="true"> · </span>
-                    <a href="refund-policy.html" target="_blank" rel="noopener" class="underline">Refund policy</a>
+                    <a href="refund-policy.html" target="_blank" rel="noopener" class="link">Refund policy</a>
                 </p>
             </div>
 
             <!-- Payment outcome (UX 12, B-17) -->
             <div id="payment-result" class="hidden p-6 space-y-4 text-center" role="status" aria-live="polite">
-                <div id="payment-result-icon" class="text-4xl" aria-hidden="true">⏳</div>
-                <h3 id="payment-result-title" class="font-bold text-lg text-theme-text">Confirming your payment…</h3>
-                <p id="payment-result-text" class="text-sm text-theme-muted"></p>
-                <button id="payment-result-close" type="button"
-                    class="upgrade-primary py-3 min-h-[44px] font-bold text-sm">Done</button>
+                <div id="payment-result-icon" class="flex justify-center text-4xl" aria-hidden="true"></div>
+                <h3 id="payment-result-title" class="font-display font-bold text-xl text-ink">Confirming your payment…</h3>
+                <p id="payment-result-text" class="text-muted"></p>
+                <button id="payment-result-close" type="button" class="upgrade-primary py-3 min-h-[44px] text-[15px]">Done</button>
             </div>
         </div>
     </div>
 
-    <!-- PHONE NUMBER MODAL (Cashfree Compliance) -->
-    <div id="phone-modal" style="z-index: 9999;"
-        class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm"
+    <!-- BILLING DETAILS (Cashfree requires a mobile number) -->
+    <div id="phone-modal" class="modal-backdrop fixed inset-0 hidden items-center justify-center p-4 z-[90]"
         role="dialog" aria-modal="true" aria-labelledby="phone-modal-title">
-        <div class="payment-details-shell rounded-2xl max-w-sm w-full p-7 shadow-2xl relative overflow-hidden transform scale-95 opacity-0 transition-all duration-300" id="phone-modal-content">
-            <div class="w-12 h-12 rounded-full flex items-center justify-center text-xl mx-auto mb-4" style="background-color: rgba(37, 99, 235, 0.1); color: #2563eb;" aria-hidden="true">
-                📱
-            </div>
-
-            <h2 id="phone-modal-title" class="font-bold text-xl text-center mb-2" style="color: var(--text-main);">Billing Details</h2>
-            <p class="text-center mb-4 leading-relaxed text-[13px]" style="color: var(--text-muted);">
-                For RBI billing compliance, Cashfree requires a mobile number.
-            </p>
+        <div class="payment-details-shell rounded-2xl max-w-sm w-full p-6 shadow-2xl relative transform scale-95 opacity-0 transition-all duration-200" id="phone-modal-content">
+            <span class="mode-icon mx-auto mb-4 flex" aria-hidden="true"><svg class="icon"><use href="#i-smartphone"></use></svg></span>
+            <h2 id="phone-modal-title" class="font-display font-bold text-xl text-center text-ink mb-2">Billing details</h2>
+            <p class="text-center text-sm text-muted mb-4">Cashfree needs a mobile number for RBI billing rules.</p>
 
             <form id="phone-form" class="space-y-4" novalidate>
                 <div>
                     <label for="user-phone" class="sr-only">Mobile number</label>
-                    <div class="flex items-center w-full rounded-xl px-4 py-3 border transition-all" style="background-color: var(--glass-bg); border-color: var(--border-color);">
-                        <span class="font-medium mr-2" style="color: var(--text-muted);">+91</span>
+                    <div class="flex items-center w-full rounded-lg px-3 border border-line-strong bg-bg focus-within:outline focus-within:outline-2 focus-within:outline-[var(--focus)]">
+                        <span class="font-medium mr-2 text-muted">+91</span>
                         <input type="tel" id="user-phone" required pattern="[6-9][0-9]{9}" inputmode="numeric" autocomplete="tel-national" maxlength="10"
-                            aria-describedby="phone-error"
-                            style="background-color: transparent; color: var(--text-main);"
-                            class="flex-1 outline-none font-medium p-0 border-0 focus:ring-0"
+                            aria-describedby="phone-error" class="flex-1 min-h-[44px] bg-transparent text-ink outline-none border-0 p-0 focus:ring-0"
                             placeholder="10-digit mobile number">
                     </div>
-                    <p id="phone-error" class="hidden text-xs text-red-600 dark:text-red-400 mt-1" role="alert">Enter a 10-digit Indian mobile number starting with 6–9.</p>
+                    <p id="phone-error" class="hidden field-error" role="alert">Enter a 10-digit Indian mobile number starting with 6–9.</p>
                 </div>
-
-                <div class="text-center pb-2 leading-relaxed text-[13px]" style="color: var(--text-muted);">
-                    <span style="background-color: rgba(16, 185, 129, 0.1);" class="inline-flex items-center gap-1 font-medium px-2 py-1 rounded text-emerald-700 dark:text-emerald-300">
-                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path></svg>
-                        Zero-Storage Promise
-                    </span>
-                    <div class="mt-1 text-[11px]">Passed directly to the gateway. Never saved.</div>
-                </div>
-
-                <div class="flex gap-3 pt-2">
-                    <button type="button" id="close-phone-modal"
-                        class="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl text-sm font-bold transition-colors" style="color: var(--text-muted);">
-                        Cancel
-                    </button>
-                    <button type="submit" id="submit-phone-btn"
-                        class="flex-[2] min-h-[44px] py-2.5 px-4 rounded-xl text-sm font-bold transition-colors active:scale-95 flex items-center justify-center" style="background-color: #2563eb; color: white;">
-                        Continue
-                    </button>
+                <p class="text-center text-xs text-muted">Passed straight to the payment gateway. Never saved.</p>
+                <div class="flex gap-2 pt-1">
+                    <button type="button" id="close-phone-modal" class="btn btn-ghost flex-1">Cancel</button>
+                    <button type="submit" id="submit-phone-btn" class="btn btn-primary flex-[2]">Continue</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- "Update available" banner (B-18) — shown by sw-register.js, never while syncing or paying -->
-    <div id="update-banner" class="hidden fixed left-1/2 -translate-x-1/2 z-[70] items-center gap-3 px-4 py-2 rounded-full shadow-xl bg-slate-900 text-white text-sm"
-        style="bottom: calc(1rem + env(safe-area-inset-bottom, 0px));" role="status" aria-live="polite">
-        <span>Update available</span>
-        <button id="update-reload-btn" type="button" class="min-h-[44px] px-4 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold">Reload</button>
+    <!-- "Update available" banner (B-18): shown by sw-register.js, never while syncing or paying -->
+    <div id="update-banner" class="hidden fixed left-1/2 -translate-x-1/2 z-[70] items-center gap-3 pl-4 pr-1 py-1 rounded-full sheet text-sm text-ink"
+        role="status" aria-live="polite">
+        <span>A new version is ready</span>
+        <button id="update-reload-btn" type="button" class="btn btn-primary rounded-full">Reload</button>
     </div>
 
     <script src="env-config.js"></script>
-    <script src="app-helpers.js?v=28"></script>
-    <script type="module" src="app.js?v=28"></script>
+    <script src="app-helpers.js?v=32"></script>
+    <script type="module" src="app.js?v=32"></script>
 </body>
 
 </html>

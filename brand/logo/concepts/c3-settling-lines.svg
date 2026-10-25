@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<title>c3 settling lines: a wavy line straightening into ruled lines</title>
+<path fill="none" stroke="#0A0A0A" stroke-width="36" stroke-linecap="butt" d="M 48 150 C 98 100 148 100 198 150 C 248 200 298 200 348 150 C 398 100 448 100 464 120"/>
+<path fill="none" stroke="#0A0A0A" stroke-width="36" stroke-linecap="butt" d="M 48 262 C 98 222 148 222 198 262 C 230 288 262 290 300 290 H 464"/>
+<path fill="none" stroke="#0A0A0A" stroke-width="36" stroke-linecap="butt" d="M 48 392 H 464"/>
+</svg>

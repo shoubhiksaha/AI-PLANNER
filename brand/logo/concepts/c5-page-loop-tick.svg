@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<title>c5 page with loop-to-tick: a planner page marked with a handwritten tick</title>
+<path fill="none" stroke="#0A0A0A" stroke-width="36" stroke-linejoin="round" d="M 92 40 H 420 A 32 32 0 0 1 452 72 V 440 A 32 32 0 0 1 420 472 H 92 A 32 32 0 0 1 60 440 V 72 A 32 32 0 0 1 92 40 Z"/>
+<path fill="none" stroke="#0A0A0A" stroke-width="36" stroke-linecap="round" stroke-linejoin="miter" d="M 124 318 C 172 302 236 252 236 210 C 236 184 220 168 200 168 C 180 168 164 186 164 212 C 164 252 198 298 240 352 L 392 172"/>
+</svg>

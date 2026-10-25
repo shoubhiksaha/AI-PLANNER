@@ -95,24 +95,60 @@ test.describe('Sync flows on the emulator stack', () => {
         expect(h.writes(await h.externalCalls(request, user.email), 'events.insert')).toHaveLength(2);
     });
 
-    test('Journal asks for Notion only when needed, then syncs to Notion', async ({ page, request }) => {
+    test('Journal goes to Google Drive by default — no setup needed', async ({ page, request }) => {
         await h.signIn(page, user);
+        await expect(page.locator('#journal-desc')).toContainText('Google Drive');
         await h.addPhoto(page, 'planner-page.png');
         await page.click('#btn-journal');
+
+        const card = page.locator('#status-area .status-card');
+        await expect(card).toHaveAttribute('data-tone', 'success');
+        await expect(card).toContainText('Saved to Google Drive');
+        await expect(card).toContainText('1 journal page saved to Google Drive');
+        await expect(card.getByRole('link', { name: /Open in Drive/ })).toHaveAttribute('href', /^https:\/\/drive\.google\.com\//);
+        // UX audit #1: the result is scrolled into view, not left below the fold.
+        await expect(card).toBeInViewport();
+
+        const driveCalls = (await h.externalCalls(request, user.email)).filter(c => c.service === 'drive');
+        expect(driveCalls.some(c => /Journal 1\.(jpg|png)/.test(c.summary))).toBe(true);
+        expect((await h.externalCalls(request, user.email)).filter(c => c.service === 'notion')).toHaveLength(0);
+    });
+
+    test('Choosing Notion in Settings asks to connect it, then journal pages go to Notion', async ({ page, request }) => {
+        await h.signIn(page, user);
+        await h.addPhoto(page, 'planner-page.png');
+        await h.openDrawerItem(page, 'settings');
+        await page.check('input[name="notes-destination"][value="notion"]');
         await expect(page.locator('#view-notion-setup')).toBeVisible();
 
         await page.fill('#notion-key-input', 'ntn_e2eFakeNotionIntegrationKey0123456789abcdef');
         await page.fill('#notion-db-input', 'https://www.notion.so/myworkspace/Journal-0123456789abcdef0123456789abcdef?v=1');
         await page.click('#save-notion-btn');
-        await expect(page.locator('#view-dashboard')).toBeVisible();
-        await expect.poll(async () => Boolean((await h.userDoc(request, user.email))?.notionKey)).toBe(true);
+        // Back where the user came from, with the choice saved.
+        await expect(page.locator('#view-setup')).toBeVisible();
+        await expect(page.locator('#notes-destination-status')).toContainText('Notion');
+        await expect.poll(async () => (await h.userDoc(request, user.email))?.notesDestination).toBe('notion');
 
-        // The page photo survives the detour through Notion setup (Zeigarnik: resume, don't restart).
+        // The page photo survives the detour (Zeigarnik: resume, don't restart).
+        await page.click('#back-to-dash-from-setup');
+        await expect(page.locator('#journal-desc')).toContainText('Notion');
         await expect(page.locator('#drop-zone .delete-btn')).toHaveCount(1);
         await page.click('#btn-journal');
         const card = page.locator('#status-area .status-card');
         await expect(card).toHaveAttribute('data-tone', 'success');
+        await expect(card).toContainText('Saved to Notion');
         const notionCalls = (await h.externalCalls(request, user.email)).filter(c => c.service === 'notion');
         expect(notionCalls.length).toBeGreaterThan(0);
+    });
+
+    test('Evening review saves the brain dump to Google Drive', async ({ page, request }) => {
+        await h.signIn(page, user);
+        await h.addPhoto(page, 'planner-page.png');
+        await page.click('#btn-night');
+        const card = page.locator('#status-area .status-card');
+        await expect(card).toHaveAttribute('data-tone', 'success');
+        await expect(card).toContainText('brain dump saved to Google Drive');
+        const driveCalls = (await h.externalCalls(request, user.email)).filter(c => c.service === 'drive');
+        expect(driveCalls.some(c => /Brain dump/.test(c.summary))).toBe(true);
     });
 });

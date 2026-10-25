@@ -60,16 +60,21 @@ async function syncToNotionPage(ctx, { aiSyncType, label, failureWarning }) {
         childrenBlocks.push(...buildParagraphBlocks(extraction.data.transcription));
     }
 
-    await createPageInDatabase(notion, userData.notionDbId || preData.notionDbId, {
+    const page = await createPageInDatabase(notion, userData.notionDbId || preData.notionDbId, {
         properties: { "Name": { title: [{ text: { content: `${label} - ${itemDate}` } }] } },
         children: childrenBlocks,
     });
+    const isVoice = mode === 'voice_note';
+    const pageUrl = page && typeof page.url === 'string' && /^https:\/\/(www\.)?notion\.so\//.test(page.url) ? page.url : null;
     return {
         msg: `${label} synced to Notion! Date: ${itemDate}`,
-        counts: { journalPages: parsedImages.length },
+        counts: isVoice ? { voiceNotes: 1 } : { journalPages: parsedImages.length },
         dataSynced: true,
         extractionOk,
         partial: false,
+        savedTo: 'notion',
+        ...(pageUrl ? { links: { notion: pageUrl } } : {}),
+        notes: [],
     };
 }
 

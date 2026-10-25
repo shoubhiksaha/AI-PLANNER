@@ -10,6 +10,7 @@ const {
 } = require('../utils');
 const { SyncError } = require('./errors');
 const { HEIC_ERROR_MESSAGE } = require('./images');
+const { modeNeedsGoogle } = require('./notesDestination');
 
 const HEIC_DATA_URL_RE = /^data:image\/hei[cf][;,]/i;
 
@@ -32,9 +33,11 @@ function syncModeOf(body) {
 
 /**
  * Validate the sync payload. Throws SyncError (400/401) on bad input.
+ * Journal and voice notes need the Google token only when notes go to Google Drive.
+ * @param {{ notesDestination?: 'drive'|'notion' }} [options]
  * @returns {{ parsedImages: object[], needsGoogle: boolean, googleToken: string|undefined, clientRequestId: string|null }}
  */
-function parseSyncRequest(body, mode) {
+function parseSyncRequest(body, mode, { notesDestination = 'notion' } = {}) {
     if (!ALLOWED_SYNC_TYPES.has(mode)) {
         throw new SyncError(400, E.BAD_REQUEST, "Invalid syncType");
     }
@@ -50,7 +53,7 @@ function parseSyncRequest(body, mode) {
             : "Invalid image data format, size, or too many images (max 5).");
     }
 
-    const needsGoogle = mode === 'morning' || mode === 'evening';
+    const needsGoogle = modeNeedsGoogle(mode, notesDestination);
     const googleToken = body.googleToken;
     if (needsGoogle && (!googleToken || typeof googleToken !== 'string')) {
         throw new SyncError(401, E.GOOGLE_TOKEN_EXPIRED, "Your Google connection expired. Reconnect Google to continue.");

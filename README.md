@@ -1,4 +1,8 @@
-# AI Planner — Zero Image Storage Architecture 🌿
+# AI Planner — Zero Image Storage Architecture
+
+<img src="brand/logo/final/logo-primary.svg" alt="ADT AI Planner" width="260">
+
+*ADT's showcase app for focused people who plan on paper ([analogdigital.tech](https://analogdigital.tech)): photograph a planner or journal page and it lands in Google Calendar, Tasks, Sheets, and Google Drive or Notion — with as little on screen as possible.*
 
 **A privacy-focused PWA that digitizes handwritten planner pages using Google Gemini AI.**
 
@@ -20,7 +24,8 @@
 Unlike traditional apps that store user images in an S3 bucket or database, **AI Planner** never stores your planner photos.
 
 - User images are processed **in-memory** (transient RAM only).
-- Data is extracted by Gemini AI and synced to Google Calendar, Tasks, Sheets, and Notion.
+- Data is extracted by Gemini AI and synced to Google Calendar, Tasks, Sheets, and the user's choice of Google Drive or Notion for journal pages, brain dumps and voice notes.
+- With Google Drive, files go to an "AI Planner" folder in the user's own Drive (the `drive.file` scope only reaches files the app created); nothing is kept on our servers.
 - The original image buffer is wiped immediately after processing.
 - Notion integration keys are **encrypted at rest** (AES-256-GCM) with keys managed via Google Cloud Secret Manager.
 
@@ -144,7 +149,6 @@ Releases go **feature branch → `staging` → (same feature branch) → `main`*
 ### V10: Future Roadmap
 - **Human-in-the-Loop Review**: Review of extracted files by user with confidence scores and templating (inspired by DocSync AI).
 - **Notion Public OAuth**: Transition from manual API keys to 1-click OAuth integration with automatic database schema generation.
-- **Google Drive Image Fallback**: Store processed images in Google Drive if Notion is not configured.
 - **Agentic AI Pivot**: Transitioning from a static parser to a proactive agent (Clarification Loops, Smart Task Rollover).
 - **Multi-Provider Fallback**: Support for OpenAI, Anthropic, DeepSeek as fallback models.
 - **CSP Reporting**: Add CSP enforcement violation monitoring endpoint.
@@ -182,7 +186,8 @@ const buffer = Buffer.from(base64Data, 'base64');
 public/
 ├── index.html       # HTML markup only
 ├── app.js           # Application logic (ES module)
-├── styles.css       # Custom CSS (themes, glass, animations)
+├── styles.css       # Design tokens and components (default style)
+├── themes/          # Theme packs: packs.js registry + one stylesheet per extra style
 ├── tailwind.css     # Prebuilt Tailwind utilities
 └── sw.js            # Service Worker v2
 
@@ -252,3 +257,7 @@ Config:
     ```bash
     firebase deploy
     ```
+
+## Brand
+
+AI Planner uses the ADT design system: Signal Aqua `#01F9C9` on Deep Black `#0A0A0A`, Space Grotesk (headings) and IBM Plex Sans (body). The tokens live in `public/styles.css`; never put aqua text or thin aqua lines on light backgrounds. People can also pick the **Cheerful** style (production's original look, with ADT's black-on-aqua logo) in the theme menu or in Settings › Appearance; styles are theme packs in `public/themes/`, see [`docs/THEMES.md`](docs/THEMES.md). The logo is an ADT family mark (ADT's wave, ending in a tick instead of a square pulse); its rationale, the stranger tests and the usage rules are in [`brand/logo/LOGO.md`](brand/logo/LOGO.md).

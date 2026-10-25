@@ -2,54 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cancellation & Refund Policy - AI Planner</title>
-    <style>
-        :root {
-            --bg-main: #f8fafc;
-            --text-main: #334155;
-            --text-muted: #64748b;
-            --border-color: #e2e8f0;
-            --accent: #2563eb;
-        }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-main: #0f172a;
-                --text-main: #e2e8f0;
-                --text-muted: #94a3b8;
-                --border-color: #334155;
-                --accent: #3b82f6;
-            }
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background-color: var(--bg-main);
-            color: var(--text-main);
-            line-height: 1.6;
-            margin: 0;
-            padding: 2rem 1rem;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 2rem;
-            border-radius: 1rem;
-            border: 1px solid var(--border-color);
-        }
-        h1 { font-size: 2rem; margin-bottom: 0.5rem; color: var(--text-main); }
-        h2 { font-size: 1.25rem; margin-top: 2rem; margin-bottom: 1rem; color: var(--text-main); }
-        p, ul { color: var(--text-muted); font-size: 0.95rem; }
-        ul { padding-left: 1.5rem; }
-        li { margin-bottom: 0.5rem; }
-        a { color: var(--accent); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .last-updated { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 2rem; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Cancellation & Refund Policy — AI Planner</title>
+    <link rel="icon" type="image/svg+xml" href="brand/favicon.svg">
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)">
+    <script src="themes/packs.js?v=1"></script>
+    <script src="theme-init.js?v=3"></script>
+    <link rel="stylesheet" href="tailwind.css?v=32">
 </head>
-<body>
-    <div class="container">
-        <a href="index.html">&larr; Back to App</a>
+<body class="min-h-screen">
+    <header class="app-bar">
+        <div class="max-w-3xl mx-auto px-4 h-16 flex items-center">
+            <a href="/" class="flex items-center gap-2 min-h-[44px] rounded-lg pr-2">
+                <img src="brand/app-icon.svg" alt="" width="28" height="28" class="brand-tile">
+                <span class="font-display font-bold text-[17px] text-ink">AI Planner</span>
+            </a>
+        </div>
+    </header>
+    <main class="doc max-w-3xl mx-auto px-4 py-8">
         <h1>Cancellation & Refund Policy</h1>
         <p class="last-updated">Last Updated: May 2026</p>
 
@@ -77,6 +48,14 @@
 
         <h2>6. Contacting Support</h2>
         <p>To request an account review, report a billing error, or ask a question regarding your cancellation, please email our billing team at support@aiplanner.app. Please include the email address associated with your AI Planner account and the order ID provided by Cashfree.</p>
-    </div>
+    
+    </main>
+    <footer class="max-w-3xl mx-auto px-4 pb-10 pt-6 border-t border-line flex flex-wrap items-center justify-between gap-4 text-sm text-muted">
+        <a href="/" class="link">Back to AI Planner</a>
+        <a href="https://analogdigital.tech" target="_blank" rel="noopener" class="inline-flex rounded" aria-label="An offering by ADT, Analog Digital Technologies">
+            <img src="brand/offering-by-adt-inline-light.svg" alt="" width="196" height="16" class="on-light h-4 w-auto">
+            <img src="brand/offering-by-adt-inline-dark.svg" alt="" width="196" height="16" class="on-dark h-4 w-auto">
+        </a>
+    </footer>
 </body>
 </html>

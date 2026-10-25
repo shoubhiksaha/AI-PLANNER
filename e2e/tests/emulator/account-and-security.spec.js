@@ -96,7 +96,8 @@ test.describe('Account, BYOK and auth hardening', () => {
         // Deliberate friction: two confirmations before anything is deleted.
         const dialogs = [];
         page.on('dialog', (d) => { dialogs.push(d.message()); d.accept(); });
-        await h.openDrawerItem(page, 'delete');
+        await h.openDrawerItem(page, 'settings');
+        await page.click('#view-setup [data-drawer="delete"]');
         await expect.poll(() => dialogs.length).toBe(2);
 
         await expect(page.locator('#view-login')).toBeVisible();
