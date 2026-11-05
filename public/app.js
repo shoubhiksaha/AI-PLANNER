@@ -92,6 +92,7 @@ const {
     buildHeatmapDays,
     loadScriptOnce,
     activateDialog,
+    closeTopDialog,
 } = helpers;
 
 const $ = (id) => document.getElementById(id);
@@ -2186,11 +2187,18 @@ async function exportMyData() {
             return;
         }
         const data = await parseJsonResponse(res);
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const fileName = `ai-planner-data-${new Date().toISOString().split('T')[0]}.json`;
+        const text = JSON.stringify(data, null, 2);
+        // The app's WebView can't save blob: links; the app saves the file and opens the share sheet.
+        if (isNativeWebView) {
+            postNativeMessage('SAVE_FILE', { fileName, mimeType: 'application/json', text });
+            return;
+        }
+        const blob = new Blob([text], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `ai-planner-data-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = fileName;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -2803,6 +2811,36 @@ const closeThemeMenuOnEscape = (e) => {
 };
 themeMenu?.addEventListener('keydown', closeThemeMenuOnEscape);
 themeBtn?.addEventListener('keydown', closeThemeMenuOnEscape);
+
+// Camera in the Android app: the app sets __aiPlannerCameraAllowed to false until Android grants
+// the camera permission. Without it the WebView silently ignores a camera input, so the tap asks
+// the app for the permission instead; the app then reopens this input (__aiPlannerPendingCamera).
+if (isNativeWebView) {
+    document.addEventListener('click', (e) => {
+        if (window.__aiPlannerCameraAllowed !== false) return;
+        const target = e.target instanceof Element ? e.target : null;
+        const input = target?.closest('input[type="file"][capture]')
+            || target?.closest('label')?.querySelector('input[type="file"][capture]');
+        if (!input) return;
+        e.preventDefault();
+        window.__aiPlannerPendingCamera = input;
+        postNativeMessage('REQUEST_CAMERA');
+    }, true);
+}
+
+// Android Back in the app (mobile/bridge.js buildBackScript): close whatever is on top, then go
+// back to the dashboard. False tells the app there was nothing to close, so it may leave.
+window.handleNativeBack = () => {
+    if (isPaying) return true; // never abandon a payment halfway
+    if (themeMenu?.classList.contains('active')) { setThemeMenu(false); return true; }
+    if (closeTopDialog()) return true;
+    const view = document.querySelector('[id^="view-"]:not(.view-hidden)')?.id;
+    if (view && view !== 'view-dashboard' && view !== 'view-login') {
+        switchView('view-dashboard');
+        return true;
+    }
+    return false;
+};
 // Tabbing out of the menu closes it.
 themeMenu?.addEventListener('focusout', (e) => {
     const next = e.relatedTarget;

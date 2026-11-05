@@ -14,7 +14,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.analogdigital.aiplanner",
       "infoPlist": {
-        "NSCameraUsageDescription": "AI Planner needs access to your camera to take photos of your physical notebook for AI extraction."
+        "NSCameraUsageDescription": "AI Planner needs access to your camera to take photos of your physical notebook for AI extraction.",
+        "NSMicrophoneUsageDescription": "AI Planner uses the microphone to record voice notes, which are typed up and saved to your Google Drive."
       }
     },
     "android": {
@@ -27,10 +28,13 @@
       "permissions": [
         "CAMERA",
         "INTERNET",
-        "VIBRATE"
+        "VIBRATE",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
       ],
       "blockedPermissions": [
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "web": {
@@ -47,6 +51,22 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#0A0A0A"
+        }
+      ],
+      "expo-sharing",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/SpaceGrotesk-500.ttf",
+            "./assets/fonts/SpaceGrotesk-700.ttf"
+          ]
+        }
+      ],
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false
         }
       ]
     ],
