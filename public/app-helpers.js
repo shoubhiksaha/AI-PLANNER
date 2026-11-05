@@ -669,7 +669,7 @@
         const previouslyFocused = document.activeElement;
         const visibleFocusables = () => Array.from(container.querySelectorAll(FOCUSABLE))
             .filter(el => !el.closest('.hidden') && !el.hidden);
-        const entry = { container };
+        const entry = { container, onRequestClose };
         const onKeyDown = (e) => {
             if (dialogStack[dialogStack.length - 1] !== entry) return;
             if (e.key === 'Escape') {
@@ -709,6 +709,14 @@
                 previouslyFocused.focus();
             }
         };
+    };
+
+    /** Asks the topmost open dialog to close, as Escape would (Android Back in the app). False when none is open. */
+    exports.closeTopDialog = () => {
+        const top = dialogStack[dialogStack.length - 1];
+        if (!top) return false;
+        if (top.onRequestClose) top.onRequestClose();
+        return true;
     };
 
     // ------------------------------------------------------------------

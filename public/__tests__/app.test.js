@@ -41,6 +41,7 @@ const {
     isAcceptedImage,
     buildHeatmapDays,
     activateDialog,
+    closeTopDialog,
     PROCESSING_MESSAGE,
 } = require('../app-helpers');
 
@@ -676,6 +677,28 @@ describe('activateDialog (U-04)', () => {
         deactivate();
         expect(document.activeElement).toBe(opener);
         jest.useRealTimers();
+    });
+
+    test('closeTopDialog closes only the topmost dialog, and reports when none is open', () => {
+        document.body.innerHTML = '<div id="outer"><button>o</button></div><div id="inner"><button>i</button></div>';
+        const closeOuter = jest.fn();
+        const closeInner = jest.fn();
+        const offOuter = activateDialog(document.getElementById('outer'), closeOuter);
+        const offInner = activateDialog(document.getElementById('inner'), closeInner);
+        expect(closeTopDialog()).toBe(true);
+        expect(closeInner).toHaveBeenCalledTimes(1);
+        expect(closeOuter).not.toHaveBeenCalled();
+        offInner();
+        expect(closeTopDialog()).toBe(true);
+        expect(closeOuter).toHaveBeenCalledTimes(1);
+        offOuter();
+        closeTopDialog();
+        expect(closeOuter).toHaveBeenCalledTimes(1);
+        expect(closeInner).toHaveBeenCalledTimes(1);
+        // Earlier tests may leave their own dialogs open; a fresh module has none.
+        jest.isolateModules(() => {
+            expect(require('../app-helpers').closeTopDialog()).toBe(false);
+        });
     });
 });
 

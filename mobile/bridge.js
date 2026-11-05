@@ -196,21 +196,92 @@ export function buildLoginScript({ idToken, accessToken }, allowedOrigins = APP_
       }
     }, true);
 
-    function isDarkTheme() {
-      var cl = document.documentElement.classList;
-      return cl.contains('dark-mode') || cl.contains('oled-mode');
+    // The app colours its status bar, navigation bar and edges like the page: light or dark
+    // (class) and the style pack (data-style), read from the page's own background.
+    var lastTheme = '';
+    function reportTheme() {
+      requestAnimationFrame(function() {
+        var cl = document.documentElement.classList;
+        var theme = {
+          dark: cl.contains('dark-mode') || cl.contains('oled-mode'),
+          background: getComputedStyle(document.body).backgroundColor
+        };
+        var key = JSON.stringify(theme);
+        if (key === lastTheme) { return; }
+        lastTheme = key;
+        postNative('THEME', theme);
+      });
     }
-    var observer = new MutationObserver(function() {
-      window.ReactNativeWebView.postMessage(isDarkTheme() ? 'THEME_DARK' : 'THEME_LIGHT');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    if (isDarkTheme()) { window.ReactNativeWebView.postMessage('THEME_DARK'); }
+    new MutationObserver(reportTheme)
+      .observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-style'] });
+    reportTheme();
   }
 
   tryLogin();
 })();
 true;
 `;
+}
+
+/**
+ * Android Back: asks the page to close whatever is on top (window.handleNativeBack in
+ * public/app.js) and reports BACK_RESULT { handled }. Pages without the handler report false.
+ */
+export function buildBackScript(allowedOrigins = APP_ORIGINS) {
+  return `
+(function() {${originGuard(allowedOrigins)}
+  var handled = false;
+  try {
+    handled = typeof window.handleNativeBack === 'function' && window.handleNativeBack() === true;
+  } catch (e) {}
+  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'BACK_RESULT', payload: { handled: handled } }));
+})();
+true;
+`;
+}
+
+/**
+ * Tells the page whether Android granted the camera (window.__aiPlannerCameraAllowed, read by
+ * public/app.js). With reopen, the camera input the person tapped is opened again.
+ */
+export function buildCameraStateScript(allowed, { reopen = false } = {}, allowedOrigins = APP_ORIGINS) {
+  return `
+(function() {${originGuard(allowedOrigins)}
+  window.__aiPlannerCameraAllowed = ${allowed ? 'true' : 'false'};
+  var pending = window.__aiPlannerPendingCamera;
+  window.__aiPlannerPendingCamera = null;
+  if (${reopen && allowed ? 'true' : 'false'} && pending && document.contains(pending)) {
+    try { pending.click(); } catch (e) {}
+  }
+})();
+true;
+`;
+}
+
+/** A CSS colour the page reported (THEME) that is safe to use as a native background. */
+export function isSafeCssColor(value) {
+  return typeof value === 'string'
+    && /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(,\s*[\d.]+\s*)?\))$/i.test(value.trim());
+}
+
+/** Fully transparent colours (rgba(..., 0)) can't paint the edges; the native default is used instead. */
+export function isOpaqueCssColor(value) {
+  if (!isSafeCssColor(value)) return false;
+  const alpha = value.match(/rgba\([^)]*,\s*([\d.]+)\s*\)/i);
+  return !alpha || Number(alpha[1]) > 0;
+}
+
+/** File name for a file the page asks the app to save (SAVE_FILE): plain characters, one extension. */
+export function safeFileName(name, fallback = 'ai-planner-export.json') {
+  if (typeof name !== 'string') return fallback;
+  const cleaned = name.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^[.-]+/, '').slice(0, 100);
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]{1,8}$/.test(cleaned) ? cleaned : fallback;
+}
+
+/** NetInfo state that means there is no connection (unknown reachability counts as online). */
+export function isOfflineState(state) {
+  if (!state) return false;
+  return state.isConnected === false || state.isInternetReachable === false;
 }
 
 /** True when the error means the Google account must sign in interactively again. */

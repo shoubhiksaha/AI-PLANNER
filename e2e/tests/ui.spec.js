@@ -349,3 +349,65 @@ test.describe('Dashboard UI Smoke Checks', () => {
         expect(req.postDataJSON().message).toBe('Fake UI Error');
     });
 });
+
+// Inside the Android app the page talks to mobile/App.js through window.ReactNativeWebView.
+test.describe('In the mobile app', () => {
+    test.beforeEach(async ({ page, baseURL }) => {
+        await page.addInitScript(() => {
+            window.__posted = [];
+            window.ReactNativeWebView = { postMessage: (m) => window.__posted.push(m) };
+        });
+        await page.goto(`${baseURL || 'http://localhost:3000'}/index.html`);
+        await page.waitForFunction(() => document.documentElement.dataset.authReady === 'true');
+        await page.evaluate(() => {
+            document.body.dataset.signedIn = 'true';
+            window.AppHelpers.switchView('view-dashboard');
+        });
+    });
+
+    const back = (page) => page.evaluate(() => window.handleNativeBack());
+    const posted = (page) => page.evaluate(() => window.__posted.map((m) => { try { return JSON.parse(m).type; } catch { return m; } }));
+
+    test('Android Back closes the menu, dialog or screen on top, then lets the app leave', async ({ page }) => {
+        expect(await back(page)).toBe(false);
+
+        await page.click('#theme-btn');
+        await expect(page.locator('#theme-dropdown')).toHaveClass(/active/);
+        expect(await back(page)).toBe(true);
+        await expect(page.locator('#theme-dropdown')).not.toHaveClass(/active/);
+
+        await page.click('#hamburger-btn');
+        await expect(page.locator('#drawer-container')).toHaveClass(/drawer-open/);
+        expect(await back(page)).toBe(true);
+        await expect(page.locator('#drawer-container')).toBeHidden();
+
+        await page.click('#current-plan-badge');
+        await expect(page.locator('#pricing-modal')).toBeVisible();
+        expect(await back(page)).toBe(true);
+        await expect(page.locator('#pricing-modal')).toBeHidden();
+
+        await page.evaluate(() => window.AppHelpers.switchView('view-setup'));
+        expect(await back(page)).toBe(true);
+        await expect(page.locator('#view-dashboard')).toBeVisible();
+        expect(await back(page)).toBe(false);
+    });
+
+    test('Camera asks the app for permission first when Android has not granted it', async ({ page }) => {
+        const cameraLabel = page.locator('#drop-zone label:has(input[capture])');
+        let choosers = 0;
+        page.on('filechooser', () => { choosers += 1; });
+
+        await page.evaluate(() => { window.__aiPlannerCameraAllowed = false; });
+        await cameraLabel.click();
+        expect(await posted(page)).toContain('REQUEST_CAMERA');
+        expect(await page.evaluate(() => window.__aiPlannerPendingCamera?.matches('input[capture]'))).toBe(true);
+        expect(choosers).toBe(0);
+
+        // Once the app reports the permission, the camera input opens as usual.
+        await page.evaluate(() => { window.__aiPlannerCameraAllowed = true; window.__posted.length = 0; });
+        const chooser = page.waitForEvent('filechooser');
+        await cameraLabel.click();
+        await chooser;
+        expect(await posted(page)).not.toContain('REQUEST_CAMERA');
+    });
+});
