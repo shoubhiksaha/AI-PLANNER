@@ -25,6 +25,34 @@ test.describe('Account, BYOK and auth hardening', () => {
         expect(await h.userDoc(request, user.email)).toBeNull();
     });
 
+    test('Export my data: a file in the browser, handed to the app (SAVE_FILE) inside the mobile app', async ({ page, browser, request, baseURL }) => {
+        const user = await h.createUser(request, { email: h.uniqueEmail('export') });
+        await h.signIn(page, user);
+        // Settings › Your data › Export my data
+        await h.openDrawerItem(page, 'settings');
+        const download = page.waitForEvent('download');
+        await page.click('#view-setup [data-drawer="export"]');
+        const file = await download;
+        expect(file.suggestedFilename()).toMatch(/^ai-planner-data-\d{4}-\d{2}-\d{2}\.json$/);
+
+        // The app's WebView can't save blob: links, so the page hands the file to the app instead.
+        const appContext = await browser.newContext({ baseURL });
+        const app = await appContext.newPage();
+        await app.addInitScript(() => {
+            window.__posted = [];
+            window.ReactNativeWebView = { postMessage: (m) => window.__posted.push(m) };
+        });
+        await h.signIn(app, user);
+        await h.openDrawerItem(app, 'settings');
+        await app.click('#view-setup [data-drawer="export"]');
+        await expect.poll(() => app.evaluate(() => window.__posted.filter((m) => m.includes('"SAVE_FILE"')).length)).toBe(1);
+        const saved = await app.evaluate(() => JSON.parse(window.__posted.find((m) => m.includes('"SAVE_FILE"'))).payload);
+        expect(saved.fileName).toBe(file.suggestedFilename());
+        expect(saved.mimeType).toBe('application/json');
+        expect(saved.text).toContain(user.email);
+        await appContext.close();
+    });
+
     test('BYOK "this tab only": key stays in sessionStorage, sync is not charged, sign-out wipes it', async ({ page, request }) => {
         const user = await h.createUser(request, { email: h.uniqueEmail('byok') });
         await h.signIn(page, user);

@@ -1,20 +1,25 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   StatusBar,
   View,
-  Text,
-  TouchableOpacity,
-  ActivityIndicator,
   Platform,
   PermissionsAndroid,
   BackHandler,
   Linking,
   AccessibilityInfo,
+  Alert,
+  AppState,
+  useColorScheme,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import * as WebBrowser from 'expo-web-browser';
+import * as SplashScreen from 'expo-splash-screen';
+import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
+import NetInfo from '@react-native-community/netinfo';
+import { NavigationBar } from 'expo-navigation-bar';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import * as SecureStore from 'expo-secure-store';
 import * as Haptics from 'expo-haptics';
@@ -27,19 +32,37 @@ import {
   classifyNavigation,
   buildLoginScript,
   buildTokenUpdateScript,
+  buildBackScript,
+  buildCameraStateScript,
+  isOpaqueCssColor,
+  safeFileName,
+  isOfflineState,
   isSignInRequiredError,
   backoffDelayMs,
 } from './bridge';
+import { screenColors } from './theme';
+import { SignInScreen, OpeningScreen, OfflineScreen, LoadErrorScreen } from './screens';
 
 // Base URL of the web app. Override per build with EXPO_PUBLIC_WEB_BASE_URL
 // (e.g. the staging origin); anything other than the two app origins falls back to prod.
 const WEB_BASE_URL = resolveWebBaseUrl(process.env.EXPO_PUBLIC_WEB_BASE_URL);
 const APP_ORIGIN = parseUrl(WEB_BASE_URL).origin;
 const START_URL = `${APP_ORIGIN}/`;
+const ADT_URL = 'https://analogdigital.tech';
 
 // Google access tokens live ~60 min; refresh a little before that.
 const TOKEN_REFRESH_AGE_MS = 45 * 60 * 1000;
 const REFRESH_CHECK_INTERVAL_MS = 60 * 1000;
+// The splash screen stays up while the page signs in, but never longer than this.
+const SPLASH_MAX_MS = 8000;
+// Back waits this long for the page's answer (BACK_RESULT) before going back natively.
+const BACK_RESULT_TIMEOUT_MS = 600;
+// Largest file the page may hand over for saving (SAVE_FILE), in characters.
+const MAX_SAVE_FILE_CHARS = 20 * 1024 * 1024;
+
+// Keep the splash screen until the first screen is ready (sign-in, offline or the signed-in page).
+SplashScreen.preventAutoHideAsync().catch(() => {});
+SplashScreen.setOptions({ fade: true, duration: 250 });
 
 // Configure the Native Google Sign-In SDK once at module load.
 GoogleSignin.configure({
@@ -94,15 +117,34 @@ function describeLoginError(error) {
   }
 }
 
+const isOfflineNow = async () => {
+  try {
+    return isOfflineState(await NetInfo.fetch());
+  } catch {
+    return false;
+  }
+};
+
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppContent />
+    </SafeAreaProvider>
+  );
+}
+
+function AppContent() {
+  const deviceScheme = useColorScheme();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingLogin, setIsCheckingLogin] = useState(true);
   const [isNativeLoginInProgress, setIsNativeLoginInProgress] = useState(false);
   const [loginError, setLoginError] = useState(null);
   const [webBridgeStatus, setWebBridgeStatus] = useState('idle');
-  const [appTheme, setAppTheme] = useState('light'); // Tracks website's dark/light mode
+  const [pageTheme, setPageTheme] = useState(null); // { dark, background } reported by the page
+  const [isOffline, setIsOffline] = useState(false);
   const [webError, setWebError] = useState(null);
   const [webViewKey, setWebViewKey] = useState(0);
+  const [splashDone, setSplashDone] = useState(false);
 
   const webviewRef = useRef(null);
   const tokensRef = useRef(null);
@@ -112,12 +154,26 @@ export default function App() {
   const refreshInFlightRef = useRef(null);
   const refreshFailuresRef = useRef(0);
   const nextRefreshAttemptAtRef = useRef(0);
-  const cameraPermissionAskedRef = useRef(false);
   const refreshSessionRef = useRef(null);
+  const backTimerRef = useRef(null);
+  const bootRef = useRef(null);
+  const isOfflineRef = useRef(false);
 
-  const isDark = appTheme === 'dark';
-  // ADT design tokens (see public/styles.css): Deep Black / white surfaces, ink text.
-  const themeBg = isDark ? '#0A0A0A' : '#FFFFFF';
+  const isPageReady = webBridgeStatus === 'authenticated' || webBridgeStatus === 'ready';
+  // Native screens follow the device until the page reports its own theme.
+  const c = screenColors(deviceScheme, isAuthenticated ? pageTheme : null);
+
+  const setOffline = (offline) => {
+    isOfflineRef.current = offline;
+    setIsOffline(offline);
+  };
+
+  const hideSplash = useCallback(() => {
+    setSplashDone((done) => {
+      if (!done) SplashScreen.hideAsync().catch(() => {});
+      return true;
+    });
+  }, []);
 
   const clearStoredLogin = async () => {
     await SecureStore.deleteItemAsync('idToken');
@@ -139,6 +195,7 @@ export default function App() {
     canGoBackRef.current = false;
     setIsAuthenticated(false);
     setWebBridgeStatus('idle');
+    setPageTheme(null);
     setWebError(null);
     setLoginError(message);
     if (message) AccessibilityInfo.announceForAccessibility(message);
@@ -193,7 +250,6 @@ export default function App() {
   };
   refreshSessionRef.current = refreshSession;
 
-  // Native Login Function
   const handleNativeLogin = async () => {
     if (isNativeLoginInProgress) return;
     setIsNativeLoginInProgress(true);
@@ -227,22 +283,56 @@ export default function App() {
 
   // On app start: clear legacy app-managed token storage and attempt native silent sign-in.
   // OAuth tokens stay in memory only; the native Google SDK manages its own account session.
-  useEffect(() => {
-    async function loadSavedTokens() {
-      try {
-        await clearStoredLogin();
-        await GoogleSignin.hasPlayServices();
-        const fresh = await fetchSilentTokens();
-        setWebBridgeStatus('authenticating');
-        applyTokens(fresh);
-        setIsAuthenticated(true);
-      } catch {
-        await clearStoredLogin();
-      }
+  // Offline, it waits for the connection instead of showing the sign-in screen.
+  const boot = async () => {
+    if (await isOfflineNow()) {
+      bootRef.current = 'waiting';
+      setOffline(true);
       setIsCheckingLogin(false);
+      return;
     }
-    loadSavedTokens();
+    bootRef.current = 'running';
+    setIsCheckingLogin(true);
+    try {
+      await clearStoredLogin();
+      await GoogleSignin.hasPlayServices();
+      const fresh = await fetchSilentTokens();
+      setWebBridgeStatus('authenticating');
+      applyTokens(fresh);
+      setIsAuthenticated(true);
+    } catch {
+      await clearStoredLogin();
+    }
+    bootRef.current = 'done';
+    setIsCheckingLogin(false);
+  };
+
+  useEffect(() => {
+    boot();
   }, []);
+
+  // Connection changes: show the offline screen when the page can't load, and pick up where
+  // we were (sign-in check or page load) as soon as the connection is back.
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      if (isOfflineState(state) || !isOfflineRef.current) return;
+      setOffline(false);
+      if (bootRef.current === 'waiting') boot();
+      else retryWebView();
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Hide the splash once there is something to see.
+  useEffect(() => {
+    if (splashDone || isCheckingLogin) return undefined;
+    if (!isAuthenticated || isOffline || webError || isPageReady) {
+      hideSplash();
+      return undefined;
+    }
+    const timer = setTimeout(hideSplash, SPLASH_MAX_MS);
+    return () => clearTimeout(timer);
+  }, [splashDone, isCheckingLogin, isAuthenticated, isOffline, webError, isPageReady, hideSplash]);
 
   // Refresh the Google access token before it expires while the app is open.
   useEffect(() => {
@@ -256,43 +346,95 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  // Android hardware Back navigates WebView history before leaving the app.
+  // Android Back: the page closes its menu, dialog or screen first (BACK_RESULT); otherwise the
+  // WebView goes back, and on the dashboard the app closes as usual.
+  const goBackNatively = () => {
+    clearTimeout(backTimerRef.current);
+    backTimerRef.current = null;
+    if (canGoBackRef.current && webviewRef.current) webviewRef.current.goBack();
+    else BackHandler.exitApp();
+  };
+
   useEffect(() => {
     if (Platform.OS !== 'android' || !isAuthenticated) return undefined;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (canGoBackRef.current && webviewRef.current) {
+      if (!webviewRef.current || isOffline || webError || !isPageReady) return false;
+      if (!isAllowedAppOrigin(currentUrlRef.current)) {
+        if (!canGoBackRef.current) return false;
         webviewRef.current.goBack();
         return true;
       }
-      return false;
+      if (backTimerRef.current) return true; // still waiting for the page's answer
+      webviewRef.current.injectJavaScript(buildBackScript(APP_ORIGINS));
+      backTimerRef.current = setTimeout(goBackNatively, BACK_RESULT_TIMEOUT_MS);
+      return true;
     });
     return () => sub.remove();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isOffline, webError, isPageReady]);
 
-  // Android only grants CAMERA at runtime, and the WebView file chooser omits the camera
-  // option without it. Ask once after sign-in (not at launch), only if not yet granted.
+  // Camera (Android): the WebView silently ignores a camera input without the CAMERA permission,
+  // so the page asks the app first (REQUEST_CAMERA). The page learns the current state here.
+  const tellPageCameraState = async ({ reopen = false } = {}) => {
+    if (Platform.OS !== 'android') return;
+    const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA).catch(() => false);
+    webviewRef.current?.injectJavaScript(buildCameraStateScript(granted, { reopen }, APP_ORIGINS));
+  };
+
+  const requestCamera = async () => {
+    let result;
+    try {
+      result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+    } catch (e) {
+      console.warn('Camera permission request failed:', e);
+      return;
+    }
+    if (result === PermissionsAndroid.RESULTS.GRANTED) {
+      await tellPageCameraState({ reopen: true });
+    } else if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+      Alert.alert(
+        'Camera is turned off',
+        'To photograph your pages, allow Camera for AI Planner in Settings. You can still add photos from your gallery.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings().catch(() => {}) },
+        ],
+      );
+    }
+  };
+
   useEffect(() => {
-    if (Platform.OS !== 'android' || cameraPermissionAskedRef.current) return;
-    if (webBridgeStatus !== 'authenticated' && webBridgeStatus !== 'ready') return;
-    cameraPermissionAskedRef.current = true;
-    (async () => {
-      try {
-        const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA);
-        if (!granted) {
-          await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA, {
-            title: 'Camera access',
-            message: 'Allow camera access to photograph your notebook pages for syncing.',
-            buttonPositive: 'Allow',
-            buttonNegative: 'Not now',
-          });
-        }
-      } catch (e) {
-        console.warn('Camera permission request failed:', e);
-      }
-    })();
-  }, [webBridgeStatus]);
+    if (isPageReady) tellPageCameraState();
+  }, [isPageReady]);
 
-  // Messages from the WebView (logout, haptics, theme, token refresh requests).
+  // Coming back from Settings may have changed the permission.
+  useEffect(() => {
+    if (!isPageReady) return undefined;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') tellPageCameraState();
+    });
+    return () => sub.remove();
+  }, [isPageReady]);
+
+  // "Download your data": the page hands the file over (SAVE_FILE); save it and open the share sheet.
+  const saveFile = async (payload) => {
+    const text = payload?.text;
+    if (typeof text !== 'string' || text.length > MAX_SAVE_FILE_CHARS) return;
+    try {
+      const file = new File(Paths.cache, safeFileName(payload.fileName));
+      file.create({ overwrite: true });
+      await file.write(text);
+      await Sharing.shareAsync(file.uri, {
+        mimeType: payload.mimeType === 'application/json' ? 'application/json' : 'text/plain',
+        dialogTitle: 'Save your AI Planner data',
+        UTI: 'public.json',
+      });
+    } catch (e) {
+      console.warn('Saving the file failed:', e);
+      Alert.alert('Couldn’t save the file', 'Please try again.');
+    }
+  };
+
+  // Messages from the WebView. Only the app's own pages may send them.
   const handleMessage = async (event) => {
     const data = event.nativeEvent.data;
     let parsedMessage = null;
@@ -300,15 +442,15 @@ export default function App() {
     try {
       parsedMessage = JSON.parse(data);
     } catch {
-      // Existing web messages are plain strings.
+      // Older web messages are plain strings.
     }
 
+    if (!isAllowedAppOrigin(event.nativeEvent.url || currentUrlRef.current)) return;
     const messageType = parsedMessage?.type || data;
+    const payload = parsedMessage?.payload;
 
     if (messageType === 'GOOGLE_TOKEN_REFRESH_REQUEST') {
-      if (isAllowedAppOrigin(event.nativeEvent.url || currentUrlRef.current)) {
-        refreshSessionRef.current?.('webRequest');
-      }
+      refreshSessionRef.current?.('webRequest');
     } else if (messageType === 'SIGNOUT') {
       await resetNativeSession();
     } else if (messageType === 'MOBILE_LOGIN_SUCCESS') {
@@ -316,16 +458,33 @@ export default function App() {
     } else if (messageType === 'MOBILE_APP_READY') {
       setWebBridgeStatus('ready');
     } else if (messageType === 'MOBILE_LOGIN_ERROR') {
-      console.warn('Mobile WebView login bridge failed:', parsedMessage?.payload || data);
+      console.warn('Mobile WebView login bridge failed:', payload || data);
+      // A cached page can load offline and then fail to sign in; that is not a bad login.
+      if (await isOfflineNow()) {
+        setOffline(true);
+        return;
+      }
       await resetNativeSession("We couldn't connect your Google login to AI Planner. Please sign in again.");
+    } else if (messageType === 'THEME') {
+      if (typeof payload?.dark === 'boolean') {
+        setPageTheme({
+          dark: payload.dark,
+          background: isOpaqueCssColor(payload.background) ? payload.background.trim() : null,
+        });
+      }
+    } else if (messageType === 'BACK_RESULT') {
+      if (!backTimerRef.current) return;
+      clearTimeout(backTimerRef.current);
+      backTimerRef.current = null;
+      if (payload?.handled !== true) goBackNatively();
+    } else if (messageType === 'REQUEST_CAMERA') {
+      if (Platform.OS === 'android') await requestCamera();
+    } else if (messageType === 'SAVE_FILE') {
+      await saveFile(payload);
     } else if (messageType === 'HAPTIC_LIGHT') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } else if (messageType === 'HAPTIC_HEAVY') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    } else if (messageType === 'THEME_DARK') {
-      setAppTheme('dark');
-    } else if (messageType === 'THEME_LIGHT') {
-      setAppTheme('light');
     }
   };
 
@@ -382,9 +541,13 @@ export default function App() {
     else if (decision !== 'block') openInBrowser(url);
   };
 
-  const handleWebError = (event) => {
+  const handleWebError = async (event) => {
     const { description, code } = event.nativeEvent || {};
     console.warn('WebView load error:', code, description);
+    if (await isOfflineNow()) {
+      setOffline(true);
+      return;
+    }
     setWebError("Couldn't load AI Planner. Check your connection and try again.");
   };
 
@@ -396,10 +559,18 @@ export default function App() {
     }
   };
 
-  const retryWebView = () => {
+  function retryWebView() {
     setWebError(null);
+    setWebBridgeStatus((status) => (status === 'idle' ? status : 'authenticating'));
     canGoBackRef.current = false;
     setWebViewKey((k) => k + 1); // remount: a failed first load has nothing to reload
+  }
+
+  const retryFromOffline = async () => {
+    if (await isOfflineNow()) return;
+    setOffline(false);
+    if (bootRef.current === 'waiting') boot();
+    else retryWebView();
   };
 
   // Android: the renderer died; the WebView instance can't be reused, so remount it.
@@ -415,55 +586,52 @@ export default function App() {
     webviewRef.current?.reload();
   };
 
+  const openPage = (path) => openInBrowser(`${APP_ORIGIN}${path}`);
+  const systemBars = (
+    <>
+      <StatusBar barStyle={c.dark ? 'light-content' : 'dark-content'} backgroundColor={c.edge} />
+      {Platform.OS === 'android' ? <NavigationBar style={c.dark ? 'dark' : 'light'} /> : null}
+    </>
+  );
+
   if (isCheckingLogin) {
+    // The splash screen covers the first check; a later one (back online) shows the spinner.
     return (
-      <SafeAreaView style={styles.authContainer}>
-        <ActivityIndicator size="large" color="#007AFF" accessibilityLabel="Checking sign-in" />
+      <SafeAreaView style={[styles.fill, { backgroundColor: c.bg }]}>
+        {systemBars}
+        {splashDone ? <OpeningScreen c={c} /> : null}
       </SafeAreaView>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <SafeAreaView style={styles.authContainer}>
-        <StatusBar barStyle="dark-content" />
-        <View style={styles.authContent}>
-          <Text style={styles.title} accessibilityRole="header">AI Planner</Text>
-          <Text style={styles.subtitle}>Your paper planner, synced</Text>
-
-          <TouchableOpacity
-            style={[styles.loginBtn, isNativeLoginInProgress && styles.loginBtnDisabled]}
-            onPress={handleNativeLogin}
-            disabled={isNativeLoginInProgress}
-            accessibilityRole="button"
-            accessibilityLabel="Sign in with Google"
-            accessibilityState={{ disabled: isNativeLoginInProgress, busy: isNativeLoginInProgress }}
-          >
-            {isNativeLoginInProgress ? (
-              <ActivityIndicator color="#0A0A0A" accessibilityLabel="Signing in" />
-            ) : (
-              <Text style={styles.loginBtnText}>Sign in with Google</Text>
-            )}
-          </TouchableOpacity>
-
-          {loginError ? (
-            <Text style={styles.loginError} accessibilityRole="alert" accessibilityLiveRegion="polite">
-              {loginError}
-            </Text>
-          ) : null}
-        </View>
+      <SafeAreaView style={[styles.fill, { backgroundColor: c.bg }]}>
+        {systemBars}
+        {isOffline ? (
+          <OfflineScreen c={c} onRetry={retryFromOffline} />
+        ) : (
+          <SignInScreen
+            c={c}
+            busy={isNativeLoginInProgress}
+            error={loginError}
+            onSignIn={handleNativeLogin}
+            onOpenPage={openPage}
+            onOpenAdt={() => openInBrowser(ADT_URL)}
+          />
+        )}
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeBg }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+    <SafeAreaView style={[styles.fill, { backgroundColor: c.edge }]}>
+      {systemBars}
       <WebView
         key={webViewKey}
         ref={webviewRef}
         source={{ uri: START_URL }}
-        style={styles.webview}
+        style={[styles.fill, { backgroundColor: c.edge }]}
         // Routing is done in onShouldStartLoadWithRequest; a narrow whitelist would send
         // Cashfree frames and UPI links to Linking before our handler runs.
         originWhitelist={['*']}
@@ -476,6 +644,9 @@ export default function App() {
         allowFileAccessFromFileURLs={false}
         allowUniversalAccessFromFileURLs={false}
         allowsBackForwardNavigationGestures={true}
+        // Voice notes record in the page; iOS asks once per app, not once per page.
+        mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
+        allowsInlineMediaPlayback={true}
         bounces={false}
         overScrollMode="never"
         onLoadStart={() => setWebError(null)}
@@ -486,149 +657,21 @@ export default function App() {
         onOpenWindow={handleOpenWindow}
         onError={handleWebError}
         onHttpError={handleHttpError}
-        renderError={() => <View style={[styles.webview, { backgroundColor: themeBg }]} />}
+        renderError={() => <View style={[styles.fill, { backgroundColor: c.bg }]} />}
         onRenderProcessGone={handleRenderProcessGone}
         onContentProcessDidTerminate={handleContentProcessDidTerminate}
       />
-      {webError ? (
-        <View style={[styles.overlay, { backgroundColor: themeBg }]}>
-          <Text
-            style={[styles.overlayTitle, { color: isDark ? '#F2F5F4' : '#0A0A0A' }]}
-            accessibilityRole="alert"
-            accessibilityLiveRegion="polite"
-          >
-            {webError}
-          </Text>
-          <TouchableOpacity
-            style={[styles.overlayBtn, styles.retryBtn]}
-            onPress={retryWebView}
-            accessibilityRole="button"
-            accessibilityLabel="Retry loading AI Planner"
-          >
-            <Text style={[styles.overlayBtnText, styles.retryBtnText]}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : webBridgeStatus !== 'authenticated' && webBridgeStatus !== 'ready' ? (
-        <View style={[styles.overlay, { backgroundColor: themeBg }]}>
-          <ActivityIndicator size="large" color={isDark ? '#01F9C9' : '#00735C'} />
-          <Text
-            style={[styles.overlayTitle, { color: isDark ? '#F2F5F4' : '#0A0A0A' }]}
-            accessibilityLiveRegion="polite"
-          >
-            Authenticating secure session
-          </Text>
-          <Text style={[styles.overlaySubtitle, { color: isDark ? '#A3ADA9' : '#4E5653' }]}>
-            Connecting your native Google login to AI Planner.
-          </Text>
-          <TouchableOpacity
-            style={[styles.overlayBtn, styles.resetBtn]}
-            onPress={() => resetNativeSession()}
-            accessibilityRole="button"
-            accessibilityLabel="Refresh login"
-            accessibilityHint="Signs out so you can sign in with Google again"
-          >
-            <Text style={styles.overlayBtnText}>Refresh Login</Text>
-          </TouchableOpacity>
-        </View>
+      {isOffline ? (
+        <OfflineScreen c={c} onRetry={retryFromOffline} />
+      ) : webError ? (
+        <LoadErrorScreen c={c} message={webError} onRetry={retryWebView} />
+      ) : !isPageReady ? (
+        <OpeningScreen c={c} onSignInAgain={() => resetNativeSession()} />
       ) : null}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  webview: {
-    flex: 1,
-  },
-  authContainer: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  authContent: {
-    width: '80%',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#0A0A0A',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#4E5653',
-    marginBottom: 48,
-  },
-  loginBtn: {
-    backgroundColor: '#01F9C9',
-    minHeight: 48,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 8,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loginBtnDisabled: {
-    backgroundColor: '#E9EDEB',
-  },
-  loginBtnText: {
-    color: '#0A0A0A',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  loginError: {
-    marginTop: 16,
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#B42318',
-    textAlign: 'center',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 28,
-  },
-  overlayTitle: {
-    marginTop: 18,
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  overlaySubtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  overlayBtn: {
-    marginTop: 24,
-    minHeight: 44,
-    minWidth: 44,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  resetBtn: {
-    backgroundColor: '#B42318',
-  },
-  retryBtn: {
-    backgroundColor: '#01F9C9',
-  },
-  overlayBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  retryBtnText: {
-    color: '#0A0A0A',
-  },
+  fill: { flex: 1 },
 });
