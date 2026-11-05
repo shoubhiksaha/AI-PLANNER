@@ -157,6 +157,7 @@ function AppContent() {
   const refreshSessionRef = useRef(null);
   const backTimerRef = useRef(null);
   const bootRef = useRef(null);
+  const bootRunRef = useRef(0); // bumped to drop the result of a sign-in check that was abandoned
   const isOfflineRef = useRef(false);
 
   const isPageReady = webBridgeStatus === 'authenticated' || webBridgeStatus === 'ready';
@@ -291,20 +292,31 @@ function AppContent() {
       setIsCheckingLogin(false);
       return;
     }
+    const run = ++bootRunRef.current;
     bootRef.current = 'running';
     setIsCheckingLogin(true);
     try {
       await clearStoredLogin();
       await GoogleSignin.hasPlayServices();
       const fresh = await fetchSilentTokens();
+      if (run !== bootRunRef.current) return;
       setWebBridgeStatus('authenticating');
       applyTokens(fresh);
       setIsAuthenticated(true);
     } catch {
+      if (run !== bootRunRef.current) return;
       await clearStoredLogin();
     }
     bootRef.current = 'done';
     setIsCheckingLogin(false);
+  };
+
+  // "Sign in again" while the sign-in check hangs: drop that check and show the sign-in screen.
+  const abandonBoot = () => {
+    bootRunRef.current += 1;
+    bootRef.current = 'done';
+    setIsCheckingLogin(false);
+    resetNativeSession();
   };
 
   useEffect(() => {
@@ -325,8 +337,8 @@ function AppContent() {
 
   // Hide the splash once there is something to see.
   useEffect(() => {
-    if (splashDone || isCheckingLogin) return undefined;
-    if (!isAuthenticated || isOffline || webError || isPageReady) {
+    if (splashDone) return undefined;
+    if (!isCheckingLogin && (!isAuthenticated || isOffline || webError || isPageReady)) {
       hideSplash();
       return undefined;
     }
@@ -595,11 +607,12 @@ function AppContent() {
   );
 
   if (isCheckingLogin) {
-    // The splash screen covers the first check; a later one (back online) shows the spinner.
+    // The splash screen covers the first check (for at most SPLASH_MAX_MS); after that, or for a
+    // later check (back online), the spinner shows, with a way out if the check hangs.
     return (
       <SafeAreaView style={[styles.fill, { backgroundColor: c.bg }]}>
         {systemBars}
-        {splashDone ? <OpeningScreen c={c} /> : null}
+        {splashDone ? <OpeningScreen c={c} onSignInAgain={abandonBoot} /> : null}
       </SafeAreaView>
     );
   }
