@@ -258,6 +258,111 @@ true;
 `;
 }
 
+// Screens the app can open from an icon shortcut or a reminder (aiplanner://scan and so on).
+export const APP_LINK_TARGETS = ['scan', 'history', 'reports'];
+
+/** The screen an aiplanner:// link asks for, or null. Accepts aiplanner://scan and aiplanner:///scan. */
+export function parseAppLink(url) {
+  if (typeof url !== 'string') return null;
+  const m = url.match(/^aiplanner:\/\/\/?([a-z]+)\/?(?:[?#].*)?$/i);
+  const target = m && m[1].toLowerCase();
+  return APP_LINK_TARGETS.includes(target) ? target : null;
+}
+
+/**
+ * Tells the page what the app can do (window.__aiPlannerApp, read by public/app.js):
+ * { scanner: boolean, reminders: { morning: { on, time }, evening: { on, time } } | null }.
+ */
+export function buildAppStateScript(state, allowedOrigins = APP_ORIGINS) {
+  return `
+(function() {${originGuard(allowedOrigins)}
+  window.__aiPlannerApp = ${JSON.stringify(state ?? {})};
+  try { if (typeof window.aiPlannerAppStateChanged === 'function') { window.aiPlannerAppStateChanged(); } } catch (e) {}
+})();
+true;
+`;
+}
+
+/** Opens a screen in the page (window.aiPlannerOpen in public/app.js). */
+export function buildOpenScript(target, allowedOrigins = APP_ORIGINS) {
+  if (!APP_LINK_TARGETS.includes(target)) return null;
+  return `
+(function() {${originGuard(allowedOrigins)}
+  try { if (typeof window.aiPlannerOpen === 'function') { window.aiPlannerOpen(${JSON.stringify(target)}); } } catch (e) {}
+})();
+true;
+`;
+}
+
+/**
+ * Hands photos to the page (window.aiPlannerAddImages in public/app.js) as if they were picked
+ * there: [{ name, mimeType, base64 }].
+ */
+export function buildAddImagesScript(images, allowedOrigins = APP_ORIGINS) {
+  return `
+(function() {${originGuard(allowedOrigins)}
+  try { if (typeof window.aiPlannerAddImages === 'function') { window.aiPlannerAddImages(${JSON.stringify(images)}); } } catch (e) {}
+})();
+true;
+`;
+}
+
+/** Shows "Preparing your photos…" in the page while the app gets scanned pages ready. */
+export function buildPreparingImagesScript(allowedOrigins = APP_ORIGINS) {
+  return `
+(function() {${originGuard(allowedOrigins)}
+  try { if (typeof window.aiPlannerPreparingImages === 'function') { window.aiPlannerPreparingImages(); } } catch (e) {}
+})();
+true;
+`;
+}
+
+/** Most pages one scan may return (the page asks for what fits the plan, SCAN_PAGES). */
+export const MAX_SCAN_PAGES = 20;
+
+export function clampScanPages(value) {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, MAX_SCAN_PAGES);
+}
+
+/** "file:/data/..." (Java's File.toURI, used by expo-sharing for shared files) as "file:///data/...". */
+export function normalizeFileUri(uri) {
+  return typeof uri === 'string' ? uri.replace(/^file:\/(?!\/)/, 'file:///') : uri;
+}
+
+/** Size that fits within max on its longer side, keeping the aspect ratio; null when it already fits. */
+export function fitWithin(width, height, max) {
+  if (!(width > 0) || !(height > 0) || Math.max(width, height) <= max) return null;
+  return width >= height
+    ? { width: max, height: Math.round((height * max) / width) }
+    : { width: Math.round((width * max) / height), height: max };
+}
+
+export const DEFAULT_REMINDERS = {
+  morning: { on: false, time: '08:00' },
+  evening: { on: false, time: '21:00' },
+};
+
+/** "HH:MM" (24-hour) to { hour, minute }, or null. */
+export function parseTime(value) {
+  const m = typeof value === 'string' && value.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  return m ? { hour: Number(m[1]), minute: Number(m[2]) } : null;
+}
+
+/** Reminder settings from the page or storage, with anything invalid replaced by the default. */
+export function normalizeReminders(input) {
+  const out = {};
+  for (const key of Object.keys(DEFAULT_REMINDERS)) {
+    const value = input && typeof input === 'object' ? input[key] : null;
+    out[key] = {
+      on: value?.on === true,
+      time: parseTime(value?.time) ? value.time : DEFAULT_REMINDERS[key].time,
+    };
+  }
+  return out;
+}
+
 /** A CSS colour the page reported (THEME) that is safe to use as a native background. */
 export function isSafeCssColor(value) {
   return typeof value === 'string'

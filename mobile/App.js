@@ -17,6 +17,7 @@ import { WebView } from 'react-native-webview';
 import * as WebBrowser from 'expo-web-browser';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Sharing from 'expo-sharing';
+import { useIncomingShare } from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
 import NetInfo from '@react-native-community/netinfo';
 import { NavigationBar } from 'expo-navigation-bar';
@@ -39,9 +40,19 @@ import {
   isOfflineState,
   isSignInRequiredError,
   backoffDelayMs,
+  parseAppLink,
+  buildAppStateScript,
+  buildOpenScript,
+  buildAddImagesScript,
+  buildPreparingImagesScript,
+  clampScanPages,
+  DEFAULT_REMINDERS,
 } from './bridge';
 import { screenColors } from './theme';
 import { SignInScreen, OpeningScreen, OfflineScreen, LoadErrorScreen } from './screens';
+import { isScannerAvailableAsync, scanPagesAsync } from './modules/document-scanner';
+import { preparePageImages } from './images';
+import { loadReminders, applyReminders, addReminderTapListener } from './reminders';
 
 // Base URL of the web app. Override per build with EXPO_PUBLIC_WEB_BASE_URL
 // (e.g. the staging origin); anything other than the two app origins falls back to prod.
@@ -59,6 +70,8 @@ const SPLASH_MAX_MS = 8000;
 const BACK_RESULT_TIMEOUT_MS = 600;
 // Largest file the page may hand over for saving (SAVE_FILE), in characters.
 const MAX_SAVE_FILE_CHARS = 20 * 1024 * 1024;
+// Most photos one share may hand to the page (the page keeps what fits the plan).
+const MAX_SHARED_IMAGES = 20;
 
 // Keep the splash screen until the first screen is ready (sign-in, offline or the signed-in page).
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -159,6 +172,15 @@ function AppContent() {
   const bootRef = useRef(null);
   const bootRunRef = useRef(0); // bumped to drop the result of a sign-in check that was abandoned
   const isOfflineRef = useRef(false);
+  // What the app adds to the page (scanner, reminders), sent once per page load (appStateSentRef).
+  const appStateRef = useRef({ scanner: false, reminders: DEFAULT_REMINDERS });
+  const appStateSentRef = useRef(false);
+  // The signed-in page has shown a screen (MOBILE_APP_READY): links and photos can go in.
+  const pageShellReadyRef = useRef(false);
+  const pendingLinkRef = useRef(null);
+  const pendingImagesRef = useRef([]);
+  const scanningRef = useRef(false);
+  const incomingShare = useIncomingShare();
 
   const isPageReady = webBridgeStatus === 'authenticated' || webBridgeStatus === 'ready';
   // Native screens follow the device until the page reports its own theme.
@@ -194,6 +216,7 @@ function AppContent() {
     tokensRef.current = null;
     tokenIssuedAtRef.current = 0;
     canGoBackRef.current = false;
+    pageShellReadyRef.current = false;
     setIsAuthenticated(false);
     setWebBridgeStatus('idle');
     setPageTheme(null);
@@ -427,6 +450,112 @@ function AppContent() {
     return () => sub.remove();
   }, [isPageReady]);
 
+  // ---- What the app adds to the page: scanner, shared photos, shortcuts, reminders ----
+
+  const injectIntoPage = (script) => {
+    if (!script || !isAllowedAppOrigin(currentUrlRef.current)) return;
+    webviewRef.current?.injectJavaScript(script);
+  };
+
+  const tellPageAppState = (extra = {}) => {
+    injectIntoPage(buildAppStateScript({ ...appStateRef.current, ...extra }, APP_ORIGINS));
+  };
+
+  // Photos go to the page's tray once the signed-in page is showing; until then they wait.
+  const deliverImages = (images) => {
+    if (!images.length) return;
+    if (!pageShellReadyRef.current) {
+      pendingImagesRef.current = [...pendingImagesRef.current, ...images].slice(0, MAX_SHARED_IMAGES);
+      return;
+    }
+    injectIntoPage(buildAddImagesScript(images, APP_ORIGINS));
+  };
+
+  // Icon shortcuts and reminders (aiplanner://scan, history, reports) open that screen in the page.
+  const deliverLink = (url) => {
+    const target = parseAppLink(url);
+    if (!target) return;
+    if (!pageShellReadyRef.current) {
+      pendingLinkRef.current = target;
+      return;
+    }
+    injectIntoPage(buildOpenScript(target, APP_ORIGINS));
+  };
+
+  const flushPending = () => {
+    const images = pendingImagesRef.current;
+    pendingImagesRef.current = [];
+    deliverImages(images);
+    const target = pendingLinkRef.current;
+    pendingLinkRef.current = null;
+    if (target) injectIntoPage(buildOpenScript(target, APP_ORIGINS));
+  };
+
+  // Google's document scanner, asked for by the page (SCAN_PAGES { maxPages }) when the person
+  // taps Camera. If it can't open, the page goes back to its own camera input.
+  const runScan = async (maxPages) => {
+    if (scanningRef.current) return;
+    scanningRef.current = true;
+    try {
+      const uris = await scanPagesAsync({ pageLimit: clampScanPages(maxPages) });
+      if (!uris.length) return;
+      injectIntoPage(buildPreparingImagesScript(APP_ORIGINS));
+      deliverImages(await preparePageImages(uris, 'scan'));
+    } catch (e) {
+      console.warn('Document scanner failed:', e);
+      appStateRef.current = { ...appStateRef.current, scanner: false };
+      tellPageAppState();
+      Alert.alert('The scanner isn’t available', 'Tap Camera again to take a photo instead.');
+    } finally {
+      scanningRef.current = false;
+    }
+  };
+
+  const setReminders = async (settings) => {
+    const result = await applyReminders(settings);
+    appStateRef.current = { ...appStateRef.current, reminders: result.reminders };
+    tellPageAppState({ remindersResult: result.ok ? 'saved' : result.reason });
+    if (result.reason === 'blocked') {
+      Alert.alert(
+        'Notifications are off',
+        'To get reminders, allow notifications for AI Planner in Settings.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings().catch(() => {}) },
+        ],
+      );
+    }
+  };
+
+  useEffect(() => {
+    isScannerAvailableAsync().then((scanner) => {
+      appStateRef.current = { ...appStateRef.current, scanner };
+      if (appStateSentRef.current) tellPageAppState();
+    });
+    loadReminders().then((reminders) => {
+      appStateRef.current = { ...appStateRef.current, reminders };
+      if (appStateSentRef.current) tellPageAppState();
+    });
+    Linking.getInitialURL().then(deliverLink).catch(() => {});
+    const linkSub = Linking.addEventListener('url', ({ url }) => deliverLink(url));
+    const removeReminderListener = addReminderTapListener(deliverLink);
+    return () => {
+      linkSub.remove();
+      removeReminderListener();
+    };
+  }, []);
+
+  // Share to AI Planner: photos shared from Photos, Gallery, Files or any other app.
+  useEffect(() => {
+    const shared = incomingShare.resolvedSharedPayloads
+      .filter((p) => p.contentType === 'image' && (p.contentUri || p.value))
+      .map((p) => [p.contentUri, p.value])
+      .slice(0, MAX_SHARED_IMAGES);
+    if (!shared.length) return;
+    incomingShare.clearSharedPayloads();
+    preparePageImages(shared, 'shared').then(deliverImages);
+  }, [incomingShare.resolvedSharedPayloads]);
+
   // "Download your data": the page hands the file over (SAVE_FILE); save it and open the share sheet.
   const saveFile = async (payload) => {
     const text = payload?.text;
@@ -469,6 +598,14 @@ function AppContent() {
       setWebBridgeStatus('authenticated');
     } else if (messageType === 'MOBILE_APP_READY') {
       setWebBridgeStatus('ready');
+      if (!appStateSentRef.current) {
+        appStateSentRef.current = true;
+        tellPageAppState();
+      }
+      if (!pageShellReadyRef.current) {
+        pageShellReadyRef.current = true;
+        flushPending();
+      }
     } else if (messageType === 'MOBILE_LOGIN_ERROR') {
       console.warn('Mobile WebView login bridge failed:', payload || data);
       // A cached page can load offline and then fail to sign in; that is not a bad login.
@@ -493,6 +630,10 @@ function AppContent() {
       if (Platform.OS === 'android') await requestCamera();
     } else if (messageType === 'SAVE_FILE') {
       await saveFile(payload);
+    } else if (messageType === 'SCAN_PAGES') {
+      await runScan(payload?.maxPages);
+    } else if (messageType === 'SET_REMINDERS') {
+      await setReminders(payload);
     } else if (messageType === 'HAPTIC_LIGHT') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } else if (messageType === 'HAPTIC_HEAVY') {
@@ -662,7 +803,12 @@ function AppContent() {
         allowsInlineMediaPlayback={true}
         bounces={false}
         overScrollMode="never"
-        onLoadStart={() => setWebError(null)}
+        onLoadStart={() => {
+          setWebError(null);
+          // A new page load knows nothing yet: send the app state and pending items again.
+          appStateSentRef.current = false;
+          pageShellReadyRef.current = false;
+        }}
         onLoadEnd={handleWebViewLoad}
         onMessage={handleMessage}
         onNavigationStateChange={handleNavigationStateChange}
