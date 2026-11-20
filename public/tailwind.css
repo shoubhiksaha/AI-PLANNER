@@ -1864,6 +1864,10 @@ button.chip:hover {
   max-width: 86vw;
 }
 
+.max-w-\[9rem\] {
+  max-width: 9rem;
+}
+
 .max-w-lg {
   max-width: 32rem;
 }

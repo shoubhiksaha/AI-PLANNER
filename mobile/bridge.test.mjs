@@ -20,6 +20,16 @@ import {
   isOfflineState,
   isSignInRequiredError,
   backoffDelayMs,
+  parseAppLink,
+  buildAppStateScript,
+  buildOpenScript,
+  buildAddImagesScript,
+  clampScanPages,
+  fitWithin,
+  normalizeFileUri,
+  parseTime,
+  normalizeReminders,
+  DEFAULT_REMINDERS,
 } from './bridge.js';
 import { COLORS, screenColors } from './theme.js';
 
@@ -222,4 +232,62 @@ test('screenColors follows the device until the page reports its theme', () => {
   assert.equal(cheerfulDark.ink, COLORS.dark.ink);
   assert.equal(cheerfulDark.edge, 'rgb(15, 23, 42)');
   assert.equal(screenColors('dark', { dark: false, background: null }).edge, COLORS.light.bg);
+});
+
+test('parseAppLink accepts only the shortcut and reminder screens', () => {
+  assert.equal(parseAppLink('aiplanner://scan'), 'scan');
+  assert.equal(parseAppLink('aiplanner:///history'), 'history');
+  assert.equal(parseAppLink('aiplanner://reports/?from=shortcut'), 'reports');
+  for (const bad of ['aiplanner://settings', 'https://planner.analogdigital.tech/scan', 'aiplanner://scan/x', '', null, 'aiplanner://']) {
+    assert.equal(parseAppLink(bad), null, String(bad));
+  }
+});
+
+test('app state, open and add-images scripts reach the page only on app origins', () => {
+  const calls = [];
+  const extra = {
+    aiPlannerAppStateChanged: () => calls.push('state'),
+    aiPlannerOpen: (t) => calls.push(['open', t]),
+    aiPlannerAddImages: (imgs) => calls.push(['add', imgs]),
+  };
+  const state = { scanner: true, reminders: DEFAULT_REMINDERS };
+  const page = runInPage(buildAppStateScript(state, APP_ORIGINS), { origin: PROD_ORIGIN, pathname: '/', extra }).window;
+  assert.deepEqual(JSON.parse(JSON.stringify(page.__aiPlannerApp)), state); // created in the page's realm
+  runInPage(buildOpenScript('history', APP_ORIGINS), { origin: STAGING_ORIGIN, pathname: '/', extra });
+  const images = [{ name: 'page-1.jpg', mimeType: 'image/jpeg', base64: 'AAA"</script>' }];
+  runInPage(buildAddImagesScript(images, APP_ORIGINS), { origin: PROD_ORIGIN, pathname: '/', extra });
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), ['state', ['open', 'history'], ['add', images]]);
+
+  assert.equal(buildOpenScript('settings', APP_ORIGINS), null);
+  const foreign = runInPage(buildAppStateScript(state, APP_ORIGINS), { origin: 'https://evil.example.com', pathname: '/', extra }).window;
+  assert.equal(foreign.__aiPlannerApp, undefined);
+  runInPage(buildAddImagesScript(images, APP_ORIGINS), { origin: 'https://evil.example.com', pathname: '/', extra });
+  assert.equal(calls.length, 3); // nothing reached the foreign page
+});
+
+test('scan page counts and photo sizes are kept in range', () => {
+  assert.equal(clampScanPages(3), 3);
+  assert.equal(clampScanPages(0), 1);
+  assert.equal(clampScanPages('x'), 1);
+  assert.equal(clampScanPages(500), 20);
+  assert.deepEqual(fitWithin(4000, 3000, 2400), { width: 2400, height: 1800 });
+  assert.deepEqual(fitWithin(3000, 4000, 2400), { width: 1800, height: 2400 });
+  assert.equal(fitWithin(1200, 1600, 2400), null);
+  assert.equal(fitWithin(0, 0, 2400), null);
+});
+
+test('reminder settings fall back to defaults for anything invalid', () => {
+  assert.deepEqual(parseTime('07:05'), { hour: 7, minute: 5 });
+  for (const bad of ['7:05', '24:00', '12:60', '', null]) assert.equal(parseTime(bad), null, String(bad));
+  assert.deepEqual(normalizeReminders(null), DEFAULT_REMINDERS);
+  assert.deepEqual(
+    normalizeReminders({ morning: { on: true, time: '06:30' }, evening: { on: 'yes', time: '9pm' }, extra: 1 }),
+    { morning: { on: true, time: '06:30' }, evening: { on: false, time: '21:00' } },
+  );
+});
+
+test('shared file URIs are normalised so images can be loaded', () => {
+  assert.equal(normalizeFileUri('file:/data/user/0/app/cache/1000000018'), 'file:///data/user/0/app/cache/1000000018');
+  assert.equal(normalizeFileUri('file:///data/x.jpg'), 'file:///data/x.jpg');
+  assert.equal(normalizeFileUri('content://media/external/images/media/5'), 'content://media/external/images/media/5');
 });
