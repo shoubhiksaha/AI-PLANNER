@@ -2937,6 +2937,11 @@ window.aiPlannerOpen = (target) => {
     if (!isSignedInChrome() || isPaying) return false;
     if (target === 'scan') {
         showDashboardForNative();
+        // A full tray has no capture control to open: say why instead of doing nothing.
+        if (remainingUploadSlots() <= 0) {
+            if (!isSyncing) showTrayFullCard();
+            return true;
+        }
         if (nativeApp().scanner === true) {
             requestNativeScan();
         } else {
@@ -2963,6 +2968,7 @@ const REMINDER_RESULTS = {
     denied: 'Allow notifications to get reminders.',
     blocked: 'Notifications are off for AI Planner. Turn them on in Android Settings.',
     error: 'Couldn’t save your reminders. Please try again.',
+    unknown: 'Couldn’t check the reminders on this phone. Change one to try again.',
 };
 // Saves still waiting for the app's answer. Until the last one is answered, the switches show
 // what the person chose, not an older answer.
@@ -2971,8 +2977,14 @@ let pendingReminderSaves = 0;
 let reminderSavesSent = 0;
 let reminderSavesAnswered = 0;
 const renderNativeReminders = () => {
-    const reminders = nativeApp().reminders;
-    $('settings-reminders')?.classList.toggle('hidden', !reminders);
+    const app = nativeApp();
+    const reminders = app.reminders;
+    // null: the app couldn't read its schedule. Show the section with a note, not a guess.
+    $('settings-reminders')?.classList.toggle('hidden', !('reminders' in app) || reminders === undefined);
+    if (pendingReminderSaves === 0) {
+        if (reminders === null) showFieldError('reminders-error', REMINDER_RESULTS.unknown);
+        else if ($('reminders-error')?.textContent === REMINDER_RESULTS.unknown) showFieldError('reminders-error', '');
+    }
     if (!reminders || pendingReminderSaves > 0) return;
     REMINDER_KEYS.forEach((key) => {
         const on = $(`reminder-${key}-on`);
@@ -3084,7 +3096,8 @@ window.aiPlannerAppStateChanged = () => {
     if (!result) return;
     updateReminderOffer(result);
     showSettingsStatus('reminders-status', result === 'saved' ? REMINDER_RESULTS.saved : '');
-    showFieldError('reminders-error', result === 'saved' ? '' : (REMINDER_RESULTS[result] || REMINDER_RESULTS.error));
+    const unknown = nativeApp().reminders === null;
+    showFieldError('reminders-error', result === 'saved' ? '' : (unknown ? REMINDER_RESULTS.unknown : (REMINDER_RESULTS[result] || REMINDER_RESULTS.error)));
 };
 renderNativeReminders();
 
