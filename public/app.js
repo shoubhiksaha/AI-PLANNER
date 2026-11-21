@@ -40,6 +40,8 @@ if (EMULATOR_MODE) window.__ENV_CONFIG__ = firebaseConfig; // getApiUrls reads p
 
 const app = initializeApp(firebaseConfig);
 const isNativeWebView = !!window.ReactNativeWebView;
+// "Tab" means nothing in the Android app (mental model).
+const KEEP_OPEN = isNativeWebView ? 'Keep AI Planner open.' : 'Keep this tab open.';
 
 const auth = isNativeWebView
     ? initializeAuth(app, { persistence: inMemoryPersistence })
@@ -110,6 +112,7 @@ let googleTokenExpiresAt = 0;
 let profileUnsubscribe = null;
 let userProfile = null;
 let isSyncing = false;             // B-16 global guard
+let syncedThisVisit = false; // the empty-tray hint after a sync says "another page"
 let isPaying = false;
 let isRecording = false;
 let lastAttempt = null;            // { id, mode, sig } — reuse clientRequestId for retries of the same pages
@@ -1692,10 +1695,11 @@ function updateDashButtons() {
 
     const hint = $('sync-hint');
     if (hint) {
-        if (isSyncing) hint.textContent = 'Syncing… please keep this tab open.';
+        // The loader below says how long it takes and to keep the app open; don't say it twice.
+        if (isSyncing) hint.textContent = 'Syncing…';
         else if (profileLoading) hint.textContent = 'Loading your account…';
         else if (isRecording) hint.textContent = 'Recording a voice note…';
-        else if (!hasImages) hint.textContent = 'Add a page photo first.';
+        else if (!hasImages) hint.textContent = syncedThisVisit ? 'Add another page to sync again.' : 'Add a page photo first.';
         else hint.textContent = `${filesAsBase64.length} page${filesAsBase64.length === 1 ? '' : 's'} ready.`;
     }
 
@@ -1838,6 +1842,7 @@ const PROGRESS_STEPS = {
     voice_note: [[0, 'Uploading your voice note…'], [5000, 'Typing it up…'], [18000, 'Saving it to {where}…'], [35000, 'Almost there…']],
 };
 let progressTimers = [];
+if ($('dash-loader-sub')) $('dash-loader-sub').textContent = `This usually takes 10–30 s. ${KEEP_OPEN}`;
 const setLoaderText = (text) => { const el = $('dash-loader-text'); if (el) el.textContent = text; };
 const startProgress = (mode) => {
     stopProgress();
@@ -1848,7 +1853,7 @@ const startProgress = (mode) => {
     (PROGRESS_STEPS[mode] || PROGRESS_STEPS.morning).forEach(([t, msg]) => {
         progressTimers.push(setTimeout(() => setLoaderText(msg.replace('{where}', where)), t));
     });
-    progressTimers.push(setTimeout(() => setLoaderText('Taking longer than usual — keep this tab open.'), 60000));
+    progressTimers.push(setTimeout(() => setLoaderText(`Taking longer than usual — ${KEEP_OPEN.charAt(0).toLowerCase()}${KEEP_OPEN.slice(1)}`), 60000));
 };
 const stopProgress = () => {
     progressTimers.forEach(clearTimeout);
@@ -2000,6 +2005,7 @@ async function runSync({ mode, images, clientRequestId, tokenPromise }) {
         stopProgress();
         const { res, data, error } = outcome;
         if (res && res.ok && data) {
+            syncedThisVisit = true;
             renderSyncSuccess({ mode, data, pages: images.length });
             if (isVoice) lastVoicePayload = null;
             else if (imagesSignature(filesAsBase64) === imagesSignature(images)) {
@@ -2118,6 +2124,7 @@ function renderSyncSuccess({ mode, data, pages }) {
         ].filter(Boolean).join(' · '),
         actions: openLinksFor(mode, data),
     });
+    offerNextReminder(mode);
     void pages;
 }
 
@@ -2966,6 +2973,9 @@ const REMINDER_RESULTS = {
 // Saves still waiting for the app's answer. Until the last one is answered, the switches show
 // what the person chose, not an older answer.
 let pendingReminderSaves = 0;
+// The app answers saves one at a time, in order: counting them tells which answer is whose.
+let reminderSavesSent = 0;
+let reminderSavesAnswered = 0;
 const renderNativeReminders = () => {
     const app = nativeApp();
     const reminders = app.reminders;
@@ -2986,18 +2996,105 @@ const renderNativeReminders = () => {
 const saveNativeReminders = () => {
     const read = (key) => ({ on: !!$(`reminder-${key}-on`)?.checked, time: $(`reminder-${key}-time`)?.value || '' });
     pendingReminderSaves += 1;
+    reminderSavesSent += 1;
     postNativeMessage('SET_REMINDERS', { morning: read('morning'), evening: read('evening') });
 };
 REMINDER_KEYS.forEach((key) => {
     $(`reminder-${key}-on`)?.addEventListener('change', saveNativeReminders);
     $(`reminder-${key}-time`)?.addEventListener('change', saveNativeReminders);
 });
+// The end of a sync is the moment a nudge for the next one makes sense (Peak-End, Zeigarnik):
+// in the app, when no reminder is on, offer one tap to set the next one. Shown at most 3 times,
+// never again once answered, and it always says how to change it.
+const REMINDER_OFFER_KEY = 'aiPlannerReminderOffer';
+const REMINDER_OFFER_MAX = 3;
+const readReminderOffer = () => {
+    try { return localStorage.getItem(REMINDER_OFFER_KEY) || ''; } catch { return 'done'; }
+};
+const writeReminderOffer = (value) => {
+    try { localStorage.setItem(REMINDER_OFFER_KEY, value); } catch { /* private mode: offer again next time */ }
+};
+const formatReminderTime = (hhmm) => {
+    const [h, m] = String(hhmm).split(':').map(Number);
+    if (!Number.isInteger(h) || !Number.isInteger(m)) return hhmm;
+    return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+};
+const NEXT_REMINDER = {
+    evening: { prompt: (t) => `Tonight, photograph the page again for your evening review. Want a nudge at ${t}?`, fallback: '21:00' },
+    morning: { prompt: (t) => `Tomorrow, photograph your plan for the day. Want a nudge at ${t}?`, fallback: '08:00' },
+};
+let reminderOfferKey = null; // the reminder the offer just set, waiting for the app's answer
+let reminderOfferSave = 0; // which save is the offer's (an earlier Settings save may answer first)
+function offerNextReminder(mode) {
+    const reminders = nativeApp().reminders;
+    const seen = readReminderOffer();
+    if (!reminders || reminders.morning?.on || reminders.evening?.on) return;
+    if (seen === 'done' || Number(seen) >= REMINDER_OFFER_MAX) return;
+    const card = statusArea?.querySelector('.status-card[data-tone="success"]');
+    if (!card) return;
+    writeReminderOffer(String((Number(seen) || 0) + 1));
+
+    const key = mode === 'morning' ? 'evening' : 'morning';
+    const time = reminders[key]?.time || NEXT_REMINDER[key].fallback;
+    const box = document.createElement('div');
+    box.id = 'reminder-offer';
+    box.className = 'border-t border-line pt-3 mt-1 space-y-2';
+    const text = document.createElement('p');
+    text.className = 'leading-snug';
+    text.textContent = NEXT_REMINDER[key].prompt(formatReminderTime(time));
+    const row = document.createElement('div');
+    row.className = 'flex flex-wrap gap-2';
+    const yes = document.createElement('button');
+    yes.type = 'button';
+    yes.id = 'reminder-offer-yes';
+    yes.className = 'btn btn-secondary';
+    yes.innerHTML = icon('bell', 'icon-sm');
+    yes.append(` Remind me at ${formatReminderTime(time)}`);
+    const no = document.createElement('button');
+    no.type = 'button';
+    no.id = 'reminder-offer-no';
+    no.className = 'btn btn-ghost';
+    no.textContent = 'No thanks';
+    yes.addEventListener('click', () => {
+        writeReminderOffer('done');
+        const on = $(`reminder-${key}-on`);
+        const field = $(`reminder-${key}-time`);
+        if (on) on.checked = true;
+        if (field) field.value = time;
+        reminderOfferKey = key;
+        saveNativeReminders();
+        reminderOfferSave = reminderSavesSent;
+        text.textContent = 'Setting your reminder…';
+        row.remove();
+    });
+    no.addEventListener('click', () => {
+        writeReminderOffer('done');
+        box.remove();
+    });
+    row.append(yes, no);
+    box.append(text, row);
+    card.appendChild(box);
+}
+const updateReminderOffer = (result) => {
+    const text = $('reminder-offer')?.querySelector('p');
+    // Only the answer to the offer's own save says whether its reminder was set.
+    if (!text || !reminderOfferKey || reminderSavesAnswered !== reminderOfferSave) return;
+    const time = formatReminderTime(nativeApp().reminders?.[reminderOfferKey]?.time || NEXT_REMINDER[reminderOfferKey].fallback);
+    text.textContent = result === 'saved'
+        ? `Reminder set for ${time}. Change it any time in Settings.`
+        : (REMINDER_RESULTS[result] || REMINDER_RESULTS.error);
+    reminderOfferKey = null;
+};
 window.aiPlannerAppStateChanged = () => {
     const result = nativeApp().remindersResult;
-    if (result) pendingReminderSaves = Math.max(0, pendingReminderSaves - 1);
+    if (result) {
+        pendingReminderSaves = Math.max(0, pendingReminderSaves - 1);
+        reminderSavesAnswered += 1;
+    }
     renderNativeReminders();
     if (filesAsBase64.length === 0 && $('upload-ui')) renderThumbnails(); // Camera ↔ Scan
     if (!result) return;
+    updateReminderOffer(result);
     showSettingsStatus('reminders-status', result === 'saved' ? REMINDER_RESULTS.saved : '');
     const unknown = nativeApp().reminders === null;
     showFieldError('reminders-error', result === 'saved' ? '' : (unknown ? REMINDER_RESULTS.unknown : (REMINDER_RESULTS[result] || REMINDER_RESULTS.error)));

@@ -327,6 +327,7 @@
         const parts = [];
         const added = [];
         if (num(c.events)) added.push(plural(num(c.events), 'event'));
+        if (num(c.reminders)) added.push(plural(num(c.reminders), 'calendar reminder'));
         if (num(c.tasks)) added.push(plural(num(c.tasks), 'task'));
         if (added.length) parts.push(`${added.join(' · ')} added`);
         if (num(c.completedTasks)) parts.push(`${plural(num(c.completedTasks), 'task')} completed`);
@@ -555,10 +556,26 @@
     exports.describeHistoryEntry = (entry) => {
         const e = entry || {};
         const message = typeof e.message === 'string' ? e.message : '';
-        if (e.status === 'success') return { state: 'success', message: message || 'Synced' };
+        // Same words as the result card ("2 events · 3 tasks added"), not the server's longer text.
+        const summary = e.counts ? exports.summarizeCounts(e.counts, { savedTo: e.savedTo }) : '';
+        if (e.status === 'success') {
+            if (!summary) return { state: 'success', message: message || 'Synced' };
+            // Like the result card: the counts, then the server's notes ("Notion isn't connected,
+            // so the brain dump wasn't saved.") and warnings ("Could not sync: …"), so the short
+            // summary never hides what wasn't saved. Notes that only repeat the counts are skipped.
+            const strings = (list) => (Array.isArray(list) ? list.filter((x) => typeof x === 'string' && x.trim()) : []);
+            const said = summary.toLowerCase();
+            const extra = [
+                ...strings(e.notes).filter((note) => !said.includes(note.toLowerCase().replace(/[.!]+$/, ''))),
+                ...strings(e.warnings),
+            ];
+            return { state: 'success', message: extra.length ? `${summary}. ${extra.join(' ')}` : summary };
+        }
         if (e.status === 'processing' || e.status === 'pending') return { state: 'pending', message: message || 'Processing…' };
         if (e.status === 'failed' && e.failureReason === 'interrupted') return { state: 'interrupted', message: exports.INTERRUPTED_MESSAGE };
-        return { state: 'failed', message: message || 'Sync failed' };
+        const failed = message || 'Sync failed';
+        const refunded = e.creditRefunded === true || e.refunded === true;
+        return { state: 'failed', message: refunded ? `${failed.replace(/\s+$/, '')} No credit used.` : failed };
     };
 
     const safeTimeZone = (tz) => {

@@ -1227,6 +1227,12 @@ video {
 
 /* Surfaces */
 
+.\!card {
+  background: var(--surface) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius-lg) !important;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -2330,6 +2336,10 @@ button.chip:hover {
 
 .pt-2 {
   padding-top: 0.5rem;
+}
+
+.pt-3 {
+  padding-top: 0.75rem;
 }
 
 .pt-6 {

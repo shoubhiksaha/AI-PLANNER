@@ -237,6 +237,50 @@ describe('C11 history rows', () => {
         expect(describeHistoryEntry({ status: 'processing' })).toEqual({ state: 'pending', message: 'Processing…' });
         expect(describeHistoryEntry(null)).toEqual({ state: 'failed', message: 'Sync failed' });
     });
+
+    test('rows use the result card\'s words and say when no credit was used', () => {
+        expect(describeHistoryEntry({
+            status: 'success',
+            message: 'Morning Sync Complete! Created 2 events, 0 reminders, and 3 tasks.',
+            counts: { events: 2, tasks: 3 },
+        })).toEqual({ state: 'success', message: '2 events · 3 tasks added' });
+        expect(describeHistoryEntry({ status: 'success', message: 'Saved.', counts: { journalPages: 1 }, savedTo: 'drive' }).message)
+            .toBe('1 journal page saved to Google Drive');
+        expect(describeHistoryEntry({
+            status: 'success',
+            message: 'Morning Sync Complete! Created 0 events, 1 reminders, and 1 tasks.',
+            counts: { events: 0, reminders: 1, tasks: 1 },
+        }).message).toBe('1 calendar reminder · 1 task added');
+        // Nothing counted: keep the server's message.
+        expect(describeHistoryEntry({ status: 'success', message: 'Nothing new.', counts: {} }).message).toBe('Nothing new.');
+        expect(describeHistoryEntry({ status: 'failed', message: 'The AI service is busy.', creditRefunded: true }).message)
+            .toBe('The AI service is busy. No credit used.');
+    });
+
+    test('a partial sync keeps its failure warning beside the counts', () => {
+        expect(describeHistoryEntry({
+            status: 'success',
+            message: 'Night Sync Complete: ✅ 1 task completed. ⚠️ Could not sync: Notion. Everything else was saved.',
+            counts: { completedTasks: 1 },
+            warnings: ['Could not sync: Notion. Everything else was saved.'],
+            partial: true,
+        }).message).toMatch(/^1 task\b.*\. Could not sync: Notion\. Everything else was saved\.$/);
+    });
+
+    test('history keeps the server\'s notes (e.g. a brain dump that wasn\'t saved) beside the counts', () => {
+        expect(describeHistoryEntry({
+            status: 'success',
+            message: 'Night Sync Complete: ✅ 1 task completed. Notion isn\'t connected, so the brain dump wasn\'t saved.',
+            counts: { completedTasks: 1 },
+            notes: ["Notion isn't connected, so the brain dump wasn't saved."],
+            warnings: [],
+        }).message).toBe("1 task completed. Notion isn't connected, so the brain dump wasn't saved.");
+        // A note that only repeats the counts is not shown twice.
+        expect(describeHistoryEntry({
+            status: 'success', message: 'x', counts: { brainDump: 1 }, savedTo: 'drive',
+            notes: ['Brain dump saved to Google Drive.'],
+        }).message).toBe('brain dump saved to Google Drive');
+    });
 });
 
 describe('Round 3: one project, two environments', () => {

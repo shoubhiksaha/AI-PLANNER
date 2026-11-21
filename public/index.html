@@ -29,6 +29,7 @@
   <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /> <path d="M12 2v2" /> <path d="M12 20v2" /> <path d="m4.93 4.93 1.41 1.41" /> <path d="m17.66 17.66 1.41 1.41" /> <path d="M2 12h2" /> <path d="M20 12h2" /> <path d="m6.34 17.66-1.41 1.41" /> <path d="m19.07 4.93-1.41 1.41" /></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0" /> <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" /></symbol>
   <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2" /> <line x1="8" x2="16" y1="21" y2="21" /> <line x1="12" x2="12" y1="17" y2="21" /></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
@@ -248,33 +249,6 @@
                 <p id="name-status" class="hidden field-help" role="status"></p>
             </section>
 
-            <!-- Appearance: the same choices as the theme menu in the app bar (docs/THEMES.md) -->
-            <section aria-labelledby="settings-appearance-title" class="space-y-3">
-                <h3 id="settings-appearance-title" class="section-title">Appearance</h3>
-                <fieldset class="space-y-2">
-                    <legend class="field-label">Mode</legend>
-                    <div class="grid gap-2 sm:grid-cols-3">
-                        <label class="choice items-center">
-                            <input type="radio" name="theme-mode" value="auto">
-                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-monitor"></use></svg> Match device</span>
-                        </label>
-                        <label class="choice items-center">
-                            <input type="radio" name="theme-mode" value="light">
-                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-sun"></use></svg> Light</span>
-                        </label>
-                        <label class="choice items-center">
-                            <input type="radio" name="theme-mode" value="dark">
-                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg> Dark</span>
-                        </label>
-                    </div>
-                </fieldset>
-                <fieldset class="space-y-2">
-                    <legend class="field-label">Style</legend>
-                    <!-- One choice per theme pack (themes/packs.js), added by app.js -->
-                    <div id="settings-style-choices" class="space-y-2"></div>
-                </fieldset>
-            </section>
-
             <!-- Reminders: only in the Android app, which schedules them on the phone (docs/MOBILE.md) -->
             <section id="settings-reminders" aria-labelledby="settings-reminders-title" class="hidden space-y-3">
                 <h3 id="settings-reminders-title" class="section-title">Reminders</h3>
@@ -301,6 +275,33 @@
                 </div>
                 <p id="reminders-error" class="hidden field-error" role="alert"></p>
                 <p id="reminders-status" class="hidden field-help" role="status"></p>
+            </section>
+
+            <!-- Appearance: the same choices as the theme menu in the app bar (docs/THEMES.md) -->
+            <section aria-labelledby="settings-appearance-title" class="space-y-3">
+                <h3 id="settings-appearance-title" class="section-title">Appearance</h3>
+                <fieldset class="space-y-2">
+                    <legend class="field-label">Mode</legend>
+                    <div class="grid gap-2 sm:grid-cols-3">
+                        <label class="choice items-center">
+                            <input type="radio" name="theme-mode" value="auto">
+                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-monitor"></use></svg> Match device</span>
+                        </label>
+                        <label class="choice items-center">
+                            <input type="radio" name="theme-mode" value="light">
+                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-sun"></use></svg> Light</span>
+                        </label>
+                        <label class="choice items-center">
+                            <input type="radio" name="theme-mode" value="dark">
+                            <span class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg> Dark</span>
+                        </label>
+                    </div>
+                </fieldset>
+                <fieldset class="space-y-2">
+                    <legend class="field-label">Style</legend>
+                    <!-- One choice per theme pack (themes/packs.js), added by app.js -->
+                    <div id="settings-style-choices" class="space-y-2"></div>
+                </fieldset>
             </section>
 
             <!-- Where notes go -->
@@ -505,7 +506,7 @@
                 <div id="dash-loader" class="hidden flex-col items-center gap-2 py-3" role="status" aria-live="polite">
                     <div class="spinner" aria-hidden="true"></div>
                     <p id="dash-loader-text" class="text-sm font-semibold text-ink text-center">Syncing…</p>
-                    <p class="text-xs text-muted">This usually takes 10–30 s. Keep this tab open.</p>
+                    <p id="dash-loader-sub" class="text-xs text-muted">This usually takes 10–30 s. Keep this tab open.</p>
                 </div>
 
                 <div id="status-area" class="hidden scroll-mt-20" role="status" aria-live="polite" tabindex="-1"></div>
