@@ -158,6 +158,8 @@ function AppContent() {
   const [webError, setWebError] = useState(null);
   const [webViewKey, setWebViewKey] = useState(0);
   const [splashDone, setSplashDone] = useState(false);
+  const [waitingPhotos, setWaitingPhotos] = useState(0); // shared before sign-in, shown on sign-in
+  const [offlineCheck, setOfflineCheck] = useState(null); // "Try again" while offline: 'checking' | 'still'
 
   const webviewRef = useRef(null);
   const tokensRef = useRef(null);
@@ -180,6 +182,7 @@ function AppContent() {
   const pendingLinkRef = useRef(null);
   const pendingImagesRef = useRef([]);
   const scanningRef = useRef(false);
+  const remindersQueueRef = useRef(Promise.resolve()); // SET_REMINDERS run one at a time, in order
   const incomingShare = useIncomingShare();
 
   const isPageReady = webBridgeStatus === 'authenticated' || webBridgeStatus === 'ready';
@@ -189,6 +192,7 @@ function AppContent() {
   const setOffline = (offline) => {
     isOfflineRef.current = offline;
     setIsOffline(offline);
+    setOfflineCheck(null);
   };
 
   const hideSplash = useCallback(() => {
@@ -309,13 +313,17 @@ function AppContent() {
   // OAuth tokens stay in memory only; the native Google SDK manages its own account session.
   // Offline, it waits for the connection instead of showing the sign-in screen.
   const boot = async () => {
-    if (await isOfflineNow()) {
+    // Taken before the first await, so "Sign in again" (abandonBoot) also stops a check that is
+    // still waiting for the connection test.
+    const run = ++bootRunRef.current;
+    const offline = await isOfflineNow();
+    if (run !== bootRunRef.current) return;
+    if (offline) {
       bootRef.current = 'waiting';
       setOffline(true);
       setIsCheckingLogin(false);
       return;
     }
-    const run = ++bootRunRef.current;
     bootRef.current = 'running';
     setIsCheckingLogin(true);
     try {
@@ -466,6 +474,7 @@ function AppContent() {
     if (!images.length) return;
     if (!pageShellReadyRef.current) {
       pendingImagesRef.current = [...pendingImagesRef.current, ...images].slice(0, MAX_SHARED_IMAGES);
+      setWaitingPhotos(pendingImagesRef.current.length);
       return;
     }
     injectIntoPage(buildAddImagesScript(images, APP_ORIGINS));
@@ -485,6 +494,7 @@ function AppContent() {
   const flushPending = () => {
     const images = pendingImagesRef.current;
     pendingImagesRef.current = [];
+    setWaitingPhotos(0);
     deliverImages(images);
     const target = pendingLinkRef.current;
     pendingLinkRef.current = null;
@@ -500,7 +510,8 @@ function AppContent() {
       const uris = await scanPagesAsync({ pageLimit: clampScanPages(maxPages) });
       if (!uris.length) return;
       injectIntoPage(buildPreparingImagesScript(APP_ORIGINS));
-      deliverImages(await preparePageImages(uris, 'scan'));
+      // Sent even when no page could be read, so the page leaves "Preparing your photos…".
+      injectIntoPage(buildAddImagesScript(await preparePageImages(uris, 'scan'), APP_ORIGINS));
     } catch (e) {
       console.warn('Document scanner failed:', e);
       appStateRef.current = { ...appStateRef.current, scanner: false };
@@ -511,7 +522,13 @@ function AppContent() {
     }
   };
 
-  const setReminders = async (settings) => {
+  const setReminders = (settings) => {
+    const next = remindersQueueRef.current.then(() => applyAndReportReminders(settings));
+    remindersQueueRef.current = next.catch(() => {});
+    return next;
+  };
+
+  const applyAndReportReminders = async (settings) => {
     const result = await applyReminders(settings);
     appStateRef.current = { ...appStateRef.current, reminders: result.reminders };
     tellPageAppState({ remindersResult: result.ok ? 'saved' : result.reason });
@@ -553,7 +570,19 @@ function AppContent() {
       .slice(0, MAX_SHARED_IMAGES);
     if (!shared.length) return;
     incomingShare.clearSharedPayloads();
-    preparePageImages(shared, 'shared').then(deliverImages);
+    // The page shows "Preparing your photos…" right away and always hears back, even if none
+    // could be read. Before sign-in the photos wait (the sign-in screen says so).
+    const pageWasReady = pageShellReadyRef.current;
+    if (pageWasReady) injectIntoPage(buildPreparingImagesScript(APP_ORIGINS));
+    preparePageImages(shared, 'shared').then((images) => {
+      if (pageWasReady && pageShellReadyRef.current) {
+        injectIntoPage(buildAddImagesScript(images, APP_ORIGINS));
+      } else if (images.length) {
+        deliverImages(images);
+      } else {
+        Alert.alert('Couldn’t open those photos', 'Try sharing them again, or add them from Gallery in AI Planner.');
+      }
+    });
   }, [incomingShare.resolvedSharedPayloads]);
 
   // "Download your data": the page hands the file over (SAVE_FILE); save it and open the share sheet.
@@ -601,6 +630,7 @@ function AppContent() {
       if (!appStateSentRef.current) {
         appStateSentRef.current = true;
         tellPageAppState();
+        tellPageCameraState(); // a reloaded page starts without the camera flag
       }
       if (!pageShellReadyRef.current) {
         pageShellReadyRef.current = true;
@@ -720,7 +750,12 @@ function AppContent() {
   }
 
   const retryFromOffline = async () => {
-    if (await isOfflineNow()) return;
+    setOfflineCheck('checking');
+    if (await isOfflineNow()) {
+      setOfflineCheck('still');
+      AccessibilityInfo.announceForAccessibility('Still offline.');
+      return;
+    }
     setOffline(false);
     if (bootRef.current === 'waiting') boot();
     else retryWebView();
@@ -743,7 +778,7 @@ function AppContent() {
   const systemBars = (
     <>
       <StatusBar barStyle={c.dark ? 'light-content' : 'dark-content'} backgroundColor={c.edge} />
-      {Platform.OS === 'android' ? <NavigationBar style={c.dark ? 'dark' : 'light'} /> : null}
+      {Platform.OS === 'android' ? <NavigationBar style={c.dark ? 'light' : 'dark'} /> : null}
     </>
   );
 
@@ -763,12 +798,13 @@ function AppContent() {
       <SafeAreaView style={[styles.fill, { backgroundColor: c.bg }]}>
         {systemBars}
         {isOffline ? (
-          <OfflineScreen c={c} onRetry={retryFromOffline} />
+          <OfflineScreen c={c} onRetry={retryFromOffline} check={offlineCheck} />
         ) : (
           <SignInScreen
             c={c}
             busy={isNativeLoginInProgress}
             error={loginError}
+            waitingPhotos={waitingPhotos}
             onSignIn={handleNativeLogin}
             onOpenPage={openPage}
             onOpenAdt={() => openInBrowser(ADT_URL)}
@@ -821,7 +857,7 @@ function AppContent() {
         onContentProcessDidTerminate={handleContentProcessDidTerminate}
       />
       {isOffline ? (
-        <OfflineScreen c={c} onRetry={retryFromOffline} />
+        <OfflineScreen c={c} onRetry={retryFromOffline} check={offlineCheck} />
       ) : webError ? (
         <LoadErrorScreen c={c} message={webError} onRetry={retryWebView} />
       ) : !isPageReady ? (

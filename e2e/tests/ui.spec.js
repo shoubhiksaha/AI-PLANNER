@@ -420,7 +420,10 @@ test.describe('In the mobile app', () => {
     test('Camera opens the app\'s page scanner when the app has one, for the pages that still fit', async ({ page }) => {
         let choosers = 0;
         page.on('filechooser', () => { choosers += 1; });
-        await page.evaluate(() => { window.__aiPlannerApp = { scanner: true }; });
+        await expect(page.locator('#drop-zone label:has(input[capture])')).toContainText('Camera');
+        await page.evaluate(() => { window.__aiPlannerApp = { scanner: true }; window.aiPlannerAppStateChanged(); });
+        // It opens a scanner, so it says Scan.
+        await expect(page.locator('#drop-zone label:has(input[capture])')).toContainText('Scan');
         await page.locator('#drop-zone label:has(input[capture])').click();
         const scans = await messages(page, 'SCAN_PAGES');
         expect(scans).toHaveLength(1);
@@ -441,6 +444,29 @@ test.describe('In the mobile app', () => {
         await page.evaluate(() => window.aiPlannerAddImages([{ name: 'x.html', mimeType: 'text/html', base64: 'PGI+' }]));
         await expect(page.locator('#drop-zone img')).toHaveCount(1);
         await expect(page.locator('#status-area')).toContainText('Those photos couldn’t be added');
+    });
+
+    test('Photos from the app that don\'t fit bring the tray back with the plan notice', async ({ page }) => {
+        const add = () => page.evaluate((png) => window.aiPlannerAddImages([{ name: 'p.png', mimeType: 'image/png', base64: png }]), PNG);
+        // Fill the tray to the plan's limit, then hand over one more page while "Preparing" shows.
+        for (let i = 0; i < 10 && await page.evaluate(() => !document.querySelector('#status-area')?.textContent.includes('per sync')); i++) {
+            await add();
+            await expect(page.locator('#drop-zone')).not.toContainText('Preparing your photos');
+        }
+        const pages = await page.locator('#drop-zone img').count();
+        expect(pages).toBeGreaterThan(0);
+        await page.evaluate(() => window.aiPlannerPreparingImages());
+        await add();
+        await expect(page.locator('#drop-zone img')).toHaveCount(pages);
+        await expect(page.locator('#drop-zone')).not.toContainText('Preparing your photos');
+        await expect(page.locator('#status-area')).toContainText('per sync');
+    });
+
+    test('Without the scanner, a scan shortcut goes through the Camera control', async ({ page }) => {
+        await page.evaluate(() => { window.__aiPlannerCameraAllowed = false; window.AppHelpers.switchView('view-history'); });
+        expect(await page.evaluate(() => window.aiPlannerOpen('scan'))).toBe(true);
+        await expect(page.locator('#view-dashboard')).toBeVisible();
+        expect(await posted(page)).toContain('REQUEST_CAMERA');
     });
 
     test('Icon shortcuts and reminders open their screen', async ({ page }) => {
@@ -473,9 +499,27 @@ test.describe('In the mobile app', () => {
         await expect(page.locator('#reminder-morning-time')).toHaveValue('07:30');
         await expect(page.locator('#reminder-evening-on')).toBeChecked();
 
-        await page.locator('label[for="reminder-morning-on"]').click();
+        // The switch takes taps a little outside its drawn edge (44 px tall target).
+        await page.locator('label[for="reminder-morning-on"]').scrollIntoViewIfNeeded();
+        const box = await page.locator('label[for="reminder-morning-on"]').boundingBox();
+        await page.mouse.click(box.x + box.width / 2, box.y - 8);
+        await expect(page.locator('#reminder-morning-on')).toBeChecked();
         const saved = await messages(page, 'SET_REMINDERS');
         expect(saved.at(-1).payload).toEqual({ morning: { on: true, time: '07:30' }, evening: { on: true, time: '21:00' } });
+
+        // A second change before the app answers the first: the first answer must not undo it.
+        await page.locator('label[for="reminder-evening-on"]').click();
+        await page.evaluate(() => {
+            window.__aiPlannerApp = { ...window.__aiPlannerApp, reminders: { morning: { on: true, time: '07:30' }, evening: { on: true, time: '21:00' } }, remindersResult: 'saved' };
+            window.aiPlannerAppStateChanged();
+        });
+        await expect(page.locator('#reminder-evening-on')).not.toBeChecked();
+        await page.evaluate(() => {
+            window.__aiPlannerApp = { ...window.__aiPlannerApp, reminders: { morning: { on: true, time: '07:30' }, evening: { on: false, time: '21:00' } }, remindersResult: 'saved' };
+            window.aiPlannerAppStateChanged();
+        });
+        await expect(page.locator('#reminder-evening-on')).not.toBeChecked();
+        await expect(page.locator('#reminder-morning-on')).toBeChecked();
 
         await page.evaluate(() => {
             window.__aiPlannerApp = { ...window.__aiPlannerApp, remindersResult: 'blocked' };

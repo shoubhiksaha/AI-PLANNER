@@ -1443,11 +1443,16 @@ const uploadLabel = (iconName, text, extraAttrs) => `
             <span class="text-sm font-semibold text-ink pointer-events-none">${text}</span>
         </label>`;
 
+// In the Android app with Google's document scanner, Camera opens the scanner, so it says so.
+const hasNativeScanner = () => isNativeWebView && window.__aiPlannerApp?.scanner === true;
+
 const defaultUploadUI = () => `
     <div id="upload-ui" class="w-full flex flex-col items-center gap-3 p-5 relative z-10">
         <p class="font-display font-bold text-ink text-center">Photograph today’s page</p>
         <div class="flex items-stretch justify-center gap-2 sm:gap-3">
-            ${uploadLabel('camera', 'Camera', 'capture="environment" aria-label="Take a photo of your page"')}
+            ${hasNativeScanner()
+                ? uploadLabel('scan-line', 'Scan', 'capture="environment" aria-label="Scan your page"')
+                : uploadLabel('camera', 'Camera', 'capture="environment" aria-label="Take a photo of your page"')}
             ${uploadLabel('image', 'Gallery', 'multiple aria-label="Choose page photos from your gallery"')}
             ${uploadLabel('folder', 'Files', 'multiple aria-label="Choose page image files"')}
         </div>
@@ -1625,6 +1630,9 @@ const handleFiles = async (files) => {
             const data = await prepareImage(file);
             if (!data) {
                 problems.push(`${file.name} couldn’t be read. It may be corrupted or unsupported.`);
+            } else if (remainingUploadSlots() <= 0) {
+                // Another batch (a drop, a pick, photos from the app) filled the tray meanwhile.
+                problems.push(`${file.name} didn’t fit — your plan holds ${maxUploadForTier(tier)} page${maxUploadForTier(tier) === 1 ? '' : 's'} per sync.`);
             } else if (imagesPayloadChars(filesAsBase64) + data.length > MAX_IMAGES_PAYLOAD_CHARS) {
                 problems.push(`${file.name} didn’t fit — these photos are too large to sync together. Sync the others first, then add it.`);
             } else {
@@ -2903,6 +2911,12 @@ window.aiPlannerAddImages = (images) => {
     if (!isSignedInChrome() || !Array.isArray(images)) return;
     if (!isPaying) showDashboardForNative();
     const files = images.map(nativeImageToFile).filter(Boolean);
+    // handleFiles would turn these away without redrawing the tray, which may show "Preparing…".
+    if (files.length && (isSyncing || remainingUploadSlots() <= 0)) {
+        renderThumbnails();
+        if (!isSyncing) showTrayFullCard();
+        return;
+    }
     if (files.length) {
         handleFiles(files);
         return;
@@ -2916,7 +2930,15 @@ window.aiPlannerOpen = (target) => {
     if (!isSignedInChrome() || isPaying) return false;
     if (target === 'scan') {
         showDashboardForNative();
-        if (nativeApp().scanner === true) requestNativeScan();
+        if (nativeApp().scanner === true) {
+            requestNativeScan();
+        } else {
+            // Same path as tapping Camera (permission first if needed). Android may want a tap
+            // before it opens the camera, so the Camera control also gets focus.
+            const camera = dropZone?.querySelector('input[type="file"][capture]');
+            camera?.focus();
+            camera?.click();
+        }
         return true;
     }
     if (target === 'history' || target === 'reports') {
@@ -2935,10 +2957,13 @@ const REMINDER_RESULTS = {
     blocked: 'Notifications are off for AI Planner. Turn them on in Android Settings.',
     error: 'Couldn’t save your reminders. Please try again.',
 };
+// Saves still waiting for the app's answer. Until the last one is answered, the switches show
+// what the person chose, not an older answer.
+let pendingReminderSaves = 0;
 const renderNativeReminders = () => {
     const reminders = nativeApp().reminders;
     $('settings-reminders')?.classList.toggle('hidden', !reminders);
-    if (!reminders) return;
+    if (!reminders || pendingReminderSaves > 0) return;
     REMINDER_KEYS.forEach((key) => {
         const on = $(`reminder-${key}-on`);
         const time = $(`reminder-${key}-time`);
@@ -2948,6 +2973,7 @@ const renderNativeReminders = () => {
 };
 const saveNativeReminders = () => {
     const read = (key) => ({ on: !!$(`reminder-${key}-on`)?.checked, time: $(`reminder-${key}-time`)?.value || '' });
+    pendingReminderSaves += 1;
     postNativeMessage('SET_REMINDERS', { morning: read('morning'), evening: read('evening') });
 };
 REMINDER_KEYS.forEach((key) => {
@@ -2955,8 +2981,10 @@ REMINDER_KEYS.forEach((key) => {
     $(`reminder-${key}-time`)?.addEventListener('change', saveNativeReminders);
 });
 window.aiPlannerAppStateChanged = () => {
-    renderNativeReminders();
     const result = nativeApp().remindersResult;
+    if (result) pendingReminderSaves = Math.max(0, pendingReminderSaves - 1);
+    renderNativeReminders();
+    if (filesAsBase64.length === 0 && $('upload-ui')) renderThumbnails(); // Camera ↔ Scan
     if (!result) return;
     showSettingsStatus('reminders-status', result === 'saved' ? REMINDER_RESULTS.saved : '');
     showFieldError('reminders-error', result === 'saved' ? '' : (REMINDER_RESULTS[result] || REMINDER_RESULTS.error));

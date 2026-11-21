@@ -65,7 +65,7 @@ function AdtFooter({ c, onPress }) {
   );
 }
 
-export function SignInScreen({ c, busy, error, onSignIn, onOpenPage, onOpenAdt }) {
+export function SignInScreen({ c, busy, error, waitingPhotos = 0, onSignIn, onOpenPage, onOpenAdt }) {
   return (
     <ScrollView
       style={{ backgroundColor: c.bg }}
@@ -77,6 +77,15 @@ export function SignInScreen({ c, busy, error, onSignIn, onOpenPage, onOpenAdt }
         <Text style={[styles.tagline, { color: c.inkMuted }]}>
           Write your day on paper. Take a photo. It’s in your calendar.
         </Text>
+
+        {waitingPhotos > 0 ? (
+          <View style={[styles.notice, styles.noticeTop, { borderColor: c.lineStrong, backgroundColor: c.surface }]}>
+            <Text style={[styles.noticeText, { color: c.ink }]} accessibilityLiveRegion="polite">
+              {waitingPhotos === 1 ? '1 photo is waiting.' : `${waitingPhotos} photos are waiting.`} Sign in and
+              {waitingPhotos === 1 ? ' it goes' : ' they go'} straight into your tray.
+            </Text>
+          </View>
+        ) : null}
 
         <Pressable
           onPress={onSignIn}
@@ -177,7 +186,7 @@ export function OpeningScreen({ c, onSignInAgain, slowAfterMs = 12000 }) {
 }
 
 /** No connection. The app retries on its own when the connection comes back. */
-export function OfflineScreen({ c, onRetry }) {
+export function OfflineScreen({ c, onRetry, check = null }) {
   return (
     <View style={[styles.overlay, { backgroundColor: c.bg }]}>
       <Lockup c={c} />
@@ -187,7 +196,15 @@ export function OfflineScreen({ c, onRetry }) {
       <Text style={[styles.overlayBody, { color: c.inkMuted }]} accessibilityLiveRegion="polite">
         Connect to the internet to open AI Planner. It opens on its own when you’re back online.
       </Text>
-      <SecondaryButton c={c} label="Try again" onPress={onRetry} />
+      <SecondaryButton
+        c={c}
+        label={check === 'checking' ? 'Checking…' : 'Try again'}
+        onPress={onRetry}
+        disabled={check === 'checking'}
+      />
+      {check === 'still' ? (
+        <Text style={[styles.overlayBody, { color: c.inkMuted }]}>Still offline. Check Wi-Fi or mobile data.</Text>
+      ) : null}
     </View>
   );
 }
@@ -209,10 +226,12 @@ export function LoadErrorScreen({ c, message, onRetry }) {
   );
 }
 
-function SecondaryButton({ c, label, onPress }) {
+function SecondaryButton({ c, label, onPress, disabled = false }) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
+      accessibilityState={{ disabled, busy: disabled }}
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.secondaryBtn,
@@ -236,6 +255,7 @@ const styles = StyleSheet.create({
   googleG: { width: 20, height: 20, marginRight: 8 },
   googleText: { fontFamily: font.medium, fontSize: 16, lineHeight: 20, letterSpacing: 0.16 },
   notice: { width: '100%', marginTop: 16, borderWidth: 1, borderRadius: 8, padding: 12 },
+  noticeTop: { marginTop: 24 },
   noticeText: { fontSize: 14, lineHeight: 20 },
   steps: { width: '100%', marginTop: 40, gap: 12 },
   card: { flexDirection: 'row', borderWidth: 1, borderRadius: 16, padding: 16, gap: 12 },

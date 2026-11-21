@@ -36,7 +36,7 @@ Everything the Play Console asks for, in the order it asks. Graphics are in this
 > • Shortcuts: long-press the icon to scan a page, see your sync history or your last 30 days.
 > • Light and dark mode, in two styles.
 >
-> Private by design: your photos are processed and then discarded; they’re never stored on our servers. AI Planner only gets access to the calendar events and tasks it creates, and the files it makes in your Drive. Your data is never used to train AI models.
+> Private by design: your photos are processed and then discarded; they’re never stored on our servers. AI Planner asks for access to your Google Calendar events and Google Tasks so it can add what you wrote (and, if you choose, check that day for duplicates), and only to the files it makes in your Drive. Your data is never used to train AI models.
 >
 > Works with any notebook. Our free printable planner page works best.
 >
