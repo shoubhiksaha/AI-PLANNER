@@ -1,7 +1,7 @@
 // Reminder scheduling against a fake Android scheduler: what's reported is always what's scheduled.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyRemindersWith, loadRemindersWith, remindersFromScheduled, MESSAGES } from './reminder-core.js';
+import { applyRemindersWith, loadRemindersWith, remindersFromScheduled, readSettingsWith, writeSettingsWith, MESSAGES } from './reminder-core.js';
 
 const OFF = { morning: { on: false, time: '08:00' }, evening: { on: false, time: '21:00' } };
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -113,4 +113,60 @@ test('loading trusts the schedule over the file, and keeps remembered times for 
 test('reminders scheduled by older builds (no tag) are recognised by their title', () => {
   const old = [{ content: { ...MESSAGES.morning, data: { url: 'aiplanner://scan' } }, trigger: { hour: 6, minute: 5 } }];
   assert.deepEqual(plain(remindersFromScheduled(old)), { morning: { on: true, time: '06:05' }, evening: { on: false, time: '21:00' } });
+});
+
+test('if the schedule can\'t be read at all, loading reports unknown (null), not the saved settings', async () => {
+  const { deps } = fakePhone({ saved: { ...OFF, morning: { on: true, time: '08:00' } }, fail: { getScheduled: true } });
+  assert.equal(await loadRemindersWith(deps), null);
+});
+
+test('repeated read failures: a failed change reports unknown, and permission refusal reports unknown too', async () => {
+  // Reading never works; scheduling the new reminder fails.
+  const { deps } = fakePhone({ saved: { ...OFF, morning: { on: true, time: '08:00' } }, fail: { getScheduled: true, 'schedule:evening': true } });
+  assert.deepEqual(await applyRemindersWith(deps, { ...OFF, evening: { on: true, time: '21:00' } }), { ok: false, reason: 'error', reminders: null });
+  const refused = fakePhone({ fail: { getScheduled: true, permission: 'denied' } });
+  assert.deepEqual(await applyRemindersWith(refused.deps, { ...OFF, morning: { on: true, time: '08:00' } }), { ok: false, reason: 'denied', reminders: null });
+});
+
+/** A fake documents folder; `fail` names operations that throw ('move:temp>main' etc.). */
+function fakeFolder(files = {}, fail = {}) {
+  const state = { files: { ...files } };
+  const check = (op) => { if (fail[op]) throw new Error(`${op} failed`); };
+  const fs = {
+    exists: async (name) => name in state.files,
+    read: async (name) => { check(`read:${name}`); return state.files[name]; },
+    write: async (name, text) => { check(`write:${name}`); state.files[name] = text; },
+    // Like Android: the destination is deleted first, then the file is moved.
+    move: async (from, to) => { delete state.files[to]; check(`move:${from}>${to}`); state.files[to] = state.files[from]; delete state.files[from]; },
+    remove: async (name) => { check(`remove:${name}`); delete state.files[name]; },
+  };
+  return { fs, state };
+}
+const json = (r) => JSON.stringify(r);
+const MORNING = { ...OFF, morning: { on: true, time: '07:00' } };
+
+test('settings file: a save replaces it and leaves no temporary or backup file', async () => {
+  const { fs, state } = fakeFolder({ main: json(OFF) });
+  await writeSettingsWith(fs, MORNING);
+  assert.deepEqual(Object.keys(state.files), ['main']);
+  assert.deepEqual(plain(await readSettingsWith(fs)), MORNING);
+});
+
+test('settings file: if moving the new file into place fails, the old settings are put back', async () => {
+  const { fs, state } = fakeFolder({ main: json(OFF) }, { 'move:temp>main': true });
+  await assert.rejects(writeSettingsWith(fs, MORNING));
+  assert.equal(state.files.main, json(OFF));
+  assert.deepEqual(plain(await readSettingsWith(fs)), OFF);
+});
+
+test('settings file: if the old file can\'t be put back either, the backup is still read', async () => {
+  const { fs, state } = fakeFolder({ main: json(OFF) }, { 'move:temp>main': true, 'move:backup>main': true });
+  await assert.rejects(writeSettingsWith(fs, MORNING, () => {}));
+  assert.equal('main' in state.files, false);
+  assert.deepEqual(plain(await readSettingsWith(fs)), OFF);
+});
+
+test('settings file: an unreadable main file falls back to the backup, then to the defaults', async () => {
+  assert.deepEqual(plain(await readSettingsWith(fakeFolder({ main: '{broken', backup: json(MORNING) }).fs, () => {})), MORNING);
+  assert.deepEqual(plain(await readSettingsWith(fakeFolder({ main: '{broken' }).fs, () => {})), OFF);
 });

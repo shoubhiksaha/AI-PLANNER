@@ -462,6 +462,39 @@ test.describe('In the mobile app', () => {
         await expect(page.locator('#status-area')).toContainText('per sync');
     });
 
+    test('A scan shortcut with a full tray says the tray is full', async ({ page }) => {
+        const add = () => page.evaluate((png) => window.aiPlannerAddImages([{ name: 'p.png', mimeType: 'image/png', base64: png }]), PNG);
+        for (let i = 0; i < 10 && await page.evaluate(() => !document.querySelector('#status-area')?.textContent.includes('per sync')); i++) {
+            await add();
+            await expect(page.locator('#drop-zone')).not.toContainText('Preparing your photos');
+        }
+        await page.evaluate(() => window.AppHelpers.switchView('view-history'));
+        await page.evaluate(() => { window.__posted.length = 0; });
+        expect(await page.evaluate(() => window.aiPlannerOpen('scan'))).toBe(true);
+        await expect(page.locator('#view-dashboard')).toBeVisible();
+        await expect(page.locator('#status-area')).toContainText('per sync');
+        const sent = await posted(page);
+        expect(sent).not.toContain('SCAN_PAGES');
+        expect(sent).not.toContain('REQUEST_CAMERA');
+    });
+
+    test('Reminders the app couldn\'t read show a note, not a guess', async ({ page }) => {
+        await page.evaluate(() => {
+            window.AppHelpers.switchView('view-setup');
+            window.__aiPlannerApp = { scanner: false, reminders: null };
+            window.aiPlannerAppStateChanged();
+        });
+        await expect(page.locator('#settings-reminders')).toBeVisible();
+        await expect(page.locator('#reminders-error')).toHaveText('Couldn’t check the reminders on this phone. Change one to try again.');
+        // Once the app can read them again, the note goes.
+        await page.evaluate(() => {
+            window.__aiPlannerApp = { scanner: false, reminders: { morning: { on: true, time: '08:00' }, evening: { on: false, time: '21:00' } } };
+            window.aiPlannerAppStateChanged();
+        });
+        await expect(page.locator('#reminders-error')).toBeHidden();
+        await expect(page.locator('#reminder-morning-on')).toBeChecked();
+    });
+
     test('Without the scanner, a scan shortcut goes through the Camera control', async ({ page }) => {
         await page.evaluate(() => { window.__aiPlannerCameraAllowed = false; window.AppHelpers.switchView('view-history'); });
         expect(await page.evaluate(() => window.aiPlannerOpen('scan'))).toBe(true);
