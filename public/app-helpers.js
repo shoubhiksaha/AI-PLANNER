@@ -558,11 +558,18 @@
         const message = typeof e.message === 'string' ? e.message : '';
         // Same words as the result card ("2 events · 3 tasks added"), not the server's longer text.
         const summary = e.counts ? exports.summarizeCounts(e.counts, { savedTo: e.savedTo }) : '';
-        // A sync that saved some things but not others keeps its warning ("Could not sync: …").
-        const warnings = Array.isArray(e.warnings) ? e.warnings.filter((w) => typeof w === 'string' && w.trim()) : [];
         if (e.status === 'success') {
-            if (summary && warnings.length) return { state: 'success', message: `${summary}. ${warnings.join(' ')}` };
-            return { state: 'success', message: summary || message || 'Synced' };
+            if (!summary) return { state: 'success', message: message || 'Synced' };
+            // Like the result card: the counts, then the server's notes ("Notion isn't connected,
+            // so the brain dump wasn't saved.") and warnings ("Could not sync: …"), so the short
+            // summary never hides what wasn't saved. Notes that only repeat the counts are skipped.
+            const strings = (list) => (Array.isArray(list) ? list.filter((x) => typeof x === 'string' && x.trim()) : []);
+            const said = summary.toLowerCase();
+            const extra = [
+                ...strings(e.notes).filter((note) => !said.includes(note.toLowerCase().replace(/[.!]+$/, ''))),
+                ...strings(e.warnings),
+            ];
+            return { state: 'success', message: extra.length ? `${summary}. ${extra.join(' ')}` : summary };
         }
         if (e.status === 'processing' || e.status === 'pending') return { state: 'pending', message: message || 'Processing…' };
         if (e.status === 'failed' && e.failureReason === 'interrupted') return { state: 'interrupted', message: exports.INTERRUPTED_MESSAGE };

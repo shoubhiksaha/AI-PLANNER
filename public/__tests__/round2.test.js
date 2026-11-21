@@ -266,6 +266,21 @@ describe('C11 history rows', () => {
             partial: true,
         }).message).toMatch(/^1 task\b.*\. Could not sync: Notion\. Everything else was saved\.$/);
     });
+
+    test('history keeps the server\'s notes (e.g. a brain dump that wasn\'t saved) beside the counts', () => {
+        expect(describeHistoryEntry({
+            status: 'success',
+            message: 'Night Sync Complete: ✅ 1 task completed. Notion isn\'t connected, so the brain dump wasn\'t saved.',
+            counts: { completedTasks: 1 },
+            notes: ["Notion isn't connected, so the brain dump wasn't saved."],
+            warnings: [],
+        }).message).toBe("1 task completed. Notion isn't connected, so the brain dump wasn't saved.");
+        // A note that only repeats the counts is not shown twice.
+        expect(describeHistoryEntry({
+            status: 'success', message: 'x', counts: { brainDump: 1 }, savedTo: 'drive',
+            notes: ['Brain dump saved to Google Drive.'],
+        }).message).toBe('brain dump saved to Google Drive');
+    });
 });
 
 describe('Round 3: one project, two environments', () => {
