@@ -251,6 +251,16 @@ describe('C11 history rows', () => {
         expect(describeHistoryEntry({ status: 'failed', message: 'The AI service is busy.', creditRefunded: true }).message)
             .toBe('The AI service is busy. No credit used.');
     });
+
+    test('a partial sync keeps its failure warning beside the counts', () => {
+        expect(describeHistoryEntry({
+            status: 'success',
+            message: 'Night Sync Complete: ✅ 1 task completed. ⚠️ Could not sync: Notion. Everything else was saved.',
+            counts: { completedTasks: 1 },
+            warnings: ['Could not sync: Notion. Everything else was saved.'],
+            partial: true,
+        }).message).toMatch(/^1 task\b.*\. Could not sync: Notion\. Everything else was saved\.$/);
+    });
 });
 
 describe('Round 3: one project, two environments', () => {

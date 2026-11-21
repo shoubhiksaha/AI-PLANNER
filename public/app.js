@@ -2973,6 +2973,9 @@ const REMINDER_RESULTS = {
 // Saves still waiting for the app's answer. Until the last one is answered, the switches show
 // what the person chose, not an older answer.
 let pendingReminderSaves = 0;
+// The app answers saves one at a time, in order: counting them tells which answer is whose.
+let reminderSavesSent = 0;
+let reminderSavesAnswered = 0;
 const renderNativeReminders = () => {
     const app = nativeApp();
     const reminders = app.reminders;
@@ -2993,6 +2996,7 @@ const renderNativeReminders = () => {
 const saveNativeReminders = () => {
     const read = (key) => ({ on: !!$(`reminder-${key}-on`)?.checked, time: $(`reminder-${key}-time`)?.value || '' });
     pendingReminderSaves += 1;
+    reminderSavesSent += 1;
     postNativeMessage('SET_REMINDERS', { morning: read('morning'), evening: read('evening') });
 };
 REMINDER_KEYS.forEach((key) => {
@@ -3020,6 +3024,7 @@ const NEXT_REMINDER = {
     morning: { prompt: (t) => `Tomorrow, photograph your plan for the day. Want a nudge at ${t}?`, fallback: '08:00' },
 };
 let reminderOfferKey = null; // the reminder the offer just set, waiting for the app's answer
+let reminderOfferSave = 0; // which save is the offer's (an earlier Settings save may answer first)
 function offerNextReminder(mode) {
     const reminders = nativeApp().reminders;
     const seen = readReminderOffer();
@@ -3058,6 +3063,7 @@ function offerNextReminder(mode) {
         if (field) field.value = time;
         reminderOfferKey = key;
         saveNativeReminders();
+        reminderOfferSave = reminderSavesSent;
         text.textContent = 'Setting your reminder…';
         row.remove();
     });
@@ -3071,7 +3077,8 @@ function offerNextReminder(mode) {
 }
 const updateReminderOffer = (result) => {
     const text = $('reminder-offer')?.querySelector('p');
-    if (!text || !reminderOfferKey) return;
+    // Only the answer to the offer's own save says whether its reminder was set.
+    if (!text || !reminderOfferKey || reminderSavesAnswered !== reminderOfferSave) return;
     const time = formatReminderTime(nativeApp().reminders?.[reminderOfferKey]?.time || NEXT_REMINDER[reminderOfferKey].fallback);
     text.textContent = result === 'saved'
         ? `Reminder set for ${time}. Change it any time in Settings.`
@@ -3080,7 +3087,10 @@ const updateReminderOffer = (result) => {
 };
 window.aiPlannerAppStateChanged = () => {
     const result = nativeApp().remindersResult;
-    if (result) pendingReminderSaves = Math.max(0, pendingReminderSaves - 1);
+    if (result) {
+        pendingReminderSaves = Math.max(0, pendingReminderSaves - 1);
+        reminderSavesAnswered += 1;
+    }
     renderNativeReminders();
     if (filesAsBase64.length === 0 && $('upload-ui')) renderThumbnails(); // Camera ↔ Scan
     if (!result) return;

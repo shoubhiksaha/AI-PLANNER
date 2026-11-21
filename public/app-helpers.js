@@ -557,7 +557,12 @@
         const message = typeof e.message === 'string' ? e.message : '';
         // Same words as the result card ("2 events · 3 tasks added"), not the server's longer text.
         const summary = e.counts ? exports.summarizeCounts(e.counts, { savedTo: e.savedTo }) : '';
-        if (e.status === 'success') return { state: 'success', message: summary || message || 'Synced' };
+        // A sync that saved some things but not others keeps its warning ("Could not sync: …").
+        const warnings = Array.isArray(e.warnings) ? e.warnings.filter((w) => typeof w === 'string' && w.trim()) : [];
+        if (e.status === 'success') {
+            if (summary && warnings.length) return { state: 'success', message: `${summary}. ${warnings.join(' ')}` };
+            return { state: 'success', message: summary || message || 'Synced' };
+        }
         if (e.status === 'processing' || e.status === 'pending') return { state: 'pending', message: message || 'Processing…' };
         if (e.status === 'failed' && e.failureReason === 'interrupted') return { state: 'interrupted', message: exports.INTERRUPTED_MESSAGE };
         const failed = message || 'Sync failed';

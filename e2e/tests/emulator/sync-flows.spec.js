@@ -98,6 +98,41 @@ test.describe('Sync flows on the emulator stack', () => {
         await expect(page.locator('#history-list')).toContainText('2 events · 3 tasks added');
     });
 
+    test('the reminder offer reports its own save, not an earlier Settings save', async ({ page, request }) => {
+        await page.addInitScript(() => {
+            window.__posted = [];
+            window.ReactNativeWebView = { postMessage: (m) => window.__posted.push(m) };
+        });
+        await h.signIn(page, user);
+        const off = { morning: { on: false, time: '08:00' }, evening: { on: false, time: '21:00' } };
+        await page.evaluate((r) => { window.__aiPlannerApp = { scanner: false, reminders: r }; window.aiPlannerAppStateChanged(); }, off);
+        await expect.poll(async () => (await h.userDoc(request, user.email))?.tierCredits).toBe(15);
+        await h.addPhoto(page, 'planner-page.png');
+        await page.click('#btn-morning');
+        const card = page.locator('#status-area .status-card');
+        await expect(card.locator('#reminder-offer')).toContainText('Want a nudge at 9:00 PM?');
+
+        // A Settings change (all still off) is waiting for the app when the offer is accepted.
+        await page.evaluate(() => {
+            const field = document.getElementById('reminder-morning-time');
+            field.value = '07:00';
+            field.dispatchEvent(new Event('change'));
+        });
+        await card.locator('#reminder-offer-yes').click();
+        await expect.poll(() => page.evaluate(() => window.__posted.filter((m) => m.includes('"SET_REMINDERS"')).length)).toBe(2);
+        const answer = (reminders, result) => page.evaluate(([r, res]) => {
+            window.__aiPlannerApp = { ...window.__aiPlannerApp, reminders: r, remindersResult: res };
+            window.aiPlannerAppStateChanged();
+        }, [reminders, result]);
+
+        // The Settings save's answer is not the offer's.
+        await answer({ ...off, morning: { on: false, time: '07:00' } }, 'saved');
+        await expect(card.locator('#reminder-offer')).toHaveText('Setting your reminder…');
+        // The offer's own save: notifications refused, so no reminder is on.
+        await answer({ ...off, morning: { on: false, time: '07:00' } }, 'denied');
+        await expect(card.locator('#reminder-offer')).toHaveText('Allow notifications to get reminders.');
+    });
+
     test('AI failure: red card, no credit used, photo kept for retry', async ({ page, request }) => {
         await h.signIn(page, user);
         await expect.poll(async () => (await h.userDoc(request, user.email))?.tierCredits).toBe(15);
