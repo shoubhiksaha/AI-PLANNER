@@ -180,6 +180,7 @@ function AppContent() {
   const pendingLinkRef = useRef(null);
   const pendingImagesRef = useRef([]);
   const scanningRef = useRef(false);
+  const remindersQueueRef = useRef(Promise.resolve()); // SET_REMINDERS run one at a time, in order
   const incomingShare = useIncomingShare();
 
   const isPageReady = webBridgeStatus === 'authenticated' || webBridgeStatus === 'ready';
@@ -309,13 +310,17 @@ function AppContent() {
   // OAuth tokens stay in memory only; the native Google SDK manages its own account session.
   // Offline, it waits for the connection instead of showing the sign-in screen.
   const boot = async () => {
-    if (await isOfflineNow()) {
+    // Taken before the first await, so "Sign in again" (abandonBoot) also stops a check that is
+    // still waiting for the connection test.
+    const run = ++bootRunRef.current;
+    const offline = await isOfflineNow();
+    if (run !== bootRunRef.current) return;
+    if (offline) {
       bootRef.current = 'waiting';
       setOffline(true);
       setIsCheckingLogin(false);
       return;
     }
-    const run = ++bootRunRef.current;
     bootRef.current = 'running';
     setIsCheckingLogin(true);
     try {
@@ -500,7 +505,8 @@ function AppContent() {
       const uris = await scanPagesAsync({ pageLimit: clampScanPages(maxPages) });
       if (!uris.length) return;
       injectIntoPage(buildPreparingImagesScript(APP_ORIGINS));
-      deliverImages(await preparePageImages(uris, 'scan'));
+      // Sent even when no page could be read, so the page leaves "Preparing your photos…".
+      injectIntoPage(buildAddImagesScript(await preparePageImages(uris, 'scan'), APP_ORIGINS));
     } catch (e) {
       console.warn('Document scanner failed:', e);
       appStateRef.current = { ...appStateRef.current, scanner: false };
@@ -511,7 +517,13 @@ function AppContent() {
     }
   };
 
-  const setReminders = async (settings) => {
+  const setReminders = (settings) => {
+    const next = remindersQueueRef.current.then(() => applyAndReportReminders(settings));
+    remindersQueueRef.current = next.catch(() => {});
+    return next;
+  };
+
+  const applyAndReportReminders = async (settings) => {
     const result = await applyReminders(settings);
     appStateRef.current = { ...appStateRef.current, reminders: result.reminders };
     tellPageAppState({ remindersResult: result.ok ? 'saved' : result.reason });
@@ -601,6 +613,7 @@ function AppContent() {
       if (!appStateSentRef.current) {
         appStateSentRef.current = true;
         tellPageAppState();
+        tellPageCameraState(); // a reloaded page starts without the camera flag
       }
       if (!pageShellReadyRef.current) {
         pageShellReadyRef.current = true;
@@ -743,7 +756,7 @@ function AppContent() {
   const systemBars = (
     <>
       <StatusBar barStyle={c.dark ? 'light-content' : 'dark-content'} backgroundColor={c.edge} />
-      {Platform.OS === 'android' ? <NavigationBar style={c.dark ? 'dark' : 'light'} /> : null}
+      {Platform.OS === 'android' ? <NavigationBar style={c.dark ? 'light' : 'dark'} /> : null}
     </>
   );
 
