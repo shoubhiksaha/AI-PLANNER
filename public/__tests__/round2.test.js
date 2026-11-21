@@ -246,6 +246,11 @@ describe('C11 history rows', () => {
         })).toEqual({ state: 'success', message: '2 events · 3 tasks added' });
         expect(describeHistoryEntry({ status: 'success', message: 'Saved.', counts: { journalPages: 1 }, savedTo: 'drive' }).message)
             .toBe('1 journal page saved to Google Drive');
+        expect(describeHistoryEntry({
+            status: 'success',
+            message: 'Morning Sync Complete! Created 0 events, 1 reminders, and 1 tasks.',
+            counts: { events: 0, reminders: 1, tasks: 1 },
+        }).message).toBe('1 calendar reminder · 1 task added');
         // Nothing counted: keep the server's message.
         expect(describeHistoryEntry({ status: 'success', message: 'Nothing new.', counts: {} }).message).toBe('Nothing new.');
         expect(describeHistoryEntry({ status: 'failed', message: 'The AI service is busy.', creditRefunded: true }).message)

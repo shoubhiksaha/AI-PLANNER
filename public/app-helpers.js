@@ -327,6 +327,7 @@
         const parts = [];
         const added = [];
         if (num(c.events)) added.push(plural(num(c.events), 'event'));
+        if (num(c.reminders)) added.push(plural(num(c.reminders), 'calendar reminder'));
         if (num(c.tasks)) added.push(plural(num(c.tasks), 'task'));
         if (added.length) parts.push(`${added.join(' · ')} added`);
         if (num(c.completedTasks)) parts.push(`${plural(num(c.completedTasks), 'task')} completed`);
