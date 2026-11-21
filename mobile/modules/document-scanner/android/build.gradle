@@ -1,0 +1,16 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'tech.analogdigital.aiplanner'
+version = '1.0.0'
+
+android {
+  namespace "tech.analogdigital.aiplanner.scanner"
+}
+
+dependencies {
+  // Google's on-device document scanner (ML Kit, delivered by Google Play services).
+  implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0'
+}

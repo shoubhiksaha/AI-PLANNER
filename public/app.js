@@ -92,6 +92,7 @@ const {
     buildHeatmapDays,
     loadScriptOnce,
     activateDialog,
+    closeTopDialog,
 } = helpers;
 
 const $ = (id) => document.getElementById(id);
@@ -1378,45 +1379,49 @@ hamburgerBtn?.addEventListener('click', openDrawer);
 $('close-drawer')?.addEventListener('click', closeDrawer);
 $('drawer-overlay')?.addEventListener('click', closeDrawer);
 
+const runDrawerAction = (action) => {
+    switch (action) {
+        case 'upgrade':
+            openUpgradeFlow();
+            break;
+        case 'reports':
+            switchView('view-reports');
+            if (currentUser) loadHeatmap(currentUser.email);
+            break;
+        case 'history':
+            switchView('view-history');
+            if (currentUser) loadSyncHistory(currentUser.email);
+            break;
+        case 'notion':
+            openNotionSetup();
+            break;
+        case 'settings': {
+            const input = $('user-display-name-input');
+            if (input) input.value = userProfile?.displayName || currentUser?.displayName || '';
+            showFieldError('name-error', '');
+            ['name-status', 'notes-destination-status', 'reminders-status'].forEach(id => showSettingsStatus(id, ''));
+            showFieldError('reminders-error', '');
+            renderNotesDestination();
+            restoreByokUi();
+            switchView('view-setup');
+            break;
+        }
+        case 'export':
+            exportMyData();
+            break;
+        case 'delete':
+            deleteMyAccount();
+            break;
+        case 'logout':
+            signOutUser();
+            break;
+    }
+};
+
 document.querySelectorAll('[data-drawer]').forEach(btn => {
     btn.addEventListener('click', () => {
         closeDrawer();
-        const action = btn.dataset.drawer;
-        switch (action) {
-            case 'upgrade':
-                openUpgradeFlow();
-                break;
-            case 'reports':
-                switchView('view-reports');
-                if (currentUser) loadHeatmap(currentUser.email);
-                break;
-            case 'history':
-                switchView('view-history');
-                if (currentUser) loadSyncHistory(currentUser.email);
-                break;
-            case 'notion':
-                openNotionSetup();
-                break;
-            case 'settings': {
-                const input = $('user-display-name-input');
-                if (input) input.value = userProfile?.displayName || currentUser?.displayName || '';
-                showFieldError('name-error', '');
-                ['name-status', 'notes-destination-status'].forEach(id => showSettingsStatus(id, ''));
-                renderNotesDestination();
-                restoreByokUi();
-                switchView('view-setup');
-                break;
-            }
-            case 'export':
-                exportMyData();
-                break;
-            case 'delete':
-                deleteMyAccount();
-                break;
-            case 'logout':
-                signOutUser();
-                break;
-        }
+        runDrawerAction(btn.dataset.drawer);
     });
 });
 
@@ -1438,11 +1443,16 @@ const uploadLabel = (iconName, text, extraAttrs) => `
             <span class="text-sm font-semibold text-ink pointer-events-none">${text}</span>
         </label>`;
 
+// In the Android app with Google's document scanner, Camera opens the scanner, so it says so.
+const hasNativeScanner = () => isNativeWebView && window.__aiPlannerApp?.scanner === true;
+
 const defaultUploadUI = () => `
     <div id="upload-ui" class="w-full flex flex-col items-center gap-3 p-5 relative z-10">
         <p class="font-display font-bold text-ink text-center">Photograph today’s page</p>
         <div class="flex items-stretch justify-center gap-2 sm:gap-3">
-            ${uploadLabel('camera', 'Camera', 'capture="environment" aria-label="Take a photo of your page"')}
+            ${hasNativeScanner()
+                ? uploadLabel('scan-line', 'Scan', 'capture="environment" aria-label="Scan your page"')
+                : uploadLabel('camera', 'Camera', 'capture="environment" aria-label="Take a photo of your page"')}
             ${uploadLabel('image', 'Gallery', 'multiple aria-label="Choose page photos from your gallery"')}
             ${uploadLabel('folder', 'Files', 'multiple aria-label="Choose page image files"')}
         </div>
@@ -1573,20 +1583,32 @@ const prepareImage = async (file) => {
     return isHeicFile(file) ? toHeicDataUrl(raw, heicMimeFor(file)) : null;
 };
 
+// B-05: tier maximum at upload; per-mode limit is enforced at sync
+const remainingUploadSlots = () => maxUploadForTier(currentTier()) - filesAsBase64.length;
+
+const showTrayFullCard = () => {
+    const tier = currentTier();
+    const max = maxUploadForTier(tier);
+    renderCard({
+        tone: 'info',
+        title: `Your plan holds ${max} page${max === 1 ? '' : 's'} per sync`,
+        lines: [tier === 'pro' ? 'Sync these pages first, then add more.' : 'Upgrade to sync more pages together.'],
+        actions: tier === 'pro' ? [] : [{ label: 'See plans', onClick: () => openUpgradeFlow({ outcome: 'batch' }) }],
+    });
+};
+
+const showPreparingPhotos = () => {
+    dropZone.innerHTML = '<div class="flex flex-col items-center p-6" role="status"><div class="spinner" aria-hidden="true"></div><p class="mt-2 text-sm text-muted">Preparing your photos…</p></div>';
+};
+
 const handleFiles = async (files) => {
     if (!files || files.length === 0 || isSyncing) return;
     const tier = currentTier();
-    const max = maxUploadForTier(tier); // B-05: tier maximum at upload; per-mode limit is enforced at sync
-    const remainingSlots = max - filesAsBase64.length;
+    const remainingSlots = remainingUploadSlots();
     const problems = [];
 
     if (remainingSlots <= 0) {
-        renderCard({
-            tone: 'info',
-            title: `Your plan holds ${max} page${max === 1 ? '' : 's'} per sync`,
-            lines: [tier === 'pro' ? 'Sync these pages first, then add more.' : 'Upgrade to sync more pages together.'],
-            actions: tier === 'pro' ? [] : [{ label: 'See plans', onClick: () => openUpgradeFlow({ outcome: 'batch' }) }],
-        });
+        showTrayFullCard();
         return;
     }
 
@@ -1595,7 +1617,7 @@ const handleFiles = async (files) => {
     const toProcess = images.slice(0, remainingSlots);
     if (images.length > remainingSlots) problems.push(`Only ${remainingSlots} more page${remainingSlots === 1 ? '' : 's'} fit${remainingSlots === 1 ? 's' : ''} your plan; the rest were skipped.`);
 
-    dropZone.innerHTML = '<div class="flex flex-col items-center p-6" role="status"><div class="spinner" aria-hidden="true"></div><p class="mt-2 text-sm text-muted">Preparing your photos…</p></div>';
+    showPreparingPhotos();
 
     try {
         for (const file of toProcess) {
@@ -1608,6 +1630,9 @@ const handleFiles = async (files) => {
             const data = await prepareImage(file);
             if (!data) {
                 problems.push(`${file.name} couldn’t be read. It may be corrupted or unsupported.`);
+            } else if (remainingUploadSlots() <= 0) {
+                // Another batch (a drop, a pick, photos from the app) filled the tray meanwhile.
+                problems.push(`${file.name} didn’t fit — your plan holds ${maxUploadForTier(tier)} page${maxUploadForTier(tier) === 1 ? '' : 's'} per sync.`);
             } else if (imagesPayloadChars(filesAsBase64) + data.length > MAX_IMAGES_PAYLOAD_CHARS) {
                 problems.push(`${file.name} didn’t fit — these photos are too large to sync together. Sync the others first, then add it.`);
             } else {
@@ -2186,11 +2211,18 @@ async function exportMyData() {
             return;
         }
         const data = await parseJsonResponse(res);
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const fileName = `ai-planner-data-${new Date().toISOString().split('T')[0]}.json`;
+        const text = JSON.stringify(data, null, 2);
+        // The app's WebView can't save blob: links; the app saves the file and opens the share sheet.
+        if (isNativeWebView) {
+            postNativeMessage('SAVE_FILE', { fileName, mimeType: 'application/json', text });
+            return;
+        }
+        const blob = new Blob([text], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `ai-planner-data-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = fileName;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -2803,6 +2835,188 @@ const closeThemeMenuOnEscape = (e) => {
 };
 themeMenu?.addEventListener('keydown', closeThemeMenuOnEscape);
 themeBtn?.addEventListener('keydown', closeThemeMenuOnEscape);
+
+// --------------------------------------------------------------------------
+// ANDROID APP extras (mobile/bridge.js, docs/MOBILE.md). The app describes what it can do in
+// window.__aiPlannerApp: { scanner, reminders }; older apps leave it undefined.
+// --------------------------------------------------------------------------
+const nativeApp = () => (isNativeWebView && window.__aiPlannerApp) || {};
+const isSignedInChrome = () => document.body.dataset.signedIn === 'true';
+
+// Google's document scanner (finds the page, straightens it, removes shadows) for as many pages
+// as still fit the plan. The photos come back through window.aiPlannerAddImages.
+const requestNativeScan = () => {
+    if (isSyncing) return;
+    const maxPages = remainingUploadSlots();
+    if (maxPages <= 0) { showTrayFullCard(); return; }
+    postNativeMessage('SCAN_PAGES', { maxPages });
+};
+
+// Camera in the Android app opens the scanner when the app has one. Otherwise the app sets
+// __aiPlannerCameraAllowed to false until Android grants the camera permission: without it the
+// WebView silently ignores a camera input, so the tap asks the app for the permission instead and
+// the app then reopens this input (__aiPlannerPendingCamera).
+if (isNativeWebView) {
+    document.addEventListener('click', (e) => {
+        const target = e.target instanceof Element ? e.target : null;
+        const input = target?.closest('input[type="file"][capture]')
+            || target?.closest('label')?.querySelector('input[type="file"][capture]');
+        if (!input) return;
+        if (nativeApp().scanner === true) {
+            e.preventDefault();
+            requestNativeScan();
+            return;
+        }
+        if (window.__aiPlannerCameraAllowed !== false) return;
+        e.preventDefault();
+        window.__aiPlannerPendingCamera = input;
+        postNativeMessage('REQUEST_CAMERA');
+    }, true);
+}
+
+// Menus and dialogs give way to what the app opens (a shortcut, a reminder, shared photos).
+const clearOverlaysForNative = () => {
+    if (themeMenu?.classList.contains('active')) setThemeMenu(false);
+    closeDrawer();
+    for (let i = 0; i < 5 && closeTopDialog(); i++) { /* close stacked dialogs */ }
+};
+
+const showDashboardForNative = () => {
+    clearOverlaysForNative();
+    if (!$('view-dashboard')?.classList.contains('view-hidden')) return;
+    switchView('view-dashboard');
+};
+
+const nativeImageToFile = (image) => {
+    if (!image || typeof image.base64 !== 'string' || !/^image\/(jpeg|png|webp)$/.test(image.mimeType)) return null;
+    try {
+        const binary = atob(image.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const name = typeof image.name === 'string' && image.name ? image.name.slice(0, 100) : 'page.jpg';
+        return new File([bytes], name, { type: image.mimeType });
+    } catch (_) {
+        return null;
+    }
+};
+
+// Scanned pages and photos shared to the app ("Share to AI Planner"): [{ name, mimeType, base64 }].
+// They go into the tray exactly like photos picked here.
+window.aiPlannerPreparingImages = () => {
+    if (!isSignedInChrome() || isPaying) return;
+    showDashboardForNative();
+    showPreparingPhotos();
+};
+window.aiPlannerAddImages = (images) => {
+    if (!isSignedInChrome() || !Array.isArray(images)) return;
+    if (!isPaying) showDashboardForNative();
+    const files = images.map(nativeImageToFile).filter(Boolean);
+    // handleFiles would turn these away without redrawing the tray, which may show "Preparing…".
+    if (files.length && (isSyncing || remainingUploadSlots() <= 0)) {
+        renderThumbnails();
+        if (!isSyncing) showTrayFullCard();
+        return;
+    }
+    if (files.length) {
+        handleFiles(files);
+        return;
+    }
+    renderThumbnails();
+    renderCard({ tone: 'info', title: 'Those photos couldn’t be added', lines: ['Please try again.'] });
+};
+
+// Icon shortcuts and reminders in the app: aiplanner://scan, history, reports.
+window.aiPlannerOpen = (target) => {
+    if (!isSignedInChrome() || isPaying) return false;
+    if (target === 'scan') {
+        showDashboardForNative();
+        // A full tray has no capture control to open: say why instead of doing nothing.
+        if (remainingUploadSlots() <= 0) {
+            if (!isSyncing) showTrayFullCard();
+            return true;
+        }
+        if (nativeApp().scanner === true) {
+            requestNativeScan();
+        } else {
+            // Same path as tapping Camera (permission first if needed). Android may want a tap
+            // before it opens the camera, so the Camera control also gets focus.
+            const camera = dropZone?.querySelector('input[type="file"][capture]');
+            camera?.focus();
+            camera?.click();
+        }
+        return true;
+    }
+    if (target === 'history' || target === 'reports') {
+        clearOverlaysForNative();
+        runDrawerAction(target);
+        return true;
+    }
+    return false;
+};
+
+// Settings › Reminders: shown only in the app, which schedules them on the phone (SET_REMINDERS).
+const REMINDER_KEYS = ['morning', 'evening'];
+const REMINDER_RESULTS = {
+    saved: 'Reminders saved on this phone.',
+    denied: 'Allow notifications to get reminders.',
+    blocked: 'Notifications are off for AI Planner. Turn them on in Android Settings.',
+    error: 'Couldn’t save your reminders. Please try again.',
+    unknown: 'Couldn’t check the reminders on this phone. Change one to try again.',
+};
+// Saves still waiting for the app's answer. Until the last one is answered, the switches show
+// what the person chose, not an older answer.
+let pendingReminderSaves = 0;
+const renderNativeReminders = () => {
+    const app = nativeApp();
+    const reminders = app.reminders;
+    // null: the app couldn't read its schedule. Show the section with a note, not a guess.
+    $('settings-reminders')?.classList.toggle('hidden', !('reminders' in app) || reminders === undefined);
+    if (pendingReminderSaves === 0) {
+        if (reminders === null) showFieldError('reminders-error', REMINDER_RESULTS.unknown);
+        else if ($('reminders-error')?.textContent === REMINDER_RESULTS.unknown) showFieldError('reminders-error', '');
+    }
+    if (!reminders || pendingReminderSaves > 0) return;
+    REMINDER_KEYS.forEach((key) => {
+        const on = $(`reminder-${key}-on`);
+        const time = $(`reminder-${key}-time`);
+        if (on) on.checked = reminders[key]?.on === true;
+        if (time && reminders[key]?.time) time.value = reminders[key].time;
+    });
+};
+const saveNativeReminders = () => {
+    const read = (key) => ({ on: !!$(`reminder-${key}-on`)?.checked, time: $(`reminder-${key}-time`)?.value || '' });
+    pendingReminderSaves += 1;
+    postNativeMessage('SET_REMINDERS', { morning: read('morning'), evening: read('evening') });
+};
+REMINDER_KEYS.forEach((key) => {
+    $(`reminder-${key}-on`)?.addEventListener('change', saveNativeReminders);
+    $(`reminder-${key}-time`)?.addEventListener('change', saveNativeReminders);
+});
+window.aiPlannerAppStateChanged = () => {
+    const result = nativeApp().remindersResult;
+    if (result) pendingReminderSaves = Math.max(0, pendingReminderSaves - 1);
+    renderNativeReminders();
+    if (filesAsBase64.length === 0 && $('upload-ui')) renderThumbnails(); // Camera ↔ Scan
+    if (!result) return;
+    showSettingsStatus('reminders-status', result === 'saved' ? REMINDER_RESULTS.saved : '');
+    const unknown = nativeApp().reminders === null;
+    showFieldError('reminders-error', result === 'saved' ? '' : (unknown ? REMINDER_RESULTS.unknown : (REMINDER_RESULTS[result] || REMINDER_RESULTS.error)));
+};
+renderNativeReminders();
+
+// Android Back in the app (mobile/bridge.js buildBackScript): close whatever is on top, then go
+// back to the dashboard. False tells the app there was nothing to close, so it may leave.
+window.handleNativeBack = () => {
+    if (isPaying) return true; // never abandon a payment halfway
+    if (themeMenu?.classList.contains('active')) { setThemeMenu(false); return true; }
+    if (closeTopDialog()) return true;
+    const view = document.querySelector('[id^="view-"]:not(.view-hidden)')?.id;
+    if (view && view !== 'view-dashboard' && view !== 'view-login') {
+        switchView('view-dashboard');
+        return true;
+    }
+    return false;
+};
 // Tabbing out of the menu closes it.
 themeMenu?.addEventListener('focusout', (e) => {
     const next = e.relatedTarget;

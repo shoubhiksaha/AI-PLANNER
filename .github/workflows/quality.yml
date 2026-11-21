@@ -146,7 +146,8 @@ jobs:
 
   e2e:
     name: E2E Tests
-    runs-on: ubuntu-latest
+    # Playwright can't install browsers on ubuntu-latest (26.04) yet.
+    runs-on: ubuntu-24.04
     needs: [frontend_tests]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -182,7 +183,8 @@ jobs:
 
   emulator_e2e:
     name: Emulator E2E (Chromium, Firefox, WebKit)
-    runs-on: ubuntu-latest
+    # Playwright can't install browsers on ubuntu-latest (26.04) yet.
+    runs-on: ubuntu-24.04
     needs: [backend_tests, frontend_tests]
     timeout-minutes: 50
     steps:

@@ -196,21 +196,197 @@ export function buildLoginScript({ idToken, accessToken }, allowedOrigins = APP_
       }
     }, true);
 
-    function isDarkTheme() {
-      var cl = document.documentElement.classList;
-      return cl.contains('dark-mode') || cl.contains('oled-mode');
+    // The app colours its status bar, navigation bar and edges like the page: light or dark
+    // (class) and the style pack (data-style), read from the page's own background.
+    var lastTheme = '';
+    function reportTheme() {
+      requestAnimationFrame(function() {
+        var cl = document.documentElement.classList;
+        var theme = {
+          dark: cl.contains('dark-mode') || cl.contains('oled-mode'),
+          background: getComputedStyle(document.body).backgroundColor
+        };
+        var key = JSON.stringify(theme);
+        if (key === lastTheme) { return; }
+        lastTheme = key;
+        postNative('THEME', theme);
+      });
     }
-    var observer = new MutationObserver(function() {
-      window.ReactNativeWebView.postMessage(isDarkTheme() ? 'THEME_DARK' : 'THEME_LIGHT');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    if (isDarkTheme()) { window.ReactNativeWebView.postMessage('THEME_DARK'); }
+    new MutationObserver(reportTheme)
+      .observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-style'] });
+    reportTheme();
   }
 
   tryLogin();
 })();
 true;
 `;
+}
+
+/**
+ * Android Back: asks the page to close whatever is on top (window.handleNativeBack in
+ * public/app.js) and reports BACK_RESULT { handled }. Pages without the handler report false.
+ */
+export function buildBackScript(allowedOrigins = APP_ORIGINS) {
+  return `
+(function() {${originGuard(allowedOrigins)}
+  var handled = false;
+  try {
+    handled = typeof window.handleNativeBack === 'function' && window.handleNativeBack() === true;
+  } catch (e) {}
+  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'BACK_RESULT', payload: { handled: handled } }));
+})();
+true;
+`;
+}
+
+/**
+ * Tells the page whether Android granted the camera (window.__aiPlannerCameraAllowed, read by
+ * public/app.js). With reopen, the camera input the person tapped is opened again.
+ */
+export function buildCameraStateScript(allowed, { reopen = false } = {}, allowedOrigins = APP_ORIGINS) {
+  return `
+(function() {${originGuard(allowedOrigins)}
+  window.__aiPlannerCameraAllowed = ${allowed ? 'true' : 'false'};
+  var pending = window.__aiPlannerPendingCamera;
+  window.__aiPlannerPendingCamera = null;
+  if (${reopen && allowed ? 'true' : 'false'} && pending && document.contains(pending)) {
+    try { pending.click(); } catch (e) {}
+  }
+})();
+true;
+`;
+}
+
+// Screens the app can open from an icon shortcut or a reminder (aiplanner://scan and so on).
+export const APP_LINK_TARGETS = ['scan', 'history', 'reports'];
+
+/** The screen an aiplanner:// link asks for, or null. Accepts aiplanner://scan and aiplanner:///scan. */
+export function parseAppLink(url) {
+  if (typeof url !== 'string') return null;
+  const m = url.match(/^aiplanner:\/\/\/?([a-z]+)\/?(?:[?#].*)?$/i);
+  const target = m && m[1].toLowerCase();
+  return APP_LINK_TARGETS.includes(target) ? target : null;
+}
+
+/**
+ * Tells the page what the app can do (window.__aiPlannerApp, read by public/app.js):
+ * { scanner: boolean, reminders: { morning: { on, time }, evening: { on, time } } | null }.
+ */
+export function buildAppStateScript(state, allowedOrigins = APP_ORIGINS) {
+  return `
+(function() {${originGuard(allowedOrigins)}
+  window.__aiPlannerApp = ${JSON.stringify(state ?? {})};
+  try { if (typeof window.aiPlannerAppStateChanged === 'function') { window.aiPlannerAppStateChanged(); } } catch (e) {}
+})();
+true;
+`;
+}
+
+/** Opens a screen in the page (window.aiPlannerOpen in public/app.js). */
+export function buildOpenScript(target, allowedOrigins = APP_ORIGINS) {
+  if (!APP_LINK_TARGETS.includes(target)) return null;
+  return `
+(function() {${originGuard(allowedOrigins)}
+  try { if (typeof window.aiPlannerOpen === 'function') { window.aiPlannerOpen(${JSON.stringify(target)}); } } catch (e) {}
+})();
+true;
+`;
+}
+
+/**
+ * Hands photos to the page (window.aiPlannerAddImages in public/app.js) as if they were picked
+ * there: [{ name, mimeType, base64 }].
+ */
+export function buildAddImagesScript(images, allowedOrigins = APP_ORIGINS) {
+  return `
+(function() {${originGuard(allowedOrigins)}
+  try { if (typeof window.aiPlannerAddImages === 'function') { window.aiPlannerAddImages(${JSON.stringify(images)}); } } catch (e) {}
+})();
+true;
+`;
+}
+
+/** Shows "Preparing your photos…" in the page while the app gets scanned pages ready. */
+export function buildPreparingImagesScript(allowedOrigins = APP_ORIGINS) {
+  return `
+(function() {${originGuard(allowedOrigins)}
+  try { if (typeof window.aiPlannerPreparingImages === 'function') { window.aiPlannerPreparingImages(); } } catch (e) {}
+})();
+true;
+`;
+}
+
+/** Most pages one scan may return (the page asks for what fits the plan, SCAN_PAGES). */
+export const MAX_SCAN_PAGES = 20;
+
+export function clampScanPages(value) {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, MAX_SCAN_PAGES);
+}
+
+/** "file:/data/..." (Java's File.toURI, used by expo-sharing for shared files) as "file:///data/...". */
+export function normalizeFileUri(uri) {
+  return typeof uri === 'string' ? uri.replace(/^file:\/(?!\/)/, 'file:///') : uri;
+}
+
+/** Size that fits within max on its longer side, keeping the aspect ratio; null when it already fits. */
+export function fitWithin(width, height, max) {
+  if (!(width > 0) || !(height > 0) || Math.max(width, height) <= max) return null;
+  return width >= height
+    ? { width: max, height: Math.round((height * max) / width) }
+    : { width: Math.round((width * max) / height), height: max };
+}
+
+export const DEFAULT_REMINDERS = {
+  morning: { on: false, time: '08:00' },
+  evening: { on: false, time: '21:00' },
+};
+
+/** "HH:MM" (24-hour) to { hour, minute }, or null. */
+export function parseTime(value) {
+  const m = typeof value === 'string' && value.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  return m ? { hour: Number(m[1]), minute: Number(m[2]) } : null;
+}
+
+/** Reminder settings from the page or storage, with anything invalid replaced by the default. */
+export function normalizeReminders(input) {
+  const out = {};
+  for (const key of Object.keys(DEFAULT_REMINDERS)) {
+    const value = input && typeof input === 'object' ? input[key] : null;
+    out[key] = {
+      on: value?.on === true,
+      time: parseTime(value?.time) ? value.time : DEFAULT_REMINDERS[key].time,
+    };
+  }
+  return out;
+}
+
+/** A CSS colour the page reported (THEME) that is safe to use as a native background. */
+export function isSafeCssColor(value) {
+  return typeof value === 'string'
+    && /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(,\s*[\d.]+\s*)?\))$/i.test(value.trim());
+}
+
+/** Fully transparent colours (rgba(..., 0)) can't paint the edges; the native default is used instead. */
+export function isOpaqueCssColor(value) {
+  if (!isSafeCssColor(value)) return false;
+  const alpha = value.match(/rgba\([^)]*,\s*([\d.]+)\s*\)/i);
+  return !alpha || Number(alpha[1]) > 0;
+}
+
+/** File name for a file the page asks the app to save (SAVE_FILE): plain characters, one extension. */
+export function safeFileName(name, fallback = 'ai-planner-export.json') {
+  if (typeof name !== 'string') return fallback;
+  const cleaned = name.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^[.-]+/, '').slice(0, 100);
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]{1,8}$/.test(cleaned) ? cleaned : fallback;
+}
+
+/** NetInfo state that means there is no connection (unknown reachability counts as online). */
+export function isOfflineState(state) {
+  if (!state) return false;
+  return state.isConnected === false || state.isInternetReachable === false;
 }
 
 /** True when the error means the Google account must sign in interactively again. */
