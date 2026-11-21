@@ -555,10 +555,14 @@
     exports.describeHistoryEntry = (entry) => {
         const e = entry || {};
         const message = typeof e.message === 'string' ? e.message : '';
-        if (e.status === 'success') return { state: 'success', message: message || 'Synced' };
+        // Same words as the result card ("2 events · 3 tasks added"), not the server's longer text.
+        const summary = e.counts ? exports.summarizeCounts(e.counts, { savedTo: e.savedTo }) : '';
+        if (e.status === 'success') return { state: 'success', message: summary || message || 'Synced' };
         if (e.status === 'processing' || e.status === 'pending') return { state: 'pending', message: message || 'Processing…' };
         if (e.status === 'failed' && e.failureReason === 'interrupted') return { state: 'interrupted', message: exports.INTERRUPTED_MESSAGE };
-        return { state: 'failed', message: message || 'Sync failed' };
+        const failed = message || 'Sync failed';
+        const refunded = e.creditRefunded === true || e.refunded === true;
+        return { state: 'failed', message: refunded ? `${failed.replace(/\s+$/, '')} No credit used.` : failed };
     };
 
     const safeTimeZone = (tz) => {
