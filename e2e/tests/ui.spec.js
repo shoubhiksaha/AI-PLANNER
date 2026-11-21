@@ -420,7 +420,10 @@ test.describe('In the mobile app', () => {
     test('Camera opens the app\'s page scanner when the app has one, for the pages that still fit', async ({ page }) => {
         let choosers = 0;
         page.on('filechooser', () => { choosers += 1; });
-        await page.evaluate(() => { window.__aiPlannerApp = { scanner: true }; });
+        await expect(page.locator('#drop-zone label:has(input[capture])')).toContainText('Camera');
+        await page.evaluate(() => { window.__aiPlannerApp = { scanner: true }; window.aiPlannerAppStateChanged(); });
+        // It opens a scanner, so it says Scan.
+        await expect(page.locator('#drop-zone label:has(input[capture])')).toContainText('Scan');
         await page.locator('#drop-zone label:has(input[capture])').click();
         const scans = await messages(page, 'SCAN_PAGES');
         expect(scans).toHaveLength(1);
@@ -496,7 +499,11 @@ test.describe('In the mobile app', () => {
         await expect(page.locator('#reminder-morning-time')).toHaveValue('07:30');
         await expect(page.locator('#reminder-evening-on')).toBeChecked();
 
-        await page.locator('label[for="reminder-morning-on"]').click();
+        // The switch takes taps a little outside its drawn edge (44 px tall target).
+        await page.locator('label[for="reminder-morning-on"]').scrollIntoViewIfNeeded();
+        const box = await page.locator('label[for="reminder-morning-on"]').boundingBox();
+        await page.mouse.click(box.x + box.width / 2, box.y - 8);
+        await expect(page.locator('#reminder-morning-on')).toBeChecked();
         const saved = await messages(page, 'SET_REMINDERS');
         expect(saved.at(-1).payload).toEqual({ morning: { on: true, time: '07:30' }, evening: { on: true, time: '21:00' } });
 

@@ -158,6 +158,8 @@ function AppContent() {
   const [webError, setWebError] = useState(null);
   const [webViewKey, setWebViewKey] = useState(0);
   const [splashDone, setSplashDone] = useState(false);
+  const [waitingPhotos, setWaitingPhotos] = useState(0); // shared before sign-in, shown on sign-in
+  const [offlineCheck, setOfflineCheck] = useState(null); // "Try again" while offline: 'checking' | 'still'
 
   const webviewRef = useRef(null);
   const tokensRef = useRef(null);
@@ -190,6 +192,7 @@ function AppContent() {
   const setOffline = (offline) => {
     isOfflineRef.current = offline;
     setIsOffline(offline);
+    setOfflineCheck(null);
   };
 
   const hideSplash = useCallback(() => {
@@ -471,6 +474,7 @@ function AppContent() {
     if (!images.length) return;
     if (!pageShellReadyRef.current) {
       pendingImagesRef.current = [...pendingImagesRef.current, ...images].slice(0, MAX_SHARED_IMAGES);
+      setWaitingPhotos(pendingImagesRef.current.length);
       return;
     }
     injectIntoPage(buildAddImagesScript(images, APP_ORIGINS));
@@ -490,6 +494,7 @@ function AppContent() {
   const flushPending = () => {
     const images = pendingImagesRef.current;
     pendingImagesRef.current = [];
+    setWaitingPhotos(0);
     deliverImages(images);
     const target = pendingLinkRef.current;
     pendingLinkRef.current = null;
@@ -565,7 +570,19 @@ function AppContent() {
       .slice(0, MAX_SHARED_IMAGES);
     if (!shared.length) return;
     incomingShare.clearSharedPayloads();
-    preparePageImages(shared, 'shared').then(deliverImages);
+    // The page shows "Preparing your photos…" right away and always hears back, even if none
+    // could be read. Before sign-in the photos wait (the sign-in screen says so).
+    const pageWasReady = pageShellReadyRef.current;
+    if (pageWasReady) injectIntoPage(buildPreparingImagesScript(APP_ORIGINS));
+    preparePageImages(shared, 'shared').then((images) => {
+      if (pageWasReady && pageShellReadyRef.current) {
+        injectIntoPage(buildAddImagesScript(images, APP_ORIGINS));
+      } else if (images.length) {
+        deliverImages(images);
+      } else {
+        Alert.alert('Couldn’t open those photos', 'Try sharing them again, or add them from Gallery in AI Planner.');
+      }
+    });
   }, [incomingShare.resolvedSharedPayloads]);
 
   // "Download your data": the page hands the file over (SAVE_FILE); save it and open the share sheet.
@@ -733,7 +750,12 @@ function AppContent() {
   }
 
   const retryFromOffline = async () => {
-    if (await isOfflineNow()) return;
+    setOfflineCheck('checking');
+    if (await isOfflineNow()) {
+      setOfflineCheck('still');
+      AccessibilityInfo.announceForAccessibility('Still offline.');
+      return;
+    }
     setOffline(false);
     if (bootRef.current === 'waiting') boot();
     else retryWebView();
@@ -776,12 +798,13 @@ function AppContent() {
       <SafeAreaView style={[styles.fill, { backgroundColor: c.bg }]}>
         {systemBars}
         {isOffline ? (
-          <OfflineScreen c={c} onRetry={retryFromOffline} />
+          <OfflineScreen c={c} onRetry={retryFromOffline} check={offlineCheck} />
         ) : (
           <SignInScreen
             c={c}
             busy={isNativeLoginInProgress}
             error={loginError}
+            waitingPhotos={waitingPhotos}
             onSignIn={handleNativeLogin}
             onOpenPage={openPage}
             onOpenAdt={() => openInBrowser(ADT_URL)}
@@ -834,7 +857,7 @@ function AppContent() {
         onContentProcessDidTerminate={handleContentProcessDidTerminate}
       />
       {isOffline ? (
-        <OfflineScreen c={c} onRetry={retryFromOffline} />
+        <OfflineScreen c={c} onRetry={retryFromOffline} check={offlineCheck} />
       ) : webError ? (
         <LoadErrorScreen c={c} message={webError} onRetry={retryWebView} />
       ) : !isPageReady ? (

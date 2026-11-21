@@ -1443,11 +1443,16 @@ const uploadLabel = (iconName, text, extraAttrs) => `
             <span class="text-sm font-semibold text-ink pointer-events-none">${text}</span>
         </label>`;
 
+// In the Android app with Google's document scanner, Camera opens the scanner, so it says so.
+const hasNativeScanner = () => isNativeWebView && window.__aiPlannerApp?.scanner === true;
+
 const defaultUploadUI = () => `
     <div id="upload-ui" class="w-full flex flex-col items-center gap-3 p-5 relative z-10">
         <p class="font-display font-bold text-ink text-center">Photograph today’s page</p>
         <div class="flex items-stretch justify-center gap-2 sm:gap-3">
-            ${uploadLabel('camera', 'Camera', 'capture="environment" aria-label="Take a photo of your page"')}
+            ${hasNativeScanner()
+                ? uploadLabel('scan-line', 'Scan', 'capture="environment" aria-label="Scan your page"')
+                : uploadLabel('camera', 'Camera', 'capture="environment" aria-label="Take a photo of your page"')}
             ${uploadLabel('image', 'Gallery', 'multiple aria-label="Choose page photos from your gallery"')}
             ${uploadLabel('folder', 'Files', 'multiple aria-label="Choose page image files"')}
         </div>
@@ -2979,6 +2984,7 @@ window.aiPlannerAppStateChanged = () => {
     const result = nativeApp().remindersResult;
     if (result) pendingReminderSaves = Math.max(0, pendingReminderSaves - 1);
     renderNativeReminders();
+    if (filesAsBase64.length === 0 && $('upload-ui')) renderThumbnails(); // Camera ↔ Scan
     if (!result) return;
     showSettingsStatus('reminders-status', result === 'saved' ? REMINDER_RESULTS.saved : '');
     showFieldError('reminders-error', result === 'saved' ? '' : (REMINDER_RESULTS[result] || REMINDER_RESULTS.error));
