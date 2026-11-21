@@ -50,14 +50,61 @@ export async function scheduleWith(deps, reminders) {
   }
 }
 
-/** What is in effect now: the scheduler's reminders, with remembered times for the ones off. */
+/**
+ * What is in effect now: the scheduler's reminders, with remembered times for the ones off.
+ * null if the schedule can't be read (the saved settings alone could be wrong).
+ */
 export async function loadRemindersWith(deps) {
   const saved = await deps.load();
   try {
     return remindersFromScheduled(await deps.getScheduled(), saved);
   } catch (e) {
     deps.warn?.('Reading scheduled reminders failed:', e);
-    return saved;
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Settings file. `fs` works on three names: 'main', 'backup' and 'temp'
+// ({ exists(name), read(name), write(name, text), move(from, to), remove(name) }; move replaces
+// the destination). The old file is kept as 'backup' until the new one is in place, so an
+// interrupted or failed save never leaves no settings behind.
+// ---------------------------------------------------------------------------------------------
+
+/** The saved settings: 'main', else 'backup' (a save that didn't finish), else the defaults. */
+export async function readSettingsWith(fs, warn) {
+  for (const name of ['main', 'backup']) {
+    try {
+      if (await fs.exists(name)) return normalizeReminders(JSON.parse(await fs.read(name)));
+    } catch (e) {
+      warn?.(`Reading reminder settings (${name}) failed:`, e);
+    }
+  }
+  return DEFAULT_REMINDERS;
+}
+
+export async function writeSettingsWith(fs, reminders, warn) {
+  await fs.write('temp', JSON.stringify(reminders));
+  const hadMain = await fs.exists('main');
+  if (hadMain) await fs.move('main', 'backup');
+  try {
+    await fs.move('temp', 'main');
+  } catch (e) {
+    if (hadMain) {
+      try {
+        await fs.move('backup', 'main');
+      } catch (restoreError) {
+        warn?.('Putting the old reminder settings back failed; they stay in the backup:', restoreError);
+      }
+    }
+    throw e;
+  }
+  if (hadMain) {
+    try {
+      await fs.remove('backup');
+    } catch (removeError) {
+      warn?.('Removing the old reminder settings failed:', removeError);
+    }
   }
 }
 
@@ -70,11 +117,13 @@ export async function loadRemindersWith(deps) {
  */
 export async function applyRemindersWith(deps, input) {
   const next = normalizeReminders(input);
-  const previous = await loadRemindersWith(deps);
+  const current = await loadRemindersWith(deps); // null: unknown
+  // If the schedule couldn't be read, the saved settings are the best thing to put back.
+  const previous = current ?? (await deps.load());
   try {
     if (next.morning.on || next.evening.on) {
       const permission = await deps.permission();
-      if (permission !== 'granted') return { ok: false, reason: permission, reminders: previous };
+      if (permission !== 'granted') return { ok: false, reason: permission, reminders: current };
     }
     await deps.ensureChannel();
     await scheduleWith(deps, next);

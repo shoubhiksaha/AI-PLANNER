@@ -1,11 +1,10 @@
 // Morning and evening reminders to photograph the planner page (local notifications, this
 // phone only). Settings come from the page's Settings › Reminders (SET_REMINDERS). What is on is
-// read from Android's schedule; the app's documents folder only remembers the times.
+// read from Android's schedule; a settings file in the app's documents folder remembers times.
 // Tapping a reminder opens the scanner (aiplanner://scan). Logic: reminder-core.js.
 import * as Notifications from 'expo-notifications';
 import { File, Paths } from 'expo-file-system';
-import { DEFAULT_REMINDERS, normalizeReminders } from './bridge';
-import { MESSAGES, applyRemindersWith, loadRemindersWith } from './reminder-core';
+import { MESSAGES, applyRemindersWith, loadRemindersWith, readSettingsWith, writeSettingsWith } from './reminder-core';
 
 const CHANNEL_ID = 'reminders';
 const STORE_NAME = 'reminders.json';
@@ -20,27 +19,20 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const storeFile = () => new File(Paths.document, STORE_NAME);
-
-async function readSaved() {
-  try {
-    const file = storeFile();
-    if (!file.exists) return DEFAULT_REMINDERS;
-    return normalizeReminders(JSON.parse(await file.text()));
-  } catch (e) {
-    console.warn('Reading reminder settings failed:', e);
-    return DEFAULT_REMINDERS;
-  }
-}
-
-// Written to a temporary file first, then moved over the old one, so a failed write never
-// leaves a half-written settings file.
-async function writeSaved(reminders) {
-  const tmp = new File(Paths.document, `${STORE_NAME}.tmp`);
-  tmp.create({ overwrite: true });
-  await tmp.write(JSON.stringify(reminders));
-  await tmp.move(storeFile(), { overwrite: true });
-}
+const FILES = { main: STORE_NAME, backup: `${STORE_NAME}.bak`, temp: `${STORE_NAME}.tmp` };
+const fileFor = (name) => new File(Paths.document, FILES[name]);
+const fs = {
+  exists: (name) => fileFor(name).exists,
+  read: (name) => fileFor(name).text(),
+  write: async (name, text) => {
+    const file = fileFor(name);
+    file.create({ overwrite: true });
+    await file.write(text);
+  },
+  move: (from, to) => fileFor(from).move(fileFor(to), { overwrite: true }),
+  remove: (name) => fileFor(name).delete(),
+};
+const warn = (...args) => console.warn(...args);
 
 /** 'granted', 'denied' (may ask again) or 'blocked' (only Settings can turn it on). */
 async function notificationPermission() {
@@ -51,8 +43,8 @@ async function notificationPermission() {
 }
 
 const deps = {
-  load: readSaved,
-  save: writeSaved,
+  load: () => readSettingsWith(fs, warn),
+  save: (reminders) => writeSettingsWith(fs, reminders, warn),
   permission: notificationPermission,
   ensureChannel: () =>
     Notifications.setNotificationChannelAsync(CHANNEL_ID, {
@@ -67,10 +59,13 @@ const deps = {
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute, channelId: CHANNEL_ID },
     }),
   getScheduled: () => Notifications.getAllScheduledNotificationsAsync(),
-  warn: (...args) => console.warn(...args),
+  warn,
 };
 
-/** What is in effect now (Android's schedule, with remembered times for reminders that are off). */
+/**
+ * What is in effect now (Android's schedule, with remembered times for reminders that are off);
+ * null if the schedule can't be read.
+ */
 export const loadReminders = () => loadRemindersWith(deps);
 
 /**

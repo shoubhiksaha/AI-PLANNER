@@ -530,7 +530,8 @@ function AppContent() {
 
   const applyAndReportReminders = async (settings) => {
     const result = await applyReminders(settings);
-    // null: the schedule couldn't be read back; load again (schedule, else the saved settings).
+    // null: the schedule couldn't be read back. Try once more; if it still can't be read, the page
+    // shows "couldn't check" rather than the saved settings, which might not match the schedule.
     const reminders = result.reminders ?? (await loadReminders());
     appStateRef.current = { ...appStateRef.current, reminders };
     tellPageAppState({ remindersResult: result.ok ? 'saved' : result.reason });
