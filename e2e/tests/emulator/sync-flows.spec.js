@@ -56,6 +56,48 @@ test.describe('Sync flows on the emulator stack', () => {
         await expect(page.locator('#history-list')).toContainText(/morning/i);
     });
 
+    test('in the app, the end of a first sync offers the next reminder once', async ({ page, request }) => {
+        await page.addInitScript(() => {
+            window.__posted = [];
+            window.ReactNativeWebView = { postMessage: (m) => window.__posted.push(m) };
+        });
+        await h.signIn(page, user);
+        const off = { morning: { on: false, time: '08:00' }, evening: { on: false, time: '21:00' } };
+        await page.evaluate((r) => { window.__aiPlannerApp = { scanner: false, reminders: r }; window.aiPlannerAppStateChanged(); }, off);
+        await expect.poll(async () => (await h.userDoc(request, user.email))?.tierCredits).toBe(15);
+
+        // While syncing, the hint doesn't repeat the loader, and the loader speaks of the app, not a tab.
+        await expect(page.locator('#dash-loader-sub')).toContainText('Keep AI Planner open.');
+        await h.addPhoto(page, 'planner-page.png');
+        await page.click('#btn-morning');
+        const card = page.locator('#status-area .status-card');
+        await expect(card).toHaveAttribute('data-tone', 'success');
+        await expect(page.locator('#sync-hint')).toHaveText('Add another page to sync again.');
+
+        // After a morning plan, the next step is the evening review.
+        await expect(card.locator('#reminder-offer')).toContainText('Want a nudge at 9:00 PM?');
+        await card.locator('#reminder-offer-yes').click();
+        await expect.poll(() => page.evaluate(() => window.__posted.filter((m) => m.includes('"SET_REMINDERS"')).length)).toBe(1);
+        const saved = await page.evaluate(() => JSON.parse(window.__posted.find((m) => m.includes('"SET_REMINDERS"'))).payload);
+        expect(saved).toEqual({ morning: { on: false, time: '08:00' }, evening: { on: true, time: '21:00' } });
+        await page.evaluate(() => {
+            window.__aiPlannerApp = { ...window.__aiPlannerApp, reminders: { morning: { on: false, time: '08:00' }, evening: { on: true, time: '21:00' } }, remindersResult: 'saved' };
+            window.aiPlannerAppStateChanged();
+        });
+        await expect(card.locator('#reminder-offer')).toHaveText('Reminder set for 9:00 PM. Change it any time in Settings.');
+
+        // Answered: never offered again, even with reminders off.
+        await page.evaluate((r) => { window.__aiPlannerApp = { scanner: false, reminders: r }; window.aiPlannerAppStateChanged(); }, off);
+        await h.addPhoto(page, 'planner-page.png');
+        await page.click('#btn-night');
+        await expect(card).toHaveAttribute('data-tone', 'success');
+        await expect(page.locator('#reminder-offer')).toHaveCount(0);
+
+        // History reads like the result card.
+        await h.openDrawerItem(page, 'history');
+        await expect(page.locator('#history-list')).toContainText('2 events · 3 tasks added');
+    });
+
     test('AI failure: red card, no credit used, photo kept for retry', async ({ page, request }) => {
         await h.signIn(page, user);
         await expect.poll(async () => (await h.userDoc(request, user.email))?.tierCredits).toBe(15);

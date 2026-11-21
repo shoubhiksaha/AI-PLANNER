@@ -39,7 +39,7 @@
             themeColor: { light: '#F8FAFC', dark: '#0F172A' },
             emoji: {
                 camera: '📷', image: '🖼️', folder: '📁',
-                sun: '☀️', moon: '🌙', monitor: '🖥️',
+                sun: '☀️', moon: '🌙', monitor: '🖥️', bell: '🔔',
                 calendar: '📅', 'list-checks': '✅', 'book-open': '📖', mic: '🎤',
                 lock: '🔒', history: '🕘', 'chart-column': '📊', settings: '⚙️', gem: '👑',
                 'file-text': '📄', shield: '🛡️', receipt: '💳', 'rotate-ccw': '💸',

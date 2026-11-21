@@ -237,6 +237,20 @@ describe('C11 history rows', () => {
         expect(describeHistoryEntry({ status: 'processing' })).toEqual({ state: 'pending', message: 'Processing…' });
         expect(describeHistoryEntry(null)).toEqual({ state: 'failed', message: 'Sync failed' });
     });
+
+    test('rows use the result card\'s words and say when no credit was used', () => {
+        expect(describeHistoryEntry({
+            status: 'success',
+            message: 'Morning Sync Complete! Created 2 events, 0 reminders, and 3 tasks.',
+            counts: { events: 2, tasks: 3 },
+        })).toEqual({ state: 'success', message: '2 events · 3 tasks added' });
+        expect(describeHistoryEntry({ status: 'success', message: 'Saved.', counts: { journalPages: 1 }, savedTo: 'drive' }).message)
+            .toBe('1 journal page saved to Google Drive');
+        // Nothing counted: keep the server's message.
+        expect(describeHistoryEntry({ status: 'success', message: 'Nothing new.', counts: {} }).message).toBe('Nothing new.');
+        expect(describeHistoryEntry({ status: 'failed', message: 'The AI service is busy.', creditRefunded: true }).message)
+            .toBe('The AI service is busy. No credit used.');
+    });
 });
 
 describe('Round 3: one project, two environments', () => {
