@@ -83,9 +83,21 @@ export async function readSettingsWith(fs, warn) {
   return DEFAULT_REMINDERS;
 }
 
+const readable = async (fs, name) => {
+  try {
+    if (!(await fs.exists(name))) return false;
+    JSON.parse(await fs.read(name));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export async function writeSettingsWith(fs, reminders, warn) {
   await fs.write('temp', JSON.stringify(reminders));
-  const hadMain = await fs.exists('main');
+  // Only a readable main file becomes the backup: an unreadable one must never replace a good
+  // backup (the last settings that can still be read).
+  const hadMain = await readable(fs, 'main');
   if (hadMain) await fs.move('main', 'backup');
   try {
     await fs.move('temp', 'main');
@@ -99,7 +111,7 @@ export async function writeSettingsWith(fs, reminders, warn) {
     }
     throw e;
   }
-  if (hadMain) {
+  if (await fs.exists('backup')) {
     try {
       await fs.remove('backup');
     } catch (removeError) {
@@ -120,17 +132,21 @@ export async function applyRemindersWith(deps, input) {
   const current = await loadRemindersWith(deps); // null: unknown
   // If the schedule couldn't be read, the saved settings are the best thing to put back.
   const previous = current ?? (await deps.load());
+  let scheduleTouched = false; // nothing to put back until the schedule starts changing
   try {
     if (next.morning.on || next.evening.on) {
       const permission = await deps.permission();
       if (permission !== 'granted') return { ok: false, reason: permission, reminders: current };
     }
     await deps.ensureChannel();
+    scheduleTouched = true;
     await scheduleWith(deps, next);
     await deps.save(next);
     return { ok: true, reminders: next };
   } catch (e) {
     deps.warn?.('Saving reminders failed:', e);
+    // Failed before anything was changed: leave the schedule as it is.
+    if (!scheduleTouched) return { ok: false, reason: 'error', reminders: current };
     try {
       await scheduleWith(deps, previous);
     } catch (restoreError) {

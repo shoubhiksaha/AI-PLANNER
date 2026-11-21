@@ -170,3 +170,35 @@ test('settings file: an unreadable main file falls back to the backup, then to t
   assert.deepEqual(plain(await readSettingsWith(fakeFolder({ main: '{broken', backup: json(MORNING) }).fs, () => {})), MORNING);
   assert.deepEqual(plain(await readSettingsWith(fakeFolder({ main: '{broken' }).fs, () => {})), OFF);
 });
+
+test('settings file: an unreadable main file never replaces a good backup, even if the save then fails', async () => {
+  const { fs, state } = fakeFolder({ main: '{broken', backup: json(MORNING) }, { 'move:temp>main': true });
+  await assert.rejects(writeSettingsWith(fs, OFF, () => {}));
+  assert.equal(state.files.backup, json(MORNING));
+  assert.deepEqual(plain(await readSettingsWith(fs, () => {})), MORNING);
+});
+
+test('settings file: a successful save over an unreadable file leaves just the new file', async () => {
+  const { fs, state } = fakeFolder({ main: '{broken', backup: json(MORNING) });
+  await writeSettingsWith(fs, OFF);
+  assert.deepEqual(Object.keys(state.files), ['main']);
+  assert.deepEqual(plain(await readSettingsWith(fs)), OFF);
+});
+
+test('a failure before the schedule changes (e.g. the channel) leaves the schedule alone', async () => {
+  // The schedule can't be read and the channel can't be created: evening stays scheduled as it
+  // was, nothing is cancelled or rebuilt from the (stale) saved settings.
+  let cancels = 0;
+  const { deps, state } = fakePhone({
+    scheduled: [daily('evening', 21, 0)],
+    saved: { ...OFF, morning: { on: true, time: '08:00' } },
+    fail: { getScheduled: true, ensureChannel: true },
+  });
+  const cancelAll = deps.cancelAll;
+  deps.cancelAll = async () => { cancels += 1; return cancelAll(); };
+  const result = await applyRemindersWith(deps, { ...OFF, evening: { on: true, time: '21:30' } });
+  assert.deepEqual(result, { ok: false, reason: 'error', reminders: null });
+  assert.equal(cancels, 0);
+  assert.deepEqual(state.scheduled.map((r) => r.content.data.reminder), ['evening']);
+  assert.equal(state.saves, 0);
+});
