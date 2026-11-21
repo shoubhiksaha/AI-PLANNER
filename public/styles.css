@@ -363,6 +363,8 @@ html[data-icons="emoji"] .icon-twin {
 /* === TOGGLE SWITCH === */
 .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
+/* Fitts's law: the switch looks 44×24 but takes taps over 48×44. */
+.toggle-switch::after { content: ""; position: absolute; inset: -10px -2px; }
 .toggle-slider {
     position: absolute; cursor: pointer; inset: 0;
     background: var(--line-strong); transition: 0.2s; border-radius: 24px;

@@ -1864,6 +1864,10 @@ button.chip:hover {
   max-width: 86vw;
 }
 
+.max-w-\[9rem\] {
+  max-width: 9rem;
+}
+
 .max-w-lg {
   max-width: 32rem;
 }
@@ -3066,6 +3070,14 @@ html[data-icons="emoji"] .icon-twin {
   opacity: 0;
   width: 0;
   height: 0;
+}
+
+/* Fitts's law: the switch looks 44×24 but takes taps over 48×44. */
+
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  inset: -10px -2px;
 }
 
 .toggle-slider {

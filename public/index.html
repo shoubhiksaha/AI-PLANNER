@@ -275,6 +275,34 @@
                 </fieldset>
             </section>
 
+            <!-- Reminders: only in the Android app, which schedules them on the phone (docs/MOBILE.md) -->
+            <section id="settings-reminders" aria-labelledby="settings-reminders-title" class="hidden space-y-3">
+                <h3 id="settings-reminders-title" class="section-title">Reminders</h3>
+                <p class="text-sm text-muted">A gentle nudge on this phone to photograph your page. Tapping it opens the camera.</p>
+                <div class="card divide-y divide-line">
+                    <div class="flex items-center justify-between gap-3 p-4">
+                        <span class="flex-1"><span id="reminder-morning-label" class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-sun"></use></svg> Morning plan</span>
+                            <label for="reminder-morning-time" class="block text-sm text-muted mt-0.5">Time</label>
+                            <input type="time" id="reminder-morning-time" class="field mt-1 max-w-[9rem]" value="08:00"></span>
+                        <label class="toggle-switch" for="reminder-morning-on">
+                            <input type="checkbox" id="reminder-morning-on" aria-labelledby="reminder-morning-label">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="flex items-center justify-between gap-3 p-4">
+                        <span class="flex-1"><span id="reminder-evening-label" class="flex items-center gap-2 font-semibold text-ink"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg> Evening review</span>
+                            <label for="reminder-evening-time" class="block text-sm text-muted mt-0.5">Time</label>
+                            <input type="time" id="reminder-evening-time" class="field mt-1 max-w-[9rem]" value="21:00"></span>
+                        <label class="toggle-switch" for="reminder-evening-on">
+                            <input type="checkbox" id="reminder-evening-on" aria-labelledby="reminder-evening-label">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <p id="reminders-error" class="hidden field-error" role="alert"></p>
+                <p id="reminders-status" class="hidden field-help" role="status"></p>
+            </section>
+
             <!-- Where notes go -->
             <section aria-labelledby="settings-notes-title" class="space-y-3">
                 <h3 id="settings-notes-title" class="section-title">Where journal pages go</h3>
