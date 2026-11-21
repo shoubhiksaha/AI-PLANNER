@@ -460,6 +460,9 @@ describe('credit notes (UX 5/6)', () => {
 describe('summarizeCounts', () => {
     test('formats C4 counts', () => {
         expect(summarizeCounts({ events: 3, tasks: 4 })).toBe('3 events · 4 tasks added');
+        // Reminder-only calendar items are counted apart from events.
+        expect(summarizeCounts({ events: 0, reminders: 1, tasks: 1 })).toBe('1 calendar reminder · 1 task added');
+        expect(summarizeCounts({ events: 2, reminders: 3 })).toBe('2 events · 3 calendar reminders added');
         expect(summarizeCounts({ events: 1, completedTasks: 2, expenses: 1, health: 2 }))
             .toBe('1 event added · 2 tasks completed · 1 expense logged · 2 health entries logged');
         expect(summarizeCounts({ journalPages: 1 })).toBe('1 journal page saved to Notion');
