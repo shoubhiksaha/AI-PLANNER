@@ -530,7 +530,9 @@ function AppContent() {
 
   const applyAndReportReminders = async (settings) => {
     const result = await applyReminders(settings);
-    appStateRef.current = { ...appStateRef.current, reminders: result.reminders };
+    // null: the schedule couldn't be read back; load again (schedule, else the saved settings).
+    const reminders = result.reminders ?? (await loadReminders());
+    appStateRef.current = { ...appStateRef.current, reminders };
     tellPageAppState({ remindersResult: result.ok ? 'saved' : result.reason });
     if (result.reason === 'blocked') {
       Alert.alert(
